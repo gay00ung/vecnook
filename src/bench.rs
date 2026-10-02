@@ -158,8 +158,10 @@ pub fn read_fvecs(path: impl AsRef<Path>, limit: usize) -> Result<Vec<Vec<f32>>>
             .read_exact(&mut bytes)
             .map_err(|_| Error::InvalidInput("truncated fvecs coordinates".into()))?;
         let vector: Vec<_> = bytes
-            .chunks_exact(4)
-            .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|&b| f32::from_le_bytes(b))
             .collect();
         if vector.iter().any(|v| !v.is_finite()) {
             return Err(Error::InvalidInput("non-finite fvecs coordinate".into()));

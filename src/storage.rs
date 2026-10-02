@@ -87,8 +87,10 @@ impl<'a> Reader<'a> {
     fn vector(&mut self, dimensions: usize) -> Result<Vec<f32>> {
         let raw = self.take(dimensions * 4)?;
         let values: Vec<_> = raw
-            .chunks_exact(4)
-            .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|&b| f32::from_le_bytes(b))
             .collect();
         if values.iter().any(|v| !v.is_finite()) {
             return Err(Error::Corrupt("non-finite vector coordinate".into()));
