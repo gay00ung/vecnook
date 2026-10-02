@@ -1,10 +1,10 @@
 use std::sync::Arc;
-use vector::{Config, Error, SearchMode, VectorIndex};
+use vecnook::{Config, Error, SearchMode, VectorIndex};
 
 fn index(dimensions: usize) -> VectorIndex {
     VectorIndex::new(Config::new(dimensions)).unwrap()
 }
-fn ids(report: vector::SearchReport) -> Vec<u64> {
+fn ids(report: vecnook::SearchReport) -> Vec<u64> {
     report.neighbors.into_iter().map(|n| n.id).collect()
 }
 
@@ -300,12 +300,14 @@ fn valid_parameter_endpoints_accept_registration_and_search() {
             m: 2,
             ef_construction: 2,
             seed: 42,
+            metric: vecnook::Metric::SquaredL2,
         },
         Config {
             dimensions: 4096,
             m: 64,
             ef_construction: 4096,
             seed: 42,
+            metric: vecnook::Metric::SquaredL2,
         },
     ] {
         let dimensions = config.dimensions;

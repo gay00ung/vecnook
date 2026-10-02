@@ -1,157 +1,172 @@
 # Vecnook
 
-A vector database prototype built with the Rust standard library. Squared L2 distance, exact Top-K search, HNSW indexing, and persistent storage are implemented in this repository, with no external crates or vector search libraries.
+A small embedded vector database for Rust applications, built with the standard library. Vecnook implements its own HNSW graph, exact search, and persistent storage. It has no external crates or vector search library dependencies.
 
-The current version provides a library and a CLI for a single local database handle. Persistent storage supports macOS and Linux; testing has been performed on macOS. The Cargo package, library, and executable are named `vector`.
+[![CI](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml/badge.svg)](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml)
+[MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
 
-## Quick start
+**0.2 is an early beta.** It is intended for local applications with one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS and Linux. The index stays in RAM; this is not a distributed service.
 
-Requires Rust 1.89 or later. The project has been tested with Rust 1.96.
+## Get started
+
+Requires Rust 1.89 or later. The package, library, and executable are all named `vecnook`.
+
+```bash
+cargo install --git https://github.com/gay00ung/vecnook --tag v0.2.0 --locked
+```
+
+For a Rust application, use the Git tag in `Cargo.toml`:
+
+```toml
+[dependencies]
+vecnook = { git = "https://github.com/gay00ung/vecnook", tag = "v0.2.0" }
+```
+
+The release is distributed through GitHub; these instructions do not require a crates.io publication. To build a checkout:
 
 ```bash
 cargo build --offline --release
 cargo run --offline --example basic
+cargo run --offline --example embedded -- data/embedded-demo
 ```
 
-Create a database in a new directory and run a search:
+The embedded example creates a new database and backup. Choose a fresh path on each run.
 
-```bash
-./target/release/vector init data/demo 3
-./target/release/vector put data/demo 1 1,0,0 "First vector"
-./target/release/vector put data/demo 2 0,1,0 "Second vector"
-./target/release/vector put data/demo 3 0,0,1 "Third vector"
-./target/release/vector search data/demo 1,0.1,0 2 64 hnsw
-./target/release/vector search data/demo 1,0.1,0 2 64 exact
-```
+## Embed a database
 
-Both searches should return ID 1 first, with a squared L2 distance of approximately 0.01. Results include IDs, distances, metadata, the number returned, and the number of distance calculations. Results are ordered by distance, then ID. `init` refuses to overwrite an existing database.
-
-## Keep a database open
-
-Each standalone CLI command rebuilds the graph when it opens the database. Use the shell to keep one handle open across commands:
-
-```bash
-./target/release/vector shell data/demo
-```
-
-Inside the shell, omit the database path. For `put`, everything after the vector is metadata; enter it without quotes.
-
-```text
-put 4 0.9,0.1,0 New vector
-put 1 0.8,0.2,0 Updated vector
-search 1,0.1,0 2 64 hnsw
-get 1
-delete 2
-stats
-checkpoint
-compact
-quit
-```
-
-Putting an existing ID replaces its vector and metadata. Deleting an absent ID returns `absent` without writing a log entry. Getting an absent ID fails. Standalone commands exit with code 0 on success and 1 on failure; shell command failures print `ERR` and leave the shell running.
-
-## Library
-
-`VectorIndex` provides an in-memory index. `Database` adds persistent storage and recovery.
+`VectorIndex` is an in-memory index. `Database` adds synced writes, locking, checkpoints, backups, and recovery.
 
 ```rust
-use vector::{Config, Database, Result};
+use vecnook::{Config, Database, Metric, Mutation, Result, SearchOptions};
 
 fn main() -> Result<()> {
-    let mut db = Database::create("data/app", Config::new(3))?;
-    db.put(1, &[1.0, 0.0, 0.0], "First vector")?;
+    let mut db = Database::create("data/app", Config::new(3).with_metric(Metric::Cosine))?;
+    db.write_batch(&[
+        Mutation::Put { id: 1, vector: &[1.0, 0.0, 0.0], metadata: "tenant-a" },
+        Mutation::Put { id: 2, vector: &[0.0, 1.0, 0.0], metadata: "tenant-b" },
+    ])?;
 
-    let result = db.search_hnsw(&[1.0, 0.1, 0.0], 10, 128)?;
-    println!("{:?}", result.neighbors);
+    let result = db.search_filtered(&[1.0, 0.1, 0.0], 10, SearchOptions::default(), |r| {
+        r.metadata == "tenant-a"
+    })?;
+    assert_eq!(result.eligible_count, 1);
+    assert_eq!(result.neighbors[0].id, 1);
+    println!("mode={:?} reason={:?}", result.mode, result.reason);
 
     db.checkpoint()?;
     drop(db);
-
     let db = Database::open("data/app")?;
-    assert!(db.get(1).is_some());
+    assert!(db.recovery_info().graph_cache_loaded);
     Ok(())
 }
 ```
 
-Use `Database::open` for an existing database. Mutations require `&mut self`; reads use `&self`. Applications that share mutations and queries between threads must synchronize access, for example with `RwLock`. An immutable `VectorIndex` can be shared between readers.
+`create` refuses to overwrite a database; use `open` for an existing one. Reads use `&self` and mutations use `&mut self`. Share a persistent handle between threads with application synchronization such as `RwLock`. An immutable index supports concurrent readers. An exclusive OS file lock prevents a second handle or process from opening the same database directory.
 
-## Choose a search mode
+## Search and filtering
 
-Exact search scans all active vectors and returns the exact nearest neighbors. Use it as a reference for evaluating approximate search or when scanning the dataset is inexpensive.
+Choose a metric when creating the database. It is stored on disk and cannot change in place. Original `f32` coordinates are preserved; distances and norms use `f64`.
 
-HNSW follows a graph to examine fewer candidates. Increasing `efSearch` generally improves recall at the cost of more work. Defaults are M=16, efConstruction=200, and CLI efSearch=128. Tune `efSearch` against exact results on your own data.
-
-Deleted nodes remain available as graph paths but are excluded from results. Updates insert a new node and mark the previous node deleted. `compact` rebuilds the graph from active vectors and reclaims old nodes. If HNSW reaches fewer than the requested number of active candidates, it returns those candidates with `complete=false`. It does not silently switch to exact search.
-
-## Storage and recovery
-
-| File | Purpose |
+| Metric | Returned distance, sorted ascending |
 | --- | --- |
-| `snapshot.bin` | Versioned configuration, mutation sequence, original vectors, metadata, deletion state, and CRC32 |
-| `wal.bin` | Upsert and delete records in a write-ahead log |
-| `LOCK` | OS exclusive lock held while the database is open |
-| `snapshot.tmp` | Temporary checkpoint file; ignored when a committed snapshot exists |
+| `Metric::SquaredL2` (default) | Sum of squared coordinate differences |
+| `Metric::Cosine` | `1 - cosine_similarity`, clamped to [0, 2]; zero vectors are rejected |
+| `Metric::InnerProduct` | Negative dot product; the highest dot product ranks first |
 
-Each acknowledged mutation is written to the WAL and synchronized before it changes the in-memory index. A checkpoint synchronizes a temporary snapshot, renames it, synchronizes the directory, and then clears the WAL. Recovery skips WAL operations already included in the snapshot.
+Neighbors sort by distance, then ID. Use `search_exact` as an exact reference and `search_hnsw` to explicitly request approximate search. M=16 and efConstruction=200 are the defaults. Tune efSearch against recall on your own queries; a larger efSearch usually examines more candidates.
 
-Recovery removes only an incomplete final frame at EOF and reports the number of discarded bytes. Complete checksum errors, invalid records or sequences, a damaged snapshot, or a missing WAL cause opening to fail. CRC32 detects accidental corruption. After an I/O failure, the handle refuses further mutations; reopen the database and check the affected ID to determine whether that operation persisted.
+`search` and `search_filtered` accept `SearchOptions`:
 
-The graph is rebuilt from original vectors on every open. Closing a handle does not perform a checkpoint. Use a local filesystem and keep database files together. Process termination and partial WAL recovery are tested; hardware power loss and disk failure are not.
+| Strategy | Behavior |
+| --- | --- |
+| `Exact` | Scan eligible vectors exactly |
+| `Hnsw` | Search the graph; report an insufficient candidate count without switching modes |
+| `Auto` (default) | Exact scan when eligible count ≤256 or K exceeds efSearch; otherwise HNSW, with exact repair if too few candidates are found |
 
-## Input limits
+A filter predicate runs once per active record before vector search. Ineligible and deleted nodes may still serve as graph paths, but never appear in results. Filtering currently costs O(active records); there is no separate metadata index. Metadata is an opaque UTF-8 string, and a predicate is not an access-control mechanism.
 
-| Input | Limit |
+Results expose `mode`, `reason`, `eligible_count`, `distance_computations`, and `complete`. **`complete=true` means min(K, eligible count) results were returned; it does not certify recall.** Auto repairs a missing result count, not inaccurate full-length approximate results. K=0 returns no neighbors; K above the eligible count is capped at that count. For forced HNSW, efSearch must be at least the capped K.
+
+## Writes, recovery, and maintenance
+
+Putting an existing ID replaces its vector and metadata. Updates append a node and mark the old node deleted; deleting an absent ID is a no-op.
+
+`write_batch` applies ordered Put/Delete operations in one synced WAL frame and advances the sequence once. It validates the entire input before writing. Operations on the same ID observe earlier operations in that batch. An empty or entirely absent-delete batch does not write or advance the sequence. A torn final batch frame replays none of its members.
+
+| File | Role |
+| --- | --- |
+| `snapshot.bin` | Authoritative versioned config, metric, sequence, original records, and CRC32 |
+| `wal.bin` | Checksummed single-change and atomic-batch frames |
+| `index.bin` | Disposable graph cache bound to the snapshot checksum and sequence |
+| `LOCK` | Exclusive OS lock held until the handle is dropped |
+| `snapshot.tmp`, `index.tmp` | Temporary checkpoint files |
+
+A successful write synchronizes the WAL before changing memory. A checkpoint synchronizes and renames a new snapshot and graph cache, synchronizes the directory, then clears and syncs the WAL. Opening restores a valid cached graph and inserts new WAL nodes. Missing, stale, or damaged caches rebuild from the authoritative records and record the reason in `RecoveryInfo`. Reopening without a checkpoint can still require substantial WAL replay and graph construction.
+
+Recovery trims only an incomplete final WAL frame at EOF. A complete checksum error, invalid record or sequence, damaged snapshot, or missing WAL fails opening. After a write or checkpoint I/O failure, the handle refuses further writes. Reopen and inspect the affected IDs: an operation that returned an I/O error may have persisted. CRC32 detects accidental damage; it does not authenticate files.
+
+`checkpoint` bounds replay work. `compact` rebuilds from active records and reclaims tombstones. `maintenance_status` reports the WAL size and tombstone ratio. `maintain(MaintenancePolicy::default())` compacts at ≥128 tombstones and ≥20% tombstones; otherwise it checkpoints at ≥64 MiB of WAL. Maintenance runs synchronously when called; dropping a handle does not checkpoint.
+
+`backup(new_directory)` checkpoints and copies a synced, independently openable snapshot/cache with an empty WAL. It refuses an existing destination. A failed copy may leave an incomplete destination, and backup changes the source's checkpoint state. Do not copy live database files individually.
+
+Use a local filesystem and keep all database files together. Tests cover process kills, truncated WAL frames, and injected corruption. Hardware power loss, network filesystems, and secure erasure are not validated. Compaction temporarily holds a replacement index and can increase peak memory use.
+
+## CLI
+
+```bash
+vecnook init data/demo 3 --metric cosine
+vecnook put data/demo 1 1,0,0 "tenant-a"
+vecnook put data/demo 2 0,1,0 "tenant-b"
+vecnook search data/demo 1,0.1,0 10 128 auto --metadata "tenant-a"
+vecnook checkpoint data/demo
+vecnook stats data/demo
+vecnook backup data/demo data/demo-backup
+```
+
+CLI metrics are `l2`, `cosine`, and `ip`. CLI search defaults to `auto`; specify `hnsw` or `exact` to force a mode. The metadata option compares the complete string for equality. Supply K, efSearch, and mode before `--metadata`.
+
+For bulk writes, `vecnook batch data/demo changes.tsv` accepts tab-separated rows:
+
+```text
+put<TAB>3<TAB>0.9,0.1,0<TAB>tenant-a
+delete<TAB>2
+```
+
+Replace `<TAB>` with a literal tab. Metadata is optional and may contain tabs, but not newlines in this format. The input text limit is 16 MiB; transaction limits below still apply.
+
+`vecnook shell data/demo` keeps one handle open. Enter commands without the database path, then `quit`. For `put`, the remainder after the vector is metadata without quotes. Other shell arguments split on whitespace; use the standalone CLI or library for paths and metadata values containing spaces. `get`, `delete`, `compact`, `maintain`, and `--help` are also available. Standalone failures exit 1; shell failures print `ERR` and leave the shell running.
+
+## Resource limits
+
+| Resource | Limit |
 | --- | --- |
 | Dimensions | 1–4096, fixed per database |
-| Coordinates | Finite `f32`; squared L2 is accumulated in `f64` |
+| Coordinates | Finite `f32`; cosine requires a nonzero vector |
 | IDs | Full `u64` range, unique among active records |
-| Metadata | UTF-8, up to 16 KiB |
-| M | 2–64 |
-| efConstruction | M–4096 |
-| efSearch | 1–4096 and at least min(K, active records) |
-| Physical nodes | Up to 100,000, including deleted nodes |
-| Snapshot size | Up to 256 MiB |
+| Metadata | 16 KiB of UTF-8 per record |
+| Physical nodes | 100,000, including old and deleted nodes |
+| Snapshot | 256 MiB |
+| Graph cache | 128 MiB |
+| M / efConstruction / efSearch | 2–64 / M–4096 / 1–4096 |
+| Atomic batch | 1024 operations and 8 MiB WAL payload |
 
-K=0 returns no neighbors. K above the active count is capped at that count. Invalid input is rejected before recording a mutation. Run `compact` to reclaim space consumed by updates and deletions.
+The node and snapshot limits both apply; dimension and metadata size may make the byte limit bind first. `stats.vector_bytes` counts coordinates only, not total RSS. The WAL has no hard total-size cap; applications must call maintenance. Maximum-scale memory and latency are not characterized.
 
-## Validation and benchmarks
+## Compatibility and validation
+
+0.2 reads 0.1 L2 snapshots and single-change WAL frames. It writes v2 snapshots and introduces batch WAL frames that 0.1 cannot read. Keep a copy of all database files before upgrading; downgrade requires that copy. The package/executable was renamed from `vector` to `vecnook`, and recovery counters now count frames rather than operations.
 
 ```bash
 cargo test --offline
 cargo fmt --check
 cargo clippy --offline --all-targets -- -D warnings
+RUSTDOCFLAGS="-D warnings" cargo doc --offline --no-deps
+cargo package --offline
 cargo tree --offline
-./target/release/vector bench 10000 512 200 128 42 clustered
-./target/release/vector bench 10000 512 200 32 42 clustered
-./target/release/vector bench 10000 512 200 128 42 uniform
-./target/release/vector bench 10000 512 200 512 42 uniform
 ```
 
-Benchmark arguments are vector count, dimensions, query count, efSearch, seed, and dataset. Queries are generated independently from stored vectors. Recall@10 is the mean overlap with exact Top-10 results. Ten warmup queries are excluded. QPS measures sequential search calls; it excludes graph construction, disk writes, networking, and concurrent requests.
+Tests cover all three metrics against independent distance oracles, filtered Top-K, batch preflight and every byte boundary of a torn batch, graph cache validation and fallback, backups, file locks, v1 upgrades, and 900 model-checked mutation/maintenance/restart steps. Separate CLI processes are killed immediately after successful single-write and batch acknowledgements to verify recovery. CI runs on Linux and macOS with stable Rust and the declared 1.89 MSRV.
 
-The initial release measurements used 10,000 vectors, 512 dimensions, 200 queries, seed 42, M=16, and efConstruction=200 on an Apple M4 Pro with 48 GiB RAM, macOS 26.6.2, and Rust 1.96.
+The release benchmark uses 10,000 SIFT vectors, 128 dimensions, and 100 queries. At efSearch=128, measured Recall@10 was 100% with 0.146166 ms HNSW p95 on an Apple M4 Pro. See [benchmark methodology and limits](docs/benchmarks.md) before comparing these figures. This is not evidence of superiority over other databases, real embedding workloads, or larger datasets.
 
-| Synthetic dataset | efSearch | Recall@10 | HNSW p95 (ms) | HNSW sequential QPS | Exact sequential QPS |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Clustered | 128 | 100.00% | 0.126708 | 9,537.05 | 400.58 |
-| Clustered | 32 | 100.00% | 0.104250 | 12,167.24 | 398.88 |
-| Uniform | 128 | 72.45% | 1.265958 | 988.48 | 403.29 |
-| Uniform | 512 | 95.95% | 3.208250 | 387.77 | 392.70 |
-
-Clustered data used up to 64 centers with coordinate noise of ±0.04. Uniform data used coordinates in [-1, 1]. These are single-machine synthetic measurements, not results on real embeddings or identity recognition. For uniform data, increasing efSearch improved recall but removed the speed advantage over exact search. They do not establish an accuracy or throughput guarantee for other datasets.
-
-The 45 automated tests cover exact results, input boundaries, graph invariants, updates and deletions, compaction, corruption handling, file locking, and recovery after killing a separate CLI process immediately after acknowledged mutations. Linux, Rust 1.89, and loads reaching the storage limits have not been tested.
-
-## Source layout
-
-| Source | Responsibility |
-| --- | --- |
-| [math.rs](src/math.rs) | Squared L2 distance |
-| [index.rs](src/index.rs) | Exact Top-K, HNSW, records, updates, deletion, and compaction |
-| [rng.rs](src/rng.rs) | Reproducible graph levels and synthetic fixtures |
-| [storage.rs](src/storage.rs) | Binary format, CRC32, WAL, snapshots, and locking |
-| [db.rs](src/db.rs) | Persistent mutation ordering and recovery |
-| [main.rs](src/main.rs) | CLI and persistent shell |
-| [bench.rs](src/bench.rs) | Independent-query recall and latency measurements |
-
-Embedding generation, metadata filtering, quantization, an HTTP server, replication, and distributed operation are outside the current implementation.
+Vecnook currently has no SIMD kernels, quantization, mmap storage, typed payload index, embedding model, network API, replication, or multi-process readers. See [CONTRIBUTING.md](CONTRIBUTING.md) to report reproducible problems or contribute.

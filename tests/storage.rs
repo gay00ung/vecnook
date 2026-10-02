@@ -4,7 +4,7 @@ use std::{
     io::Write,
 };
 use support::TempDir;
-use vector::{Config, Database, Error};
+use vecnook::{Config, Database, Error};
 
 #[test]
 fn wal_replays_insert_update_delete_and_utf8_metadata() {
@@ -19,7 +19,7 @@ fn wal_replays_insert_update_delete_and_utf8_metadata() {
     let before = db.search_hnsw(&[0.0, 0.0], 10, 128).unwrap();
     drop(db);
     let db = Database::open(temp.path()).unwrap();
-    assert_eq!(db.recovery_info().replayed_operations, 4);
+    assert_eq!(db.recovery_info().replayed_frames, 4);
     assert_eq!(db.get(1).unwrap().vector, [5.0, 6.0]);
     assert_eq!(db.get(1).unwrap().metadata, "한글 🐈\nnew");
     assert!(db.get(2).is_none());
@@ -41,7 +41,7 @@ fn checkpoint_preserves_tombstones_and_next_wal_sequence() {
     drop(db);
     let db = Database::open(temp.path()).unwrap();
     assert_eq!(db.sequence(), 3);
-    assert_eq!(db.recovery_info().replayed_operations, 1);
+    assert_eq!(db.recovery_info().replayed_frames, 1);
     assert_eq!(db.stats().tombstones, 1);
     assert_eq!(db.get(1).unwrap().metadata, "new");
     assert!(db.get(2).is_some());
@@ -59,8 +59,8 @@ fn old_wal_after_snapshot_commit_is_validated_but_not_reapplied() {
     drop(db);
     fs::write(temp.path().join("wal.bin"), [old, new].concat()).unwrap();
     let db = Database::open(temp.path()).unwrap();
-    assert_eq!(db.recovery_info().skipped_operations, 1);
-    assert_eq!(db.recovery_info().replayed_operations, 1);
+    assert_eq!(db.recovery_info().skipped_frames, 1);
+    assert_eq!(db.recovery_info().replayed_frames, 1);
     assert_eq!(db.stats().physical_nodes, 2);
     assert_eq!(db.stats().active_records, 2);
 }
@@ -194,7 +194,7 @@ fn checksummed_snapshot_fields_are_validated_before_allocation() {
         ));
     }
     let mut bytes = original;
-    bytes[40..48].copy_from_slice(&u64::MAX.to_le_bytes());
+    bytes[44..52].copy_from_slice(&u64::MAX.to_le_bytes());
     reseal_snapshot(&mut bytes);
     fs::write(temp.path().join("snapshot.bin"), bytes).unwrap();
     assert!(matches!(
@@ -264,10 +264,10 @@ fn checksummed_snapshot_rejects_bad_flag_float_length_and_utf8() {
     drop(db);
     let original = fs::read(temp.path().join("snapshot.bin")).unwrap();
     let mutations = [
-        (56, vec![2]),
-        (57, f32::NAN.to_le_bytes().to_vec()),
-        (61, 16_385u32.to_le_bytes().to_vec()),
-        (65, vec![255]),
+        (60, vec![2]),
+        (61, f32::NAN.to_le_bytes().to_vec()),
+        (65, 16_385u32.to_le_bytes().to_vec()),
+        (69, vec![255]),
     ];
     for (offset, replacement) in mutations {
         let mut bytes = original.clone();

@@ -1,12 +1,22 @@
-//! Reproducible synthetic benchmarks using independent corpus/query draws.
-use std::time::Instant;
+//! Synthetic and fvecs benchmarks comparing HNSW with exact search.
+use std::{
+    fs::File,
+    io::{BufReader, Read},
+    path::Path,
+    time::Instant,
+};
 
-use crate::{Config, Error, IndexStats, Result, VectorIndex, rng::Rng};
+use crate::{
+    Config, Error, IndexStats, Metric, Result, VectorIndex,
+    config::{MAX_DIMENSIONS, MAX_RECORDS, MAX_SNAPSHOT_BYTES},
+    rng::Rng,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Dataset {
     Clustered,
     Uniform,
+    File,
 }
 
 impl Dataset {
@@ -14,6 +24,7 @@ impl Dataset {
         match self {
             Self::Clustered => "clustered",
             Self::Uniform => "uniform",
+            Self::File => "fvecs",
         }
     }
 }
@@ -26,6 +37,7 @@ pub struct BenchConfig {
     pub ef_search: usize,
     pub seed: u64,
     pub dataset: Dataset,
+    pub metric: Metric,
 }
 
 impl Default for BenchConfig {
@@ -37,6 +49,7 @@ impl Default for BenchConfig {
             ef_search: 128,
             seed: 42,
             dataset: Dataset::Clustered,
+            metric: Metric::SquaredL2,
         }
     }
 }
@@ -81,6 +94,122 @@ pub struct BenchReport {
 /// Build from scratch and compare HNSW with this engine's exact search.
 /// Data construction/ingestion, disk I/O and recovery are not query timings.
 pub fn run(config: BenchConfig) -> Result<BenchReport> {
+    if config.dataset == Dataset::File {
+        return Err(Error::InvalidInput(
+            "use run_fvecs for file datasets".into(),
+        ));
+    }
+    Config::new(config.dimensions).validate()?;
+    if config.count > MAX_RECORDS
+        || config.count.saturating_mul(13 + config.dimensions * 4) + 56 > MAX_SNAPSHOT_BYTES
+    {
+        return Err(Error::InvalidInput(
+            "benchmark corpus exceeds storage limits".into(),
+        ));
+    }
+    if config.ef_search < 10.min(config.count) || config.ef_search > 4096 || config.ef_search == 0 {
+        return Err(Error::InvalidInput("invalid benchmark efSearch".into()));
+    }
+    if config.count == 0
+        || config.count > MAX_RECORDS
+        || config.queries == 0
+        || config.queries > 10_000
+    {
+        return Err(Error::InvalidInput(
+            "invalid benchmark corpus/query count".into(),
+        ));
+    }
+    let (corpus, queries) = fixture(&config);
+    run_vectors(config, corpus, queries)
+}
+
+/// Read a bounded prefix of a little-endian fvecs file. No external loader.
+pub fn read_fvecs(path: impl AsRef<Path>, limit: usize) -> Result<Vec<Vec<f32>>> {
+    if !(1..=MAX_RECORDS).contains(&limit) {
+        return Err(Error::InvalidInput("fvecs limit must be 1..=100000".into()));
+    }
+    let mut reader = BufReader::new(File::open(path)?);
+    let mut vectors = Vec::new();
+    let mut dimensions = None;
+    let mut allocated = 0;
+    while vectors.len() < limit {
+        let mut header = [0; 4];
+        if reader.read(&mut header[..1])? == 0 {
+            break;
+        }
+        reader
+            .read_exact(&mut header[1..])
+            .map_err(|_| Error::InvalidInput("truncated fvecs dimension".into()))?;
+        let d = u32::from_le_bytes(header) as usize;
+        if !(1..=MAX_DIMENSIONS).contains(&d) || dimensions.is_some_and(|expected| expected != d) {
+            return Err(Error::InvalidInput(
+                "invalid or mixed fvecs dimensions".into(),
+            ));
+        }
+        dimensions = Some(d);
+        allocated += d * 4;
+        if allocated > MAX_SNAPSHOT_BYTES {
+            return Err(Error::InvalidInput(
+                "fvecs prefix exceeds memory payload limit".into(),
+            ));
+        }
+        let mut bytes = vec![0; d * 4];
+        reader
+            .read_exact(&mut bytes)
+            .map_err(|_| Error::InvalidInput("truncated fvecs coordinates".into()))?;
+        let vector: Vec<_> = bytes
+            .chunks_exact(4)
+            .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+            .collect();
+        if vector.iter().any(|v| !v.is_finite()) {
+            return Err(Error::InvalidInput("non-finite fvecs coordinate".into()));
+        }
+        vectors.push(vector);
+    }
+    if vectors.is_empty() {
+        return Err(Error::InvalidInput("empty fvecs dataset".into()));
+    }
+    Ok(vectors)
+}
+
+pub fn run_fvecs(
+    base: impl AsRef<Path>,
+    query: impl AsRef<Path>,
+    count: usize,
+    queries: usize,
+    ef: usize,
+    metric: Metric,
+) -> Result<BenchReport> {
+    if !(1..=MAX_RECORDS).contains(&count)
+        || !(1..=10_000).contains(&queries)
+        || !(1..=4096).contains(&ef)
+    {
+        return Err(Error::InvalidInput(
+            "invalid fvecs count, query limit or efSearch".into(),
+        ));
+    }
+    let corpus = read_fvecs(base, count)?;
+    let query_vectors = read_fvecs(query, queries)?;
+    let config = BenchConfig {
+        count: corpus.len(),
+        dimensions: corpus[0].len(),
+        queries: query_vectors.len(),
+        ef_search: ef,
+        dataset: Dataset::File,
+        metric,
+        ..BenchConfig::default()
+    };
+    if query_vectors[0].len() != config.dimensions {
+        return Err(Error::InvalidInput("corpus/query dimensions differ".into()));
+    }
+    run_vectors(config, corpus, query_vectors)
+}
+
+fn run_vectors(
+    config: BenchConfig,
+    corpus: Vec<Vec<f32>>,
+    queries: Vec<Vec<f32>>,
+) -> Result<BenchReport> {
     if config.count == 0 || config.count > 100_000 || config.queries == 0 || config.queries > 10_000
     {
         return Err(Error::InvalidInput(
@@ -89,16 +218,21 @@ pub fn run(config: BenchConfig) -> Result<BenchReport> {
     }
     let index_config = Config {
         seed: config.seed,
+        metric: config.metric,
         ..Config::new(config.dimensions)
     };
     index_config.validate()?;
+    if config.count * (13 + config.dimensions * 4) + 56 > MAX_SNAPSHOT_BYTES {
+        return Err(Error::InvalidInput(
+            "benchmark corpus exceeds snapshot limit".into(),
+        ));
+    }
     let k = 10.min(config.count);
     if config.ef_search < k || config.ef_search > 4096 {
         return Err(Error::InvalidInput(
             "benchmark efSearch must be min(10, count)..=4096".into(),
         ));
     }
-    let (corpus, queries) = fixture(&config);
     let mut index = VectorIndex::new(index_config)?;
     let build = Instant::now();
     for (id, vector) in corpus.into_iter().enumerate() {
@@ -175,7 +309,7 @@ fn fixture(config: &BenchConfig) -> (Vec<Vec<f32>>, Vec<Vec<f32>>) {
             .map(|d| {
                 let value = random.uniform() * 2.0 - 1.0;
                 match config.dataset {
-                    Dataset::Uniform => value as f32,
+                    Dataset::Uniform | Dataset::File => value as f32,
                     Dataset::Clustered => centers[cluster][d] + (value * 0.04) as f32,
                 }
             })

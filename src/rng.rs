@@ -6,6 +6,10 @@ impl Rng {
         Self(seed)
     }
 
+    pub(crate) fn state(&self) -> u64 {
+        self.0
+    }
+
     pub(crate) fn next_u64(&mut self) -> u64 {
         self.0 = self.0.wrapping_add(0x9e3779b97f4a7c15);
         let mut z = self.0;

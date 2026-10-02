@@ -1,0 +1,39 @@
+name: Bug report
+description: Report a reproducible search, storage, or CLI problem.
+title: '[Bug]: '
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Vecnook version or commit
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, architecture, Rust version; hardware if reporting performance.
+    validations:
+      required: true
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Configuration and data
+      description: Metric, dimensions, count, M, efConstruction, efSearch, K, and any filter.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Runnable Rust or CLI steps using shareable example data.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: Include errors and relevant search/recovery reports. For recall, compare against exact results.
+    validations:
+      required: true

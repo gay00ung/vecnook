@@ -1,29 +1,35 @@
 #![forbid(unsafe_code)]
 use std::{
     fmt::Display,
-    io::{self, BufRead, Write},
+    fs::File,
+    io::{self, BufRead, Read, Write},
     process::ExitCode,
     str::FromStr,
 };
 
-use vector::{
-    Config, Database, Error, Result, SearchMode,
+use vecnook::{
+    Config, Database, Error, MaintenancePolicy, Metric, Mutation, Result, SearchMode,
+    SearchOptions, SearchStrategy,
     bench::{self, BenchConfig, Dataset},
 };
 
-const HELP: &str = "vector: dependency-free vector database\n\
+const HELP: &str = "vecnook: dependency-free vector database\n\
 Usage:\n\
-  vector init <db-dir> <dimensions> [m] [ef-construction] [seed]\n\
-  vector put <db-dir> <id> <comma-separated-vector> [metadata]\n\
-  vector get <db-dir> <id>\n\
-  vector delete <db-dir> <id>\n\
-  vector search <db-dir> <comma-separated-vector> [k] [ef-search] [exact|hnsw]\n\
-  vector stats <db-dir>\n\
-  vector checkpoint <db-dir>\n\
-  vector compact <db-dir>\n\
-  vector shell <db-dir>\n\
-  vector bench [count=10000] [dimensions=512] [queries=200] [ef=128] [seed=42] [clustered|uniform]\n\n\
-Distances are squared L2. The shell accepts the same DB commands without <db-dir>, plus quit.\n";
+  vecnook init <db-dir> <dimensions> [m] [ef-construction] [seed] [--metric l2|cosine|ip]\n\
+  vecnook put <db-dir> <id> <comma-separated-vector> [metadata]\n\
+  vecnook get <db-dir> <id>\n\
+  vecnook delete <db-dir> <id>\n\
+  vecnook search <db-dir> <comma-separated-vector> [k] [ef-search] [exact|hnsw|auto] [--metadata value]\n\
+  vecnook batch <db-dir> <tsv-file>\n\
+  vecnook backup <db-dir> <new-backup-dir>\n\
+  vecnook maintain <db-dir>\n\
+  vecnook stats <db-dir>\n\
+  vecnook checkpoint <db-dir>\n\
+  vecnook compact <db-dir>\n\
+  vecnook shell <db-dir>\n\
+  vecnook bench [count=10000] [dimensions=512] [queries=200] [ef=128] [seed=42] [clustered|uniform] [l2|cosine|ip]\n\
+  vecnook bench-file <base.fvecs> <query.fvecs> [count=10000] [queries=200] [ef=128] [l2|cosine|ip]\n\n\
+Distances sort ascending. The shell accepts the same DB commands without <db-dir>, plus quit.\n";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -41,6 +47,10 @@ fn run(args: &[String]) -> Result<()> {
         print!("{HELP}");
         return Ok(());
     };
+    if matches!(command, "--version" | "-V") {
+        println!("vecnook {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
     if matches!(command, "help" | "--help" | "-h") {
         print!("{HELP}");
         return Ok(());
@@ -49,40 +59,84 @@ fn run(args: &[String]) -> Result<()> {
         require_count(
             args,
             3,
-            6,
-            "init <db-dir> <dimensions> [m] [ef-construction] [seed]",
+            8,
+            "init <db-dir> <dimensions> [m] [ef-construction] [seed] [--metric l2|cosine|ip]",
         )?;
         let mut config = Config::new(parse(&args[2], "dimensions")?);
-        if let Some(value) = args.get(3) {
+        let extras = &args[3..];
+        let numeric = if let Some(position) = extras.iter().position(|arg| arg == "--metric") {
+            if position + 2 != extras.len() {
+                return Err(Error::InvalidInput(
+                    "--metric requires one final value".into(),
+                ));
+            }
+            config.metric = metric(&extras[position + 1])?;
+            &extras[..position]
+        } else {
+            extras
+        };
+        if numeric.len() > 3 {
+            return Err(Error::InvalidInput("too many init parameters".into()));
+        }
+        if let Some(value) = numeric.first() {
             config.m = parse(value, "M")?;
         }
-        if let Some(value) = args.get(4) {
+        if let Some(value) = numeric.get(1) {
             config.ef_construction = parse(value, "efConstruction")?;
         }
-        if let Some(value) = args.get(5) {
+        if let Some(value) = numeric.get(2) {
             config.seed = parse(value, "seed")?;
         }
         let db = Database::create(&args[1], config)?;
         println!(
-            "OK initialized dimensions={} m={} ef_construction={} seed={}",
+            "OK initialized dimensions={} m={} ef_construction={} seed={} metric={}",
             db.config().dimensions,
             db.config().m,
             db.config().ef_construction,
-            db.config().seed
+            db.config().seed,
+            db.config().metric.name()
         );
         return Ok(());
     }
     if command == "bench" {
         return benchmark(&args[1..]);
     }
+    if command == "bench-file" {
+        require_count(
+            args,
+            3,
+            7,
+            "bench-file <base> <query> [count] [queries] [ef] [metric]",
+        )?;
+        let result = bench::run_fvecs(
+            &args[1],
+            &args[2],
+            optional(args, 3, 10_000, "count")?,
+            optional(args, 4, 200, "queries")?,
+            optional(args, 5, 128, "efSearch")?,
+            metric(args.get(6).map_or("l2", String::as_str))?,
+        )?;
+        print_benchmark(result);
+        return Ok(());
+    }
     if args.len() < 2 {
         return Err(Error::InvalidInput(
-            "missing database directory; see vector --help".into(),
+            "missing database directory; see vecnook --help".into(),
         ));
     }
     if !matches!(
         command,
-        "put" | "get" | "delete" | "search" | "stats" | "checkpoint" | "compact" | "shell"
+        "put"
+            | "get"
+            | "delete"
+            | "search"
+            | "stats"
+            | "checkpoint"
+            | "compact"
+            | "shell"
+            | "batch"
+            | "backup"
+            | "maintain"
     ) {
         return Err(Error::InvalidInput(format!("unknown command {command}")));
     }
@@ -139,34 +193,66 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
             ))
         }
         "search" => {
-            require_count(args, 1, 4, "search <vector> [k] [ef] [exact|hnsw]")?;
+            require_count(
+                args,
+                1,
+                6,
+                "search <vector> [k] [ef] [exact|hnsw|auto] [--metadata value]",
+            )?;
             let query = vector_values(&args[0])?;
             let k = optional(args, 1, 10, "K")?;
             let ef = optional(args, 2, 128, "efSearch")?;
-            let mode = args.get(3).map_or("hnsw", String::as_str);
-            let found = match mode {
-                "exact" => db.search_exact(&query, k)?,
-                "hnsw" => db.search_hnsw(&query, k, ef)?,
+            let mode = args.get(3).map_or("auto", String::as_str);
+            let strategy = match mode {
+                "exact" => SearchStrategy::Exact,
+                "hnsw" => SearchStrategy::Hnsw,
+                "auto" => SearchStrategy::Auto,
                 _ => {
                     return Err(Error::InvalidInput(
-                        "search mode must be exact or hnsw".into(),
+                        "search mode must be exact, hnsw or auto".into(),
                     ));
                 }
             };
+            let filter = if args.len() > 4 {
+                if args.len() != 6 || args[4] != "--metadata" {
+                    return Err(Error::InvalidInput(
+                        "expected --metadata <exact value>".into(),
+                    ));
+                }
+                Some(args[5].as_str())
+            } else {
+                None
+            };
+            let found = db.search_filtered(
+                &query,
+                k,
+                SearchOptions {
+                    strategy,
+                    ef_search: ef,
+                    ..SearchOptions::default()
+                },
+                |r| filter.is_none_or(|value| r.metadata == value),
+            )?;
             let mut output = format!(
-                "mode={} requested={k} returned={} complete={} distance_computations={}",
+                "mode={} requested={k} returned={} complete={} distance_computations={} metric={} eligible={} reason={:?}",
                 match found.mode {
                     SearchMode::Exact => "exact",
                     SearchMode::Hnsw => "hnsw",
                 },
                 found.neighbors.len(),
                 found.complete,
-                found.distance_computations
+                found.distance_computations,
+                found.metric.name(),
+                found.eligible_count,
+                found.reason
             );
             for neighbor in found.neighbors {
                 output.push_str(&format!(
-                    "\nid={} squared_l2={:.9} metadata={:?}",
-                    neighbor.id, neighbor.distance, neighbor.metadata
+                    "\nid={} {}={:.9} metadata={:?}",
+                    neighbor.id,
+                    found.metric.name(),
+                    neighbor.distance,
+                    neighbor.metadata
                 ));
             }
             Ok(output)
@@ -175,8 +261,9 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
             require_count(args, 0, 0, "stats")?;
             let stats = db.stats();
             let recovery = db.recovery_info();
+            let maintenance = db.maintenance_status(MaintenancePolicy::default())?;
             Ok(format!(
-                "dimensions={} m={} ef_construction={} seed={}\nactive={} physical={} tombstones={} layers={} directed_edges={} raw_vector_bytes={} sequence={}\nreplayed_operations={} skipped_operations={} truncated_tail_bytes={}",
+                "dimensions={} m={} ef_construction={} seed={}\nactive={} physical={} tombstones={} layers={} directed_edges={} raw_vector_bytes={} sequence={}\nreplayed_frames={} skipped_frames={} truncated_tail_bytes={}\nmetric={} graph_cache_loaded={} cached_nodes={} graph_cache_note={:?}\nwal_bytes={} tombstone_ratio={:.6} checkpoint_recommended={} compact_recommended={}",
                 db.config().dimensions,
                 db.config().m,
                 db.config().ef_construction,
@@ -188,15 +275,60 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
                 stats.directed_edges,
                 stats.vector_bytes,
                 db.sequence(),
-                recovery.replayed_operations,
-                recovery.skipped_operations,
-                recovery.truncated_tail_bytes
+                recovery.replayed_frames,
+                recovery.skipped_frames,
+                recovery.truncated_tail_bytes,
+                db.config().metric.name(),
+                recovery.graph_cache_loaded,
+                recovery.cached_nodes,
+                recovery.graph_cache_note,
+                maintenance.wal_bytes,
+                maintenance.tombstone_ratio,
+                maintenance.checkpoint_recommended,
+                maintenance.compact_recommended
             ))
         }
         "checkpoint" => {
             require_count(args, 0, 0, "checkpoint")?;
             db.checkpoint()?;
             Ok(format!("OK checkpoint sequence={}", db.sequence()))
+        }
+        "backup" => {
+            require_count(args, 1, 1, "backup <new-directory>")?;
+            db.backup(&args[0])?;
+            Ok(format!(
+                "OK backup sequence={} path={:?}",
+                db.sequence(),
+                args[0]
+            ))
+        }
+        "maintain" => {
+            require_count(args, 0, 0, "maintain")?;
+            let report = db.maintain(MaintenancePolicy::default())?;
+            Ok(format!(
+                "OK maintenance action={:?} removed_nodes={}",
+                report.action, report.removed_nodes
+            ))
+        }
+        "batch" => {
+            require_count(args, 1, 1, "batch <tsv-file>")?;
+            let rows = read_batch(&args[0])?;
+            let operations: Vec<_> = rows
+                .iter()
+                .map(|r| match &r.vector {
+                    Some(vector) => Mutation::Put {
+                        id: r.id,
+                        vector,
+                        metadata: &r.metadata,
+                    },
+                    None => Mutation::Delete { id: r.id },
+                })
+                .collect();
+            let report = db.write_batch(&operations)?;
+            Ok(format!(
+                "OK batch sequence={} inserted={} updated={} deleted={} absent={}",
+                report.sequence, report.inserted, report.updated, report.deleted, report.absent
+            ))
         }
         "compact" => {
             require_count(args, 0, 0, "compact")?;
@@ -269,9 +401,74 @@ where
         .map_or(Ok(default), |text| parse(text, name))
 }
 fn vector_values(text: &str) -> Result<Vec<f32>> {
-    text.split(',')
-        .map(|value| parse(value.trim(), "coordinate"))
-        .collect()
+    let mut vector = Vec::new();
+    for value in text.split(',') {
+        if vector.len() == 4096 {
+            return Err(Error::InvalidInput("too many vector coordinates".into()));
+        }
+        vector.push(parse(value.trim(), "coordinate")?);
+    }
+    Ok(vector)
+}
+
+fn metric(value: &str) -> Result<Metric> {
+    match value {
+        "l2" => Ok(Metric::SquaredL2),
+        "cosine" => Ok(Metric::Cosine),
+        "ip" => Ok(Metric::InnerProduct),
+        _ => Err(Error::InvalidInput(
+            "metric must be l2, cosine or ip".into(),
+        )),
+    }
+}
+
+struct BatchRow {
+    id: u64,
+    vector: Option<Vec<f32>>,
+    metadata: String,
+}
+fn read_batch(path: &str) -> Result<Vec<BatchRow>> {
+    let file = File::open(path)?;
+    const LIMIT: u64 = 16 * 1024 * 1024;
+    if file.metadata()?.len() > LIMIT {
+        return Err(Error::InvalidInput("batch input exceeds 16 MiB".into()));
+    }
+    let mut text = String::new();
+    file.take(LIMIT + 1).read_to_string(&mut text)?;
+    if text.len() as u64 > LIMIT {
+        return Err(Error::InvalidInput("batch input exceeds 16 MiB".into()));
+    }
+    let mut rows = Vec::new();
+    for line in text.lines().filter(|line| !line.is_empty()) {
+        if rows.len() == 1024 {
+            return Err(Error::InvalidInput("batch exceeds 1024 operations".into()));
+        }
+        let fields: Vec<_> = line.splitn(4, '\t').collect();
+        let row = match fields.as_slice() {
+            ["put", id, vector] => BatchRow {
+                id: parse(id, "ID")?,
+                vector: Some(vector_values(vector)?),
+                metadata: String::new(),
+            },
+            ["put", id, vector, metadata] => BatchRow {
+                id: parse(id, "ID")?,
+                vector: Some(vector_values(vector)?),
+                metadata: (*metadata).to_owned(),
+            },
+            ["delete", id] => BatchRow {
+                id: parse(id, "ID")?,
+                vector: None,
+                metadata: String::new(),
+            },
+            _ => {
+                return Err(Error::InvalidInput(
+                    "batch lines must be tab-separated put/ID/vector/metadata or delete/ID".into(),
+                ));
+            }
+        };
+        rows.push(row);
+    }
+    Ok(rows)
 }
 fn require_count(args: &[String], min: usize, max: usize, usage: &str) -> Result<()> {
     if (min..=max).contains(&args.len()) {
@@ -285,8 +482,8 @@ fn benchmark(args: &[String]) -> Result<()> {
     require_count(
         args,
         0,
-        6,
-        "bench [count] [dimensions] [queries] [ef] [seed] [clustered|uniform]",
+        7,
+        "bench [count] [dimensions] [queries] [ef] [seed] [clustered|uniform] [metric]",
     )?;
     let defaults = BenchConfig::default();
     let config = BenchConfig {
@@ -304,17 +501,24 @@ fn benchmark(args: &[String]) -> Result<()> {
                 ));
             }
         },
+        metric: metric(args.get(6).map_or("l2", String::as_str))?,
     };
     let result = bench::run(config)?;
+    print_benchmark(result);
+    Ok(())
+}
+
+fn print_benchmark(result: bench::BenchReport) {
     println!(
-        "dataset={} count={} dimensions={} queries={} k={} ef_search={} seed={}",
+        "dataset={} count={} dimensions={} queries={} k={} ef_search={} seed={} metric={}",
         result.config.dataset.name(),
         result.config.count,
         result.config.dimensions,
         result.config.queries,
         result.k,
         result.config.ef_search,
-        result.config.seed
+        result.config.seed,
+        result.config.metric.name()
     );
     println!(
         "build_seconds={:.6} recall_at_{}={:.4}% incomplete_queries={}",
@@ -344,5 +548,4 @@ fn benchmark(args: &[String]) -> Result<()> {
         result.index_stats.directed_edges,
         result.index_stats.vector_bytes
     );
-    Ok(())
 }

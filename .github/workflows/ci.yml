@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: ${{ matrix.os }} / Rust ${{ matrix.rust }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        rust: [stable, '1.89.0']
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install Rust
+        run: rustup toolchain install "${{ matrix.rust }}" --profile minimal --component rustfmt --component clippy
+      - name: Format
+        run: cargo +${{ matrix.rust }} fmt --check
+      - name: Test
+        run: cargo +${{ matrix.rust }} test --offline
+      - name: Lint
+        run: cargo +${{ matrix.rust }} clippy --offline --all-targets -- -D warnings
+      - name: Documentation
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo +${{ matrix.rust }} doc --offline --no-deps
+      - name: Release build
+        run: cargo +${{ matrix.rust }} build --offline --release
+      - name: Verify package
+        run: cargo +${{ matrix.rust }} package --offline

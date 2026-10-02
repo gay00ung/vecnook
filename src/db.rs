@@ -4,15 +4,53 @@ use std::{
 };
 
 use crate::{
-    Config, Error, IndexStats, Record, Result, SearchReport, VectorIndex,
+    BatchReport, Config, Error, IndexStats, Mutation, Record, Result, SearchOptions, SearchReport,
+    VectorIndex,
     storage::{self, Operation},
 };
 
 #[derive(Clone, Debug, Default)]
 pub struct RecoveryInfo {
-    pub replayed_operations: usize,
-    pub skipped_operations: usize,
+    pub replayed_frames: usize,
+    pub skipped_frames: usize,
     pub truncated_tail_bytes: u64,
+    pub graph_cache_loaded: bool,
+    pub cached_nodes: usize,
+    pub graph_cache_note: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct MaintenancePolicy {
+    pub wal_bytes: u64,
+    pub min_tombstones: usize,
+    pub tombstone_ratio: f64,
+}
+impl Default for MaintenancePolicy {
+    fn default() -> Self {
+        Self {
+            wal_bytes: 64 * 1024 * 1024,
+            min_tombstones: 128,
+            tombstone_ratio: 0.2,
+        }
+    }
+}
+#[derive(Clone, Debug)]
+pub struct MaintenanceStatus {
+    pub wal_bytes: u64,
+    pub tombstone_ratio: f64,
+    pub checkpoint_recommended: bool,
+    pub compact_recommended: bool,
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MaintenanceAction {
+    None,
+    Checkpoint,
+    Compact,
+}
+#[derive(Clone, Debug)]
+pub struct MaintenanceReport {
+    pub action: MaintenanceAction,
+    pub removed_nodes: usize,
 }
 
 /// Holds an exclusive OS lock until dropped. Dropping does not checkpoint:
@@ -34,9 +72,15 @@ impl Database {
         let path = path.as_ref().to_path_buf();
         fs::create_dir_all(&path)?;
         let lock = storage::acquire_lock(&path)?;
-        if ["snapshot.bin", "wal.bin", "snapshot.tmp"]
-            .iter()
-            .any(|name| path.join(name).exists())
+        if [
+            "snapshot.bin",
+            "wal.bin",
+            "snapshot.tmp",
+            "index.bin",
+            "index.tmp",
+        ]
+        .iter()
+        .any(|name| path.join(name).exists())
         {
             return Err(Error::AlreadyExists);
         }
@@ -72,11 +116,21 @@ impl Database {
             .write(true)
             .open(path.join("wal.bin"))?;
         let recovered = storage::recover(&path, &mut wal)?;
-        let index = VectorIndex::from_records(recovered.config, recovered.records)?;
+        let cached_nodes = recovered.graph.as_ref().map_or(0, |g| g.links.len());
+        let graph_cache_loaded = recovered.graph.is_some();
+        let index = match recovered.graph {
+            Some(graph) => {
+                VectorIndex::from_cached_graph(recovered.config, recovered.records, graph)?
+            }
+            None => VectorIndex::from_records(recovered.config, recovered.records)?,
+        };
         let recovery = RecoveryInfo {
-            replayed_operations: recovered.replayed,
-            skipped_operations: recovered.skipped,
+            replayed_frames: recovered.replayed,
+            skipped_frames: recovered.skipped,
             truncated_tail_bytes: recovered.truncated_bytes,
+            graph_cache_loaded,
+            cached_nodes,
+            graph_cache_note: recovered.cache_note,
         };
         Ok(Self {
             path,
@@ -109,6 +163,21 @@ impl Database {
     }
     pub fn search_hnsw(&self, query: &[f32], k: usize, ef: usize) -> Result<SearchReport> {
         self.index.search_hnsw(query, k, ef)
+    }
+    pub fn search(&self, query: &[f32], k: usize, options: SearchOptions) -> Result<SearchReport> {
+        self.index.search(query, k, options)
+    }
+    pub fn search_filtered<F>(
+        &self,
+        query: &[f32],
+        k: usize,
+        options: SearchOptions,
+        filter: F,
+    ) -> Result<SearchReport>
+    where
+        F: FnMut(&Record) -> bool,
+    {
+        self.index.search_filtered(query, k, options, filter)
     }
     pub fn check_invariants(&self) -> Result<()> {
         self.index.check_invariants()
@@ -150,6 +219,113 @@ impl Database {
         self.index.delete(id);
         self.sequence = next;
         Ok(true)
+    }
+
+    /// One synced WAL frame. Input errors or WAL write failure leave RAM unchanged.
+    pub fn write_batch(&mut self, operations: &[Mutation<'_>]) -> Result<BatchReport> {
+        self.ensure_writable()?;
+        let mut report = self.index.validate_batch(operations)?;
+        report.sequence = self.sequence;
+        if report.inserted + report.updated + report.deleted == 0 {
+            return Ok(report);
+        }
+        let next = self.next_sequence()?;
+        self.commit_frame(&storage::encode_batch(next, operations))?;
+        for operation in operations {
+            match operation {
+                Mutation::Put {
+                    id,
+                    vector,
+                    metadata,
+                } => {
+                    if let Err(error) = self.index.put(*id, vector, metadata) {
+                        self.poisoned = true;
+                        return Err(error);
+                    }
+                }
+                Mutation::Delete { id } => {
+                    self.index.delete(*id);
+                }
+            }
+        }
+        self.sequence = next;
+        report.sequence = next;
+        Ok(report)
+    }
+
+    /// Make an independently openable backup in a new directory. A failed copy
+    /// can leave an incomplete destination; it never overwrites an existing one.
+    pub fn backup(&mut self, destination: impl AsRef<Path>) -> Result<()> {
+        self.ensure_writable()?;
+        let destination = destination.as_ref();
+        if destination.exists() {
+            return Err(Error::AlreadyExists);
+        }
+        if let Some(parent) = destination.parent().filter(|p| !p.as_os_str().is_empty()) {
+            fs::create_dir_all(parent)?;
+        }
+        fs::create_dir(destination)?;
+        let _target_lock = storage::acquire_lock(destination)?;
+        self.checkpoint()?;
+        for name in ["snapshot.bin", "index.bin"] {
+            let mut source = File::open(self.path.join(name))?;
+            let mut target = OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .open(destination.join(name))?;
+            std::io::copy(&mut source, &mut target)?;
+            target.sync_all()?;
+        }
+        OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(destination.join("wal.bin"))?
+            .sync_all()?;
+        storage::sync_directory(destination)?;
+        if let Some(parent) = destination.parent().filter(|p| !p.as_os_str().is_empty()) {
+            storage::sync_directory(parent)?;
+        }
+        Ok(())
+    }
+
+    pub fn maintenance_status(&self, policy: MaintenancePolicy) -> Result<MaintenanceStatus> {
+        if policy.wal_bytes == 0
+            || policy.min_tombstones == 0
+            || !(0.0..=1.0).contains(&policy.tombstone_ratio)
+        {
+            return Err(Error::InvalidInput("invalid maintenance thresholds".into()));
+        }
+        let stats = self.stats();
+        let ratio = if stats.physical_nodes == 0 {
+            0.0
+        } else {
+            stats.tombstones as f64 / stats.physical_nodes as f64
+        };
+        let wal_bytes = self.wal.metadata()?.len();
+        Ok(MaintenanceStatus {
+            wal_bytes,
+            tombstone_ratio: ratio,
+            checkpoint_recommended: wal_bytes >= policy.wal_bytes,
+            compact_recommended: stats.tombstones >= policy.min_tombstones
+                && ratio >= policy.tombstone_ratio,
+        })
+    }
+
+    pub fn maintain(&mut self, policy: MaintenancePolicy) -> Result<MaintenanceReport> {
+        self.ensure_writable()?;
+        let status = self.maintenance_status(policy)?;
+        let (action, removed_nodes) = if status.compact_recommended {
+            (MaintenanceAction::Compact, self.compact()?)
+        } else if status.checkpoint_recommended {
+            self.checkpoint()?;
+            (MaintenanceAction::Checkpoint, 0)
+        } else {
+            (MaintenanceAction::None, 0)
+        };
+        Ok(MaintenanceReport {
+            action,
+            removed_nodes,
+        })
     }
 
     pub fn checkpoint(&mut self) -> Result<()> {
@@ -200,6 +376,35 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn failed_batch_wal_write_applies_none_of_the_members_and_poisons_handle() {
+        let path =
+            std::env::temp_dir().join(format!("vecnook-batch-io-failure-{}", std::process::id()));
+        let mut db = Database::create(&path, Config::new(1)).unwrap();
+        db.put(1, &[1.0], "original").unwrap();
+        db.wal = File::open(path.join("wal.bin")).unwrap();
+        assert!(matches!(
+            db.write_batch(&[
+                Mutation::Delete { id: 1 },
+                Mutation::Put {
+                    id: 2,
+                    vector: &[2.0],
+                    metadata: "new"
+                }
+            ]),
+            Err(Error::Io(_))
+        ));
+        assert_eq!(db.get(1).unwrap().metadata, "original");
+        assert!(db.get(2).is_none());
+        assert_eq!(db.sequence(), 1);
+        assert!(matches!(db.write_batch(&[]), Err(Error::Poisoned)));
+        drop(db);
+        let db = Database::open(&path).unwrap();
+        assert!(db.get(1).is_some());
+        assert!(db.get(2).is_none());
+        drop(db);
+        fs::remove_dir_all(path).unwrap();
+    }
     #[test]
     fn failed_wal_write_keeps_memory_and_poison_blocks_subsequent_writes() {
         let path = std::env::temp_dir().join(format!("vector-io-failure-{}", std::process::id()));

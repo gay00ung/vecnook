@@ -1,16 +1,22 @@
 [package]
-name = "vector"
-version = "0.1.0"
+name = "vecnook"
+version = "0.2.0"
 edition = "2024"
 rust-version = "1.89"
+license = "MIT"
+repository = "https://github.com/gay00ung/vecnook"
+readme = "README.md"
+keywords = ["vector", "database", "hnsw", "embedded", "similarity"]
+categories = ["database-implementations", "algorithms"]
+include = ["src/**", "examples/**", "tests/**", "docs/**", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE", "CHANGELOG.md", "CONTRIBUTING.md"]
 description = "A vector database with a from-scratch HNSW index and durable storage"
 
 [lib]
-name = "vector"
+name = "vecnook"
 path = "src/lib.rs"
 
 [[bin]]
-name = "vector"
+name = "vecnook"
 path = "src/main.rs"
 
 [dependencies]
