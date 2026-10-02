@@ -1,0 +1,10 @@
+# Build output and local runtime data
+/target/
+/work/
+/data/
+.DS_Store
+
+# Local planning and QA documents
+/PLAN.md
+/PLANNING_QA.md
+/IMPLEMENTATION_QA.md

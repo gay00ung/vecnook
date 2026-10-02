@@ -1,0 +1,20 @@
+[package]
+name = "vector"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.89"
+description = "A vector database with a from-scratch HNSW index and durable storage"
+
+[lib]
+name = "vector"
+path = "src/lib.rs"
+
+[[bin]]
+name = "vector"
+path = "src/main.rs"
+
+[dependencies]
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
