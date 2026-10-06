@@ -41,5 +41,9 @@ jobs:
         run: cargo +${{ matrix.rust }} doc --offline --no-deps
       - name: Release build
         run: cargo +${{ matrix.rust }} build --offline --release
+      - name: Document search integration
+        env:
+          VECNOOK_BINARY: target/release/vecnook
+        run: python3 -m unittest discover -s examples/documents -p 'test_*.py'
       - name: Verify package
         run: cargo +${{ matrix.rust }} package --offline

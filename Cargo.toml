@@ -8,7 +8,7 @@ repository = "https://github.com/gay00ung/vecnook"
 readme = "README.md"
 keywords = ["vector", "database", "hnsw", "embedded", "similarity"]
 categories = ["database-implementations", "algorithms"]
-include = ["src/**", "examples/**", "tests/**", "docs/**", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE", "CHANGELOG.md", "CONTRIBUTING.md"]
+include = ["src/**", "examples/*.rs", "examples/documents/*.py", "examples/documents/**/*.md", "tests/**", "docs/*.md", "Cargo.toml", "Cargo.lock", "README.md", "LICENSE", "CHANGELOG.md", "CONTRIBUTING.md"]
 description = "A vector database with a from-scratch HNSW index and durable storage"
 
 [lib]

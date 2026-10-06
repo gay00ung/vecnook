@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Local Markdown search demo with Ollama, source line ranges, model digest checks and restart persistence.
+- CLI `search --json` with escaped UTF-8 metadata and full-precision distances.
+
 ## 0.2.0 — 2026-10-03
 
 An embedded beta for Rust applications, licensed under MIT.

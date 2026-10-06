@@ -111,6 +111,10 @@ Recovery trims only an incomplete final WAL frame at EOF. A complete checksum er
 
 Use a local filesystem and keep all database files together. Tests cover process kills, truncated WAL frames, and injected corruption. Hardware power loss, network filesystems, and secure erasure are not validated. Compaction temporarily holds a replacement index and can increase peak memory use.
 
+## Search real documents
+
+The [Markdown search demo](examples/documents/README.md) uses a local Ollama embedding model, stores source paths and line ranges, and prints original chunks for natural-language queries. Python uses only its standard library; the Rust database keeps zero external dependencies.
+
 ## CLI
 
 ```bash
@@ -123,7 +127,7 @@ vecnook stats data/demo
 vecnook backup data/demo data/demo-backup
 ```
 
-CLI metrics are `l2`, `cosine`, and `ip`. CLI search defaults to `auto`; specify `hnsw` or `exact` to force a mode. The metadata option compares the complete string for equality. Supply K, efSearch, and mode before `--metadata`.
+CLI metrics are `l2`, `cosine`, and `ip`. CLI search defaults to `auto`; specify `hnsw` or `exact` to force a mode. The metadata option compares the complete string for equality. Supply K, efSearch, and mode before `--metadata`. Append `--json` for machine-readable search reports with original metadata and full-precision distances.
 
 For bulk writes, `vecnook batch data/demo changes.tsv` accepts tab-separated rows:
 

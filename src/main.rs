@@ -19,7 +19,7 @@ Usage:\n\
   vecnook put <db-dir> <id> <comma-separated-vector> [metadata]\n\
   vecnook get <db-dir> <id>\n\
   vecnook delete <db-dir> <id>\n\
-  vecnook search <db-dir> <comma-separated-vector> [k] [ef-search] [exact|hnsw|auto] [--metadata value]\n\
+  vecnook search <db-dir> <comma-separated-vector> [k] [ef-search] [exact|hnsw|auto] [--metadata value] [--json]\n\
   vecnook batch <db-dir> <tsv-file>\n\
   vecnook backup <db-dir> <new-backup-dir>\n\
   vecnook maintain <db-dir>\n\
@@ -193,6 +193,8 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
             ))
         }
         "search" => {
+            let json = args.last().is_some_and(|value| value == "--json");
+            let args = if json { &args[..args.len() - 1] } else { args };
             require_count(
                 args,
                 1,
@@ -233,6 +235,9 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
                 },
                 |r| filter.is_none_or(|value| r.metadata == value),
             )?;
+            if json {
+                return Ok(search_json(&found));
+            }
             let mut output = format!(
                 "mode={} requested={k} returned={} complete={} distance_computations={} metric={} eligible={} reason={:?}",
                 match found.mode {
@@ -342,6 +347,51 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
             "unknown shell command {command}"
         ))),
     }
+}
+
+fn json_string(value: &str) -> String {
+    let mut result = String::from("\"");
+    for c in value.chars() {
+        match c {
+            '"' => result.push_str("\\\""),
+            '\\' => result.push_str("\\\\"),
+            '\n' => result.push_str("\\n"),
+            '\r' => result.push_str("\\r"),
+            '\t' => result.push_str("\\t"),
+            c if c <= '\u{1f}' => result.push_str(&format!("\\u{:04x}", c as u32)),
+            c => result.push(c),
+        }
+    }
+    result.push('"');
+    result
+}
+
+fn search_json(report: &vecnook::SearchReport) -> String {
+    let neighbors: Vec<_> = report
+        .neighbors
+        .iter()
+        .map(|n| {
+            format!(
+                "{{\"id\":{},\"distance\":{},\"metadata\":{}}}",
+                n.id,
+                n.distance,
+                json_string(&n.metadata)
+            )
+        })
+        .collect();
+    format!(
+        "{{\"mode\":\"{}\",\"metric\":\"{}\",\"complete\":{},\"eligible_count\":{},\"distance_computations\":{},\"reason\":\"{:?}\",\"neighbors\":[{}]}}",
+        match report.mode {
+            SearchMode::Exact => "exact",
+            SearchMode::Hnsw => "hnsw",
+        },
+        report.metric.name(),
+        report.complete,
+        report.eligible_count,
+        report.distance_computations,
+        report.reason,
+        neighbors.join(",")
+    )
 }
 
 fn take_word(text: &str) -> (&str, &str) {
@@ -548,4 +598,15 @@ fn print_benchmark(result: bench::BenchReport) {
         result.index_stats.directed_edges,
         result.index_stats.vector_bytes
     );
+}
+
+#[cfg(test)]
+mod json_tests {
+    #[test]
+    fn json_preserves_unicode_and_escapes_every_control_character() {
+        assert_eq!(
+            super::json_string("한글\"\\\n\r\t\0\u{1f}"),
+            "\"한글\\\"\\\\\\n\\r\\t\\u0000\\u001f\""
+        );
+    }
 }
