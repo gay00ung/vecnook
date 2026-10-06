@@ -76,6 +76,8 @@ pub struct Timing {
     pub p50_ms: f64,
     /// Nearest-rank 95th percentile latency in milliseconds.
     pub p95_ms: f64,
+    /// Nearest-rank 99th percentile latency in milliseconds.
+    pub p99_ms: f64,
 }
 
 impl Timing {
@@ -89,6 +91,7 @@ impl Timing {
             sequential_qps: qps,
             p50_ms: percentile(0.50),
             p95_ms: percentile(0.95),
+            p99_ms: percentile(0.99),
         }
     }
 }

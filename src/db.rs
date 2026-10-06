@@ -210,7 +210,7 @@ impl Database {
     }
     /// Bounded snapshot/node headroom; this does not measure process RSS.
     pub fn capacity(&self) -> crate::CapacityStatus {
-        crate::CapacityStatus::from_records(self.index.records())
+        self.index.capacity()
     }
     /// Export active IDs, original f32 coordinates and opaque metadata to a new file.
     /// Failure can leave an incomplete export; import verifies it before writing.

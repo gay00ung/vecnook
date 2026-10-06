@@ -255,6 +255,15 @@ impl VectorIndex {
     pub fn config(&self) -> &Config {
         &self.config
     }
+    /// Constant-time snapshot/node budget, including deleted versions.
+    pub fn capacity(&self) -> crate::CapacityStatus {
+        crate::CapacityStatus::from_counts(
+            self.len(),
+            self.nodes.len(),
+            self.nodes.len() * self.config.dimensions * 4,
+            self.encoded_bytes + SNAPSHOT_HEADER_BYTES + 4,
+        )
+    }
     /// Number of active IDs; old and deleted physical nodes are excluded.
     pub fn len(&self) -> usize {
         self.active.len()

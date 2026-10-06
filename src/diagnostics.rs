@@ -32,17 +32,12 @@ pub struct CapacityStatus {
     pub remaining_nodes: usize,
 }
 impl CapacityStatus {
-    pub(crate) fn from_records<'a>(records: impl Iterator<Item = &'a Record>) -> Self {
-        let mut physical_nodes = 0;
-        let mut active_records = 0;
-        let mut vector_bytes = 0;
-        let mut snapshot_bytes = SNAPSHOT_HEADER_BYTES + 4;
-        for record in records {
-            physical_nodes += 1;
-            active_records += usize::from(!record.deleted);
-            vector_bytes += 4 * record.vector.len();
-            snapshot_bytes += record.encoded_len();
-        }
+    pub(crate) fn from_counts(
+        active_records: usize,
+        physical_nodes: usize,
+        vector_bytes: usize,
+        snapshot_bytes: usize,
+    ) -> Self {
         Self {
             active_records,
             physical_nodes,
@@ -54,6 +49,19 @@ impl CapacityStatus {
             max_physical_nodes: MAX_RECORDS,
             remaining_nodes: MAX_RECORDS.saturating_sub(physical_nodes),
         }
+    }
+    pub(crate) fn from_records<'a>(records: impl Iterator<Item = &'a Record>) -> Self {
+        let mut physical_nodes = 0;
+        let mut active_records = 0;
+        let mut vector_bytes = 0;
+        let mut snapshot_bytes = SNAPSHOT_HEADER_BYTES + 4;
+        for record in records {
+            physical_nodes += 1;
+            active_records += usize::from(!record.deleted);
+            vector_bytes += 4 * record.vector.len();
+            snapshot_bytes += record.encoded_len();
+        }
+        Self::from_counts(active_records, physical_nodes, vector_bytes, snapshot_bytes)
     }
 }
 

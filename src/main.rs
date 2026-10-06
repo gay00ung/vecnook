@@ -908,17 +908,19 @@ fn print_benchmark(result: bench::BenchReport) {
         result.incomplete_queries
     );
     println!(
-        "exact sequential_qps={:.2} p50_ms={:.6} p95_ms={:.6} mean_distance_computations={:.2}",
+        "exact sequential_qps={:.2} p50_ms={:.6} p95_ms={:.6} p99_ms={:.6} mean_distance_computations={:.2}",
         result.exact.sequential_qps,
         result.exact.p50_ms,
         result.exact.p95_ms,
+        result.exact.p99_ms,
         result.mean_exact_computations
     );
     println!(
-        "hnsw sequential_qps={:.2} p50_ms={:.6} p95_ms={:.6} mean_distance_computations={:.2}",
+        "hnsw sequential_qps={:.2} p50_ms={:.6} p95_ms={:.6} p99_ms={:.6} mean_distance_computations={:.2}",
         result.hnsw.sequential_qps,
         result.hnsw.p50_ms,
         result.hnsw.p95_ms,
+        result.hnsw.p99_ms,
         result.mean_hnsw_computations
     );
     println!(

@@ -23,6 +23,38 @@ fn bytes(path: &std::path::Path) -> BTreeMap<String, Vec<u8>> {
 }
 
 #[test]
+fn constant_time_capacity_matches_actual_snapshot_after_churn_and_compaction() {
+    let tmp = TempDir::new();
+    let path = tmp.path().join("budget");
+    let mut db = Database::create(&path, Config::new(3)).unwrap();
+    db.put(1, &[1.0, 2.0, 3.0], "original 한글").unwrap();
+    db.put(2, &[4.0, 5.0, 6.0], "deleted").unwrap();
+    db.put(1, &[7.0, 8.0, 9.0], "a longer replacement\r\n")
+        .unwrap();
+    db.delete(2).unwrap();
+    for compact in [false, true] {
+        if compact {
+            db.compact().unwrap();
+        }
+        db.checkpoint().unwrap();
+        let capacity = db.capacity();
+        assert_eq!(
+            capacity.snapshot_bytes as u64,
+            fs::metadata(path.join("snapshot.bin")).unwrap().len()
+        );
+        assert_eq!(capacity.active_records, 1);
+        assert_eq!(capacity.vector_bytes, capacity.physical_nodes * 3 * 4);
+        assert_eq!(capacity.tombstones, if compact { 0 } else { 2 });
+        drop(db);
+        let inspected = doctor(&path).unwrap().capacity;
+        assert_eq!(capacity.snapshot_bytes, inspected.snapshot_bytes);
+        assert_eq!(capacity.physical_nodes, inspected.physical_nodes);
+        db = Database::open(&path).unwrap();
+        assert_eq!(db.capacity().snapshot_bytes, capacity.snapshot_bytes);
+    }
+}
+
+#[test]
 fn doctor_never_changes_clean_torn_corrupt_locked_or_missing_lock_storage() {
     let tmp = TempDir::new();
     let path = tmp.path().join("raw");

@@ -151,6 +151,16 @@ impl Postings {
         }
         Ok(result)
     }
+    fn covers_all(&self, filter: DocumentFilter<'_>, active: usize) -> bool {
+        filter.source.is_none_or(|source| {
+            self.sources
+                .get(source)
+                .is_some_and(|ids| ids.len() == active)
+        }) && filter
+            .tags
+            .iter()
+            .all(|tag| self.tags.get(*tag).is_some_and(|ids| ids.len() == active))
+    }
     fn select(&self, filter: DocumentFilter<'_>) -> Vec<u64> {
         let mut sets = Vec::new();
         if let Some(source) = filter.source {
@@ -400,7 +410,7 @@ impl Collection {
         if filter.tags.len() > 32 {
             return Err(Error::InvalidInput("filter exceeds 32 tags".into()));
         }
-        let search = if filter.source.is_none() && filter.tags.is_empty() {
+        let search = if self.postings.covers_all(filter, self.db.len()) {
             self.db.search(query, k, options)?
         } else {
             self.db

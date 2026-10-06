@@ -11,6 +11,65 @@ fn space() -> EmbeddingSpace {
 }
 
 #[test]
+fn full_coverage_filters_preserve_results_after_mutations_and_restart() {
+    let temp = TempDir::new();
+    let mut c = Collection::create(temp.path(), "covered", Config::new(1), "fixture").unwrap();
+    let documents = (0..600)
+        .map(|id| doc(id, "a.md", &["all", "common"]))
+        .collect::<Vec<_>>();
+    let vectors = (0..600).map(|id| [id as f32]).collect::<Vec<_>>();
+    let operations = documents
+        .iter()
+        .zip(&vectors)
+        .map(|(document, vector)| DocumentMutation::Put { document, vector })
+        .collect::<Vec<_>>();
+    c.write_batch(&operations).unwrap();
+    let filter = DocumentFilter::default()
+        .with_source("a.md")
+        .with_tags(&["all", "common"]);
+    let options = SearchOptions::default();
+    let before = c.search(&[599.0], 10, options, filter).unwrap();
+    assert_eq!(before.search.eligible_count, 600);
+    assert_eq!(before.search.filter_evaluations, 0);
+    assert_eq!(
+        before.neighbors,
+        c.search(&[599.0], 10, options, DocumentFilter::default())
+            .unwrap()
+            .neighbors
+    );
+    c.put(&doc(599, "other.md", &["common"]), &[599.0]).unwrap();
+    let changed = c.search(&[599.0], 10, options, filter).unwrap();
+    assert_eq!(changed.search.eligible_count, 599);
+    // Posting-list selection does not count predicate evaluations. Validate
+    // the actual excluded result rather than treating that counter as allocation evidence.
+    assert!(changed.neighbors.iter().all(|n| n.document.id != 599
+        && n.document.source == "a.md"
+        && n.document.tags.contains(&"all".to_owned())));
+    c.delete(599).unwrap();
+    for _ in 0..2 {
+        let report = c.search(&[599.0], 10, options, filter).unwrap();
+        assert_eq!(report.search.eligible_count, 599);
+        assert_eq!(report.search.filter_evaluations, 0);
+        assert!(report.neighbors.iter().all(|n| n.document.id != 599));
+        c.check_invariants().unwrap();
+        c.checkpoint().unwrap();
+        let space = c.space().clone();
+        drop(c);
+        c = Collection::open(temp.path(), "covered", &space).unwrap();
+    }
+    let missing = c
+        .search(
+            &[599.0],
+            10,
+            options,
+            DocumentFilter::default().with_tags(&["missing"]),
+        )
+        .unwrap();
+    assert_eq!(missing.search.eligible_count, 0);
+    assert!(missing.neighbors.is_empty());
+}
+
+#[test]
 fn large_tag_intersections_use_graph_paths_and_exact_results_match_an_independent_oracle() {
     let temp = TempDir::new();
     let mut collection =
