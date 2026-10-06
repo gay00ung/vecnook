@@ -205,7 +205,7 @@ impl Collection {
         })
     }
     /// Open and validate the expected model identity, dimensions and metric.
-    /// A mismatch returns InvalidInput before accepting any document/query.
+    /// A mismatch returns EmbeddingMismatch before accepting any document/query.
     /// Malformed payloads or inconsistent headers return Corrupt.
     pub fn open(root: impl AsRef<Path>, name: &str, expected: &EmbeddingSpace) -> Result<Self> {
         expected.validate()?;
@@ -250,6 +250,35 @@ impl Collection {
     /// Record/graph counts; includes tombstoned document versions.
     pub fn stats(&self) -> IndexStats {
         self.db.stats()
+    }
+    /// Estimated snapshot and physical-node headroom, including old versions.
+    pub fn capacity(&self) -> crate::CapacityStatus {
+        self.db.capacity()
+    }
+    /// Export original documents/vectors and embedding identity to a new file.
+    pub fn export(&self, destination: impl AsRef<Path>) -> Result<()> {
+        self.db.export_collection(destination.as_ref(), &self.space)
+    }
+    /// Validate and import a logical document export into a new named directory.
+    /// All documents are validated before claiming the destination. A storage failure
+    /// can leave an incomplete directory; it is never overwritten on retry.
+    pub fn import(source: impl AsRef<Path>, root: impl AsRef<Path>, name: &str) -> Result<Self> {
+        let data = crate::transfer::read(source.as_ref())?;
+        let space = data.space.ok_or_else(|| {
+            Error::InvalidInput("document import requires a collection export".into())
+        })?;
+        let index = crate::VectorIndex::from_records(data.config, data.records)?;
+        let path = collection_path(root.as_ref(), name)?;
+        crate::transfer::claim_directory(&path)?;
+        let db = Database::create_from_index(&path, index)?;
+        write_header(&path, name, &space)?;
+        let postings = Postings::from_db(&db)?;
+        Ok(Self {
+            db,
+            name: name.to_owned(),
+            space,
+            postings,
+        })
     }
     /// Recovery observations from the underlying database open.
     pub fn recovery_info(&self) -> &RecoveryInfo {
@@ -461,7 +490,7 @@ fn write_header(path: &Path, name: &str, space: &EmbeddingSpace) -> Result<()> {
     file.sync_all()?;
     storage::sync_directory(path)
 }
-fn read_header(path: &Path, name: &str) -> Result<EmbeddingSpace> {
+pub(crate) fn read_header(path: &Path, name: &str) -> Result<EmbeddingSpace> {
     let mut bytes = Vec::new();
     File::open(path.join("collection.bin"))?
         .take(1025)

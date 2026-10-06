@@ -2,6 +2,8 @@
 
 ## 0.4.0-beta.1 — unreleased
 
+- Add read-only diagnostics, snapshot/node headroom, bounded logical export/import and collection backup commands.
+
 - Add paginated documents, optimistic batch writes and source-atomic Markdown sync with explicit namespace-restricted pruning.
 
 - Prepare extensible constructors and typed error categories; publish the bounded app worker and CLI JSON v1 with decimal string IDs.

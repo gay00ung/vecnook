@@ -84,7 +84,7 @@ impl<'a> Reader<'a> {
     pub(crate) fn u64(&mut self) -> Result<u64> {
         Ok(u64::from_le_bytes(self.take(8)?.try_into().unwrap()))
     }
-    fn vector(&mut self, dimensions: usize) -> Result<Vec<f32>> {
+    pub(crate) fn vector(&mut self, dimensions: usize) -> Result<Vec<f32>> {
         let raw = self.take(dimensions * 4)?;
         let values: Vec<_> = raw
             .as_chunks::<4>()
@@ -421,6 +421,14 @@ pub(crate) struct Recovered {
 }
 
 pub(crate) fn recover(path: &Path, wal: &mut File) -> Result<Recovered> {
+    recover_inner(path, wal, true)
+}
+
+pub(crate) fn inspect(path: &Path, wal: &mut File) -> Result<Recovered> {
+    recover_inner(path, wal, false)
+}
+
+fn recover_inner(path: &Path, wal: &mut File, repair: bool) -> Result<Recovered> {
     let Snapshot {
         config,
         sequence: snapshot_sequence,
@@ -538,7 +546,7 @@ pub(crate) fn recover(path: &Path, wal: &mut File) -> Result<Recovered> {
     }
     drop(reader);
     let truncated_bytes = file_length - offset;
-    if truncated_bytes != 0 {
+    if truncated_bytes != 0 && repair {
         wal.set_len(offset)?;
         wal.sync_all()?;
     }

@@ -27,6 +27,12 @@ Usage:\n\
   vecnook batch <db-dir> <tsv-file>\n\
   vecnook backup <db-dir> <new-backup-dir>\n\
   vecnook maintain <db-dir>\n\
+  vecnook doctor <db-or-collection-dir>\n\
+  vecnook export <db-dir> <new-export-file>\n\
+  vecnook import <export-file> <new-db-dir>\n\
+  vecnook docs-import <export-file> <root> <new-name>\n\
+  vecnook docs-export <root> <name> <dimensions> <model-identity> <metric> <new-export-file>\n\
+  vecnook docs-backup <root> <name> <dimensions> <model-identity> <metric> <backup-root> <new-name>\n\
   vecnook stats <db-dir>\n\
   vecnook checkpoint <db-dir>\n\
   vecnook compact <db-dir>\n\
@@ -70,6 +76,18 @@ fn run(args: &[String]) -> Result<()> {
     }
     if command == "demo" {
         return demo::run(&args[1..]);
+    }
+    if command == "doctor" {
+        require_count(args, 2, 2, "doctor <db-or-collection-directory>")?;
+        let report = vecnook::doctor(&args[1])?;
+        println!("{}", diagnostic_json(&report));
+        return Ok(());
+    }
+    if command == "import" {
+        require_count(args, 3, 3, "import <export-file> <new-db-directory>")?;
+        let db = Database::import(&args[1], &args[2])?;
+        println!("OK imported records={}", db.len());
+        return Ok(());
     }
     if command == "init" {
         require_count(
@@ -152,6 +170,7 @@ fn run(args: &[String]) -> Result<()> {
             | "shell"
             | "batch"
             | "backup"
+            | "export"
             | "maintain"
     ) {
         return Err(Error::InvalidInput(format!("unknown command {command}")));
@@ -309,6 +328,11 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
             db.checkpoint()?;
             Ok(format!("OK checkpoint sequence={}", db.sequence()))
         }
+        "export" => {
+            require_count(args, 1, 1, "export <new-export-file>")?;
+            db.export(&args[0])?;
+            Ok(format!("OK exported records={}", db.len()))
+        }
         "backup" => {
             require_count(args, 1, 1, "backup <new-directory>")?;
             db.backup(&args[0])?;
@@ -396,6 +420,12 @@ fn document_json(document: &Document) -> String {
 
 fn document_command(args: &[String]) -> Result<()> {
     let command = args[0].as_str();
+    if command == "docs-import" {
+        require_count(args, 4, 4, "docs-import <export-file> <root> <new-name>")?;
+        let collection = Collection::import(&args[1], &args[2], &args[3])?;
+        println!("OK imported documents={}", collection.len());
+        return Ok(());
+    }
     if command == "docs-info" {
         require_count(args, 3, 3, "docs-info <root> <name>")?;
         let space = Collection::describe(&args[1], &args[2])?;
@@ -435,6 +465,8 @@ fn document_command(args: &[String]) -> Result<()> {
         command,
         "docs-batch"
             | "docs-list"
+            | "docs-export"
+            | "docs-backup"
             | "docs-search"
             | "docs-checkpoint"
             | "docs-get"
@@ -445,6 +477,16 @@ fn document_command(args: &[String]) -> Result<()> {
     let mut collection = Collection::open(&args[1], &args[2], &space)?;
     let extra = &args[6..];
     match command {
+        "docs-export" => {
+            require_count(extra, 1, 1, "docs-export ... <new-export-file>")?;
+            collection.export(&extra[0])?;
+            println!("OK exported documents={}", collection.len());
+        }
+        "docs-backup" => {
+            require_count(extra, 2, 2, "docs-backup ... <root> <new-name>")?;
+            collection.backup(&extra[0], &extra[1])?;
+            println!("OK backup documents={}", collection.len());
+        }
         "docs-batch" => {
             require_count(extra, 1, 3, "docs-batch ... <tsv-file> [--if-sequence N]")?;
             let expected = match extra {
@@ -623,6 +665,37 @@ fn document_command(args: &[String]) -> Result<()> {
         _ => unreachable!(),
     }
     Ok(())
+}
+
+fn diagnostic_json(r: &vecnook::DiagnosticReport) -> String {
+    let c = &r.capacity;
+    format!(
+        "{{\"schema_version\":1,\"sequence\":\"{}\",\"model\":{},\"dimensions\":{},\"metric\":{},\"active_records\":{},\"physical_nodes\":{},\"tombstones\":{},\"raw_vector_bytes\":{},\"estimated_snapshot_bytes\":{},\"remaining_snapshot_bytes\":{},\"remaining_nodes\":{},\"snapshot_file_bytes\":{},\"wal_bytes\":{},\"cache_bytes\":{},\"pending_tail_bytes\":{},\"replayed_frames\":{},\"graph_cache_valid\":{},\"graph_cache_note\":{},\"checkpoint_recommended\":{},\"compact_recommended\":{}}}",
+        r.sequence,
+        r.space
+            .as_ref()
+            .map_or("null".into(), |s| json_string(&s.model)),
+        r.config.dimensions,
+        json_string(r.config.metric.name()),
+        c.active_records,
+        c.physical_nodes,
+        c.tombstones,
+        c.vector_bytes,
+        c.snapshot_bytes,
+        c.remaining_snapshot_bytes,
+        c.remaining_nodes,
+        r.snapshot_file_bytes,
+        r.wal_bytes,
+        r.cache_bytes,
+        r.pending_tail_bytes,
+        r.replayed_frames,
+        r.graph_cache_valid,
+        r.graph_cache_note
+            .as_ref()
+            .map_or("null".into(), |s| json_string(s)),
+        r.checkpoint_recommended,
+        r.compact_recommended
+    )
 }
 
 fn search_json(report: &vecnook::SearchReport) -> String {

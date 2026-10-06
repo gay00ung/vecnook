@@ -55,6 +55,7 @@ pub mod bench;
 mod collection;
 mod config;
 mod db;
+mod diagnostics;
 mod document;
 mod error;
 mod graph;
@@ -63,6 +64,7 @@ mod math;
 mod rng;
 mod search;
 mod storage;
+mod transfer;
 
 pub use batch::{BatchReport, Mutation};
 pub use collection::{
@@ -74,6 +76,7 @@ pub use db::{
     Database, MaintenanceAction, MaintenancePolicy, MaintenanceReport, MaintenanceStatus,
     RecoveryInfo,
 };
+pub use diagnostics::{CapacityStatus, DiagnosticReport, doctor};
 pub use document::Document;
 pub use error::{Error, ErrorKind, Result};
 pub use index::{IndexStats, Neighbor, Record, SearchMode, SearchReport, VectorIndex};

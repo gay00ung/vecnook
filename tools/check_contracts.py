@@ -37,6 +37,20 @@ def main():
         assert document["schema_version"] == 1 and document["id"] == identifier
         assert document["text"] == original and document["source"] == "한글.md"
         assert matches["matches"][0]["document"] == document
+        cli(binary, "export", root / "vectors", root / "vectors.export")
+        cli(binary, "import", root / "vectors.export", root / "restored")
+        restored = json.loads(cli(binary, "search", root / "restored", "1,0", 1, "--json"))
+        assert restored["neighbors"] == report["neighbors"]
+        cli(binary, "docs-export", *space, root / "documents.export")
+        cli(binary, "docs-import", root / "documents.export", root, "imported")
+        imported_space = [root, "imported", 2, "fixture-v1", "cosine"]
+        assert json.loads(cli(binary, "docs-get", *imported_space, identifier)) == document
+        cli(binary, "docs-backup", *space, root, "backup")
+        assert json.loads(cli(binary, "docs-get", root, "backup", 2, "fixture-v1", "cosine", identifier)) == document
+        before = {p.name: p.read_bytes() for p in (root / "documents").iterdir()}
+        diagnostic = json.loads(cli(binary, "doctor", root / "documents"))
+        assert diagnostic["active_records"] == 1 and diagnostic["model"] == "fixture-v1"
+        assert before == {p.name: p.read_bytes() for p in (root / "documents").iterdir()}
         script = """
 const assert = require('node:assert/strict');
 let input = ''; process.stdin.setEncoding('utf8');
