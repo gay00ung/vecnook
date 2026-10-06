@@ -44,7 +44,7 @@ class IntegrationTests(unittest.TestCase):
         self.root = Path(self.temporary.name)
         self.documents = self.root / "documents"
         self.documents.mkdir()
-        (self.documents / '한글 "notes".md').write_text('# 제목\nline "one"\\\t\nsecond line\n', encoding="utf-8")
+        (self.documents / '한글 notes 🚀.md').write_text('# 제목\nline "one"\\\t\nsecond line\n', encoding="utf-8")
         Handler.digest, Handler.broken = "fixture-model-v1", False
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
         self.server.inputs = []
@@ -70,7 +70,7 @@ class IntegrationTests(unittest.TestCase):
             search.search_documents(self.args, self.client)
         result = json.loads(first.getvalue())
         record = result["neighbors"][0]
-        self.assertEqual(record["source"], '한글 "notes".md')
+        self.assertEqual(record["source"], '한글 notes 🚀.md')
         self.assertEqual(record["text"], (self.documents / record["source"]).read_text(encoding="utf-8"))
         self.assertEqual((record["start_line"], record["end_line"]), (1, 3))
         self.assertEqual(record["distance"], 0.0)
@@ -114,7 +114,7 @@ class IntegrationTests(unittest.TestCase):
             search.search_documents(self.args, self.client)
         self.assertEqual(json.loads(output.getvalue())["neighbors"], [])
         self.args.tags = ["rust", "notes"]
-        self.args.source = '한글 "notes".md'
+        self.args.source = '한글 notes 🚀.md'
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
             search.search_documents(self.args, self.client)
