@@ -7,6 +7,8 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum ErrorKind {
+    /// An optimistic write precondition no longer matches stored state.
+    Conflict,
     /// Caller supplied invalid data or settings.
     InvalidInput,
     /// A bounded storage or batch resource would be exceeded.
@@ -32,6 +34,13 @@ pub enum ErrorKind {
 /// I/O failure on a mutation can be ambiguous; close and reopen before writing again.
 #[non_exhaustive]
 pub enum Error {
+    /// Another write committed after the caller read its state; reread before retrying.
+    Conflict {
+        /// WAL sequence on which the caller based the request.
+        expected: u64,
+        /// Current committed sequence.
+        actual: u64,
+    },
     /// Caller input violates dimensions, finite values or documented limits.
     InvalidInput(String),
     /// Preflight rejection; no mutation was attempted. Compact or reduce the batch.
@@ -63,6 +72,7 @@ impl Error {
     /// Classify errors without parsing display text.
     pub fn kind(&self) -> ErrorKind {
         match self {
+            Self::Conflict { .. } => ErrorKind::Conflict,
             Self::InvalidInput(_) => ErrorKind::InvalidInput,
             Self::Capacity { .. } => ErrorKind::Capacity,
             Self::EmbeddingMismatch => ErrorKind::EmbeddingMismatch,
@@ -79,6 +89,10 @@ impl Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Conflict { expected, actual } => write!(
+                f,
+                "write conflict: expected sequence {expected}, actual {actual}; reread before retrying"
+            ),
             Self::InvalidInput(s) => write!(f, "invalid input: {s}"),
             Self::Capacity {
                 resource,

@@ -14,7 +14,7 @@ for future variants. The benchmark module is a development measurement API;
 its configuration and output are outside the proposed 1.x application contract.
 
 `Error::kind()` distinguishes invalid input, capacity, embedding mismatch,
-corruption, I/O, ownership, destination and poisoned-handle failures. Capacity
+corruption, I/O, ownership, destination, write conflict and poisoned-handle failures. Capacity
 reports the resource, limit and required value before any mutation. An I/O error
 from a write can occur after persistence: close the handle, reopen, inspect the
 affected IDs, and reconcile before retrying. The original I/O error remains
@@ -34,7 +34,7 @@ its decision. Forced HNSW can underfill; exact search supplies a reference resul
 
 ## CLI JSON v1
 
-`search ... --json`, `docs-info`, `docs-get` and `docs-search` include
+`search ... --json`, `docs-info`, `docs-get`, `docs-list` and `docs-search` include
 `"schema_version": 1`. IDs are canonical unsigned decimal **strings**, including
 `"18446744073709551615"`. JavaScript can convert them with `BigInt(id)`; never
 convert to `Number` for identity comparisons. Counts and line numbers remain
@@ -80,3 +80,5 @@ strings. Existing collection and database files retain their current formats.
 The reason for preparing these changes before 1.0 is explained by Cargo's
 [SemVer guidance](https://doc.rust-lang.org/cargo/reference/semver.html) and
 [MSRV reference](https://doc.rust-lang.org/cargo/reference/rust-version.html).
+
+Document listing uses a decimal string `sequence`, a nullable decimal string `next_after`, and at most 256 `documents` per page. Keep the same sequence across pages. Pass it to `docs-batch ... --if-sequence N` to reject intervening writes.

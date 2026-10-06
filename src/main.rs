@@ -33,7 +33,8 @@ Usage:\n\
   vecnook shell <db-dir>\n\
   vecnook docs-init <root> <name> <dimensions> <model-identity> <l2|cosine|ip>\n\
   vecnook docs-info <root> <name>\n\
-  vecnook docs-batch <root> <name> <dimensions> <model-identity> <metric> <tsv-file>\n\
+  vecnook docs-list <root> <name> <dimensions> <model-identity> <metric> [after-id|-] [limit=128]\n\
+  vecnook docs-batch <root> <name> <dimensions> <model-identity> <metric> <tsv-file> [--if-sequence N]\n\
   vecnook docs-search <root> <name> <dimensions> <model-identity> <metric> <vector> [k] [ef] [auto|hnsw|exact] [--tag value] [--source value]\n\
   vecnook docs-checkpoint <root> <name> <dimensions> <model-identity> <metric>\n\
   vecnook bench [count=10000] [dimensions=512] [queries=200] [ef=128] [seed=42] [clustered|uniform] [l2|cosine|ip]\n\
@@ -432,7 +433,12 @@ fn document_command(args: &[String]) -> Result<()> {
     }
     if !matches!(
         command,
-        "docs-batch" | "docs-search" | "docs-checkpoint" | "docs-get" | "docs-compact"
+        "docs-batch"
+            | "docs-list"
+            | "docs-search"
+            | "docs-checkpoint"
+            | "docs-get"
+            | "docs-compact"
     ) {
         return Err(Error::InvalidInput("unknown document command".into()));
     }
@@ -440,7 +446,14 @@ fn document_command(args: &[String]) -> Result<()> {
     let extra = &args[6..];
     match command {
         "docs-batch" => {
-            require_count(extra, 1, 1, "docs-batch ... <tsv-file>")?;
+            require_count(extra, 1, 3, "docs-batch ... <tsv-file> [--if-sequence N]")?;
+            let expected = match extra {
+                [_] => None,
+                [_, flag, value] if flag == "--if-sequence" => {
+                    Some(parse::<u64>(value, "sequence")?)
+                }
+                _ => return Err(Error::InvalidInput("expected --if-sequence N".into())),
+            };
             let rows = read_batch(&extra[0])?;
             let documents = rows
                 .iter()
@@ -469,10 +482,47 @@ fn document_command(args: &[String]) -> Result<()> {
                     None => DocumentMutation::Delete { id: row.id },
                 })
                 .collect();
-            let report = collection.write_batch(&operations)?;
+            let report = match expected {
+                Some(sequence) => collection.write_batch_if_sequence(sequence, &operations)?,
+                None => collection.write_batch(&operations)?,
+            };
             println!(
                 "OK documents inserted={} updated={} deleted={} sequence={}",
                 report.inserted, report.updated, report.deleted, report.sequence
+            );
+        }
+        "docs-list" => {
+            require_count(extra, 0, 2, "docs-list ... [after-id|-] [limit=128]")?;
+            let after = extra
+                .first()
+                .filter(|s| s.as_str() != "-")
+                .map(|s| parse::<u64>(s, "after ID"))
+                .transpose()?;
+            let limit = optional(extra, 1, 128usize, "limit")?;
+            if !(1..=256).contains(&limit) {
+                return Err(Error::InvalidInput("list limit must be 1..256".into()));
+            }
+            let page = collection
+                .documents()
+                .filter(|d| d.as_ref().map_or(true, |d| after.is_none_or(|a| d.id > a)))
+                .take(limit + 1)
+                .collect::<Result<Vec<_>>>()?;
+            let next = if page.len() > limit {
+                json_string(&page[limit - 1].id.to_string())
+            } else {
+                "null".into()
+            };
+            let documents = page
+                .iter()
+                .take(limit)
+                .map(document_json)
+                .collect::<Vec<_>>()
+                .join(",");
+            println!(
+                "{{\"schema_version\":1,\"sequence\":\"{}\",\"next_after\":{},\"documents\":[{}]}}",
+                collection.sequence(),
+                next,
+                documents
             );
         }
         "docs-search" => {

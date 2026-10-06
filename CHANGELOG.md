@@ -2,6 +2,8 @@
 
 ## 0.4.0-beta.1 — unreleased
 
+- Add paginated documents, optimistic batch writes and source-atomic Markdown sync with explicit namespace-restricted pruning.
+
 - Prepare extensible constructors and typed error categories; publish the bounded app worker and CLI JSON v1 with decimal string IDs.
 
 - Offline prepared-query CLI demo with actual EmbeddingGemma outputs, original Markdown, checkpoint/reopen and generation provenance. Requires a development checkout until this version is published.

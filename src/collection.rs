@@ -255,6 +255,31 @@ impl Collection {
     pub fn recovery_info(&self) -> &RecoveryInfo {
         self.db.recovery_info()
     }
+    /// Current committed WAL sequence, for optimistic write preconditions.
+    pub fn sequence(&self) -> u64 {
+        self.db.sequence()
+    }
+    /// Decode active documents in ascending ID order while borrowing this collection.
+    pub fn documents(&self) -> impl Iterator<Item = Result<Document>> + '_ {
+        self.db
+            .iter()
+            .map(|record| Document::from_payload(&record.metadata))
+    }
+    /// Commit only if no write occurred after the caller observed `expected`.
+    /// A conflict never changes RAM, WAL or derived postings.
+    pub fn write_batch_if_sequence(
+        &mut self,
+        expected: u64,
+        operations: &[DocumentMutation<'_>],
+    ) -> Result<BatchReport> {
+        if self.sequence() != expected {
+            return Err(Error::Conflict {
+                expected,
+                actual: self.sequence(),
+            });
+        }
+        self.write_batch(operations)
+    }
     /// Borrow original active coordinates without decoding the text payload.
     pub fn vector(&self, id: u64) -> Option<&[f32]> {
         self.db.get(id).map(|r| r.vector.as_slice())
