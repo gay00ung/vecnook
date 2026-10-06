@@ -32,12 +32,16 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(len(self.server.inputs), requests)
         self.assertEqual(self.state()[1], sequence)
         source = self.documents / '한글 notes 🚀.md'
-        source.write_text("updated original\n", encoding="utf-8")
+        source.write_bytes(b"updated original\n")
         self.assertIn("changed=1", self.run_sync())
         after, _, _ = self.state()
         self.assertEqual(after[0]["id"], before[0]["id"])
         self.assertEqual(after[0]["text"], "updated original\n")
         self.assertEqual(len(self.server.inputs), requests + 1)
+        mixed = "한글\r\nsecond\n"
+        source.write_bytes(mixed.encode("utf-8"))
+        self.run_sync()
+        self.assertEqual(self.state()[0][0]["text"], mixed)
 
     def test_chunk_growth_shrink_empty_and_restart_derive_state_from_database(self):
         source = self.documents / '한글 notes 🚀.md'
