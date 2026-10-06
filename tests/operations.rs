@@ -8,10 +8,16 @@ fn bytes(path: &std::path::Path) -> BTreeMap<String, Vec<u8>> {
         .unwrap()
         .map(|e| {
             let e = e.unwrap();
-            (
-                e.file_name().to_str().unwrap().to_owned(),
-                fs::read(e.path()).unwrap(),
-            )
+            // Windows enforces mandatory byte-range locking even for the owner's
+            // second read handle. LOCK is deliberately empty; assert that without
+            // reading a locked range, and still include it in the directory inventory.
+            let contents = if e.file_name() == "LOCK" {
+                assert_eq!(e.metadata().unwrap().len(), 0);
+                Vec::new()
+            } else {
+                fs::read(e.path()).unwrap()
+            };
+            (e.file_name().to_str().unwrap().to_owned(), contents)
         })
         .collect()
 }
