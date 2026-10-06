@@ -11,6 +11,7 @@ pub(crate) const MAX_BATCH_BYTES: usize = 8 * 1024 * 1024;
 
 /// All distances sort ascending. InnerProduct is the negative dot product.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Metric {
     #[default]
     /// Sum of squared coordinate differences (default).
@@ -34,6 +35,7 @@ impl Metric {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 /// Fixed construction settings for an index and its persisted database.
+#[non_exhaustive]
 pub struct Config {
     /// Fixed coordinate count in 1..=4096.
     pub dimensions: usize,
@@ -48,6 +50,21 @@ pub struct Config {
 }
 
 impl Config {
+    /// Set the graph neighbor bound; validation occurs when the index is created.
+    pub fn with_m(mut self, m: usize) -> Self {
+        self.m = m;
+        self
+    }
+    /// Set the insertion candidate pool.
+    pub fn with_ef_construction(mut self, ef: usize) -> Self {
+        self.ef_construction = ef;
+        self
+    }
+    /// Set the deterministic graph seed.
+    pub fn with_seed(mut self, seed: u64) -> Self {
+        self.seed = seed;
+        self
+    }
     /// Select the distance metric before creating an index or database.
     pub fn with_metric(mut self, metric: Metric) -> Self {
         self.metric = metric;

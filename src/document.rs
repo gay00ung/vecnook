@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 /// A document chunk with its original text, source and application tags.
 /// The encoded payload, including all fields, must fit 16 KiB.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Document {
     /// Application ID; all u64 values are supported.
     pub id: u64,

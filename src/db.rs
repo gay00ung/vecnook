@@ -11,6 +11,7 @@ use crate::{
 
 #[derive(Clone, Debug, Default)]
 /// What opening recovered, trimmed or rebuilt.
+#[non_exhaustive]
 pub struct RecoveryInfo {
     /// Complete WAL frames applied after the snapshot sequence.
     pub replayed_frames: usize,
@@ -29,6 +30,7 @@ pub struct RecoveryInfo {
 #[derive(Clone, Copy, Debug)]
 /// Thresholds for explicit synchronous maintenance. Defaults: 64 MiB WAL,
 /// 128 tombstones and 20% tombstones; no background worker is started.
+#[non_exhaustive]
 pub struct MaintenancePolicy {
     /// Current WAL size, or byte threshold when used in a policy.
     pub wal_bytes: u64,
@@ -46,8 +48,27 @@ impl Default for MaintenancePolicy {
         }
     }
 }
+impl MaintenancePolicy {
+    /// Set the WAL byte threshold for checkpoint recommendation.
+    pub fn with_wal_bytes(mut self, bytes: u64) -> Self {
+        self.wal_bytes = bytes;
+        self
+    }
+    /// Set the minimum tombstone count for compaction recommendation.
+    pub fn with_min_tombstones(mut self, count: usize) -> Self {
+        self.min_tombstones = count;
+        self
+    }
+    /// Set the minimum deleted/physical ratio for compaction recommendation.
+    pub fn with_tombstone_ratio(mut self, ratio: f64) -> Self {
+        self.tombstone_ratio = ratio;
+        self
+    }
+}
+
 #[derive(Clone, Debug)]
 /// Observed storage pressure and maintenance recommendations.
+#[non_exhaustive]
 pub struct MaintenanceStatus {
     /// Current WAL size, or byte threshold when used in a policy.
     pub wal_bytes: u64,
@@ -60,6 +81,7 @@ pub struct MaintenanceStatus {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Action performed by an explicit maintenance call.
+#[non_exhaustive]
 pub enum MaintenanceAction {
     /// Thresholds did not require maintenance.
     None,
@@ -70,6 +92,7 @@ pub enum MaintenanceAction {
 }
 #[derive(Clone, Debug)]
 /// Result of synchronous maintenance.
+#[non_exhaustive]
 pub struct MaintenanceReport {
     /// Action actually performed.
     pub action: MaintenanceAction,

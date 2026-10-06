@@ -49,6 +49,7 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+pub mod app;
 mod batch;
 pub mod bench;
 mod collection;
@@ -74,6 +75,6 @@ pub use db::{
     RecoveryInfo,
 };
 pub use document::Document;
-pub use error::{Error, Result};
+pub use error::{Error, ErrorKind, Result};
 pub use index::{IndexStats, Neighbor, Record, SearchMode, SearchReport, VectorIndex};
 pub use search::{SearchOptions, SearchReason, SearchStrategy};

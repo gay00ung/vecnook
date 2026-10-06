@@ -79,10 +79,7 @@ pub fn run(args: &[String]) -> Result<()> {
         DIMENSIONS
     );
     println!("Prepared queries only; no network or model installation is used at runtime.");
-    let options = SearchOptions {
-        strategy: SearchStrategy::Hnsw,
-        ..SearchOptions::default()
-    };
+    let options = SearchOptions::default().with_strategy(SearchStrategy::Hnsw);
     for (i, (query, vector)) in QUERIES.iter().enumerate() {
         if selected.is_some_and(|n| n != i + 1) {
             continue;

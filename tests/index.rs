@@ -270,23 +270,10 @@ fn invalid_configurations_are_rejected() {
     for config in [
         Config::new(0),
         Config::new(4097),
-        Config {
-            m: 1,
-            ..Config::new(2)
-        },
-        Config {
-            m: 65,
-            ..Config::new(2)
-        },
-        Config {
-            m: 16,
-            ef_construction: 15,
-            ..Config::new(2)
-        },
-        Config {
-            ef_construction: 4097,
-            ..Config::new(2)
-        },
+        Config::new(2).with_m(1),
+        Config::new(2).with_m(65),
+        Config::new(2).with_m(16).with_ef_construction(15),
+        Config::new(2).with_ef_construction(4097),
     ] {
         assert!(VectorIndex::new(config).is_err());
     }
@@ -295,20 +282,16 @@ fn invalid_configurations_are_rejected() {
 #[test]
 fn valid_parameter_endpoints_accept_registration_and_search() {
     for config in [
-        Config {
-            dimensions: 1,
-            m: 2,
-            ef_construction: 2,
-            seed: 42,
-            metric: vecnook::Metric::SquaredL2,
-        },
-        Config {
-            dimensions: 4096,
-            m: 64,
-            ef_construction: 4096,
-            seed: 42,
-            metric: vecnook::Metric::SquaredL2,
-        },
+        Config::new(1)
+            .with_m(2)
+            .with_ef_construction(2)
+            .with_seed(42)
+            .with_metric(vecnook::Metric::SquaredL2),
+        Config::new(4096)
+            .with_m(64)
+            .with_ef_construction(4096)
+            .with_seed(42)
+            .with_metric(vecnook::Metric::SquaredL2),
     ] {
         let dimensions = config.dimensions;
         let mut db = VectorIndex::new(config).unwrap();

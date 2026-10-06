@@ -2,7 +2,7 @@
 
 Open one `Collection` when the application starts and reuse it. Each open holds an exclusive filesystem lock, so opening the same directory for each UI request fails while the application owns it. Put slow search and persistence work on a background thread.
 
-The runnable [`local_app.rs`](../examples/local_app.rs) example uses the reusable [`support/app_backend.rs`](../examples/support/app_backend.rs) module. It creates or reopens a named collection, moves it onto one worker, runs four application clients, checks the returned document, drains pending work and checkpoints before closing:
+The runnable [`local_app.rs`](../examples/local_app.rs) example uses the public `vecnook::app` module. It creates or reopens a named collection, moves it onto one worker, runs four application clients, checks the returned document, drains pending work and checkpoints before closing:
 
 ```bash
 cargo run --offline --example local_app -- data/local-app
@@ -31,7 +31,7 @@ Drop every client clone to close submissions. The worker drains queued requests 
 
 ## Connecting a desktop frontend
 
-The backend uses the Rust standard library and has no GUI framework dependency. A Tauri, egui or other desktop application can own the `SearchClient` in its backend state and translate responses into its own frontend messages. Copy the helper module into the application; it is an example, not a supported public Vecnook API.
+The backend uses the Rust standard library and has no GUI framework dependency. A Tauri, egui or other desktop application can own the `SearchClient` in its backend state and translate responses into its own frontend messages. Import `vecnook::app`; no helper copying is required. See the [compatibility contract](compatibility.md).
 
 For a JavaScript frontend, encode document IDs as decimal strings: Vecnook supports `u64::MAX`, which exceeds JavaScript's exact integer range. Return original text, source, line range and distance separately. Treat source and document text as data and escape them when rendering. Store collections under an application-owned data directory; do not pass arbitrary frontend paths to storage operations. This repository tests the Rust backend; it does not include or claim validation of a GUI window or framework adapter.
 

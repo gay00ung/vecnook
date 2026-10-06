@@ -9,7 +9,7 @@ use std::{
 
 use vecnook::{
     Collection, Config, Database, Document, DocumentFilter, DocumentMutation, EmbeddingSpace,
-    Error, MaintenancePolicy, Metric, Mutation, Result, SearchMode, SearchOptions, SearchStrategy,
+    Error, MaintenancePolicy, Metric, Mutation, Result, SearchOptions, SearchStrategy,
     bench::{self, BenchConfig, Dataset},
 };
 
@@ -240,11 +240,9 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
             } else {
                 None
             };
-            let options = SearchOptions {
-                strategy,
-                ef_search: ef,
-                ..SearchOptions::default()
-            };
+            let options = SearchOptions::default()
+                .with_strategy(strategy)
+                .with_ef_search(ef);
             let found = match filter {
                 Some(value) => db.search_metadata(&query, k, options, value)?,
                 None => db.search(&query, k, options)?,
@@ -254,10 +252,7 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
             }
             let mut output = format!(
                 "mode={} requested={k} returned={} complete={} distance_computations={} filter_evaluations={} metric={} eligible={} reason={:?}",
-                match found.mode {
-                    SearchMode::Exact => "exact",
-                    SearchMode::Hnsw => "hnsw",
-                },
+                found.mode.name(),
                 found.neighbors.len(),
                 found.complete,
                 found.distance_computations,
@@ -383,8 +378,8 @@ fn json_string(value: &str) -> String {
 
 fn document_json(document: &Document) -> String {
     format!(
-        "{{\"id\":{},\"source\":{},\"text\":{},\"start_line\":{},\"end_line\":{},\"tags\":[{}]}}",
-        document.id,
+        "{{\"schema_version\":1,\"id\":{},\"source\":{},\"text\":{},\"start_line\":{},\"end_line\":{},\"tags\":[{}]}}",
+        json_string(&document.id.to_string()),
         json_string(&document.source),
         json_string(&document.text),
         document.start_line,
@@ -404,7 +399,7 @@ fn document_command(args: &[String]) -> Result<()> {
         require_count(args, 3, 3, "docs-info <root> <name>")?;
         let space = Collection::describe(&args[1], &args[2])?;
         println!(
-            "{{\"name\":{},\"model\":{},\"dimensions\":{},\"metric\":{}}}",
+            "{{\"schema_version\":1,\"name\":{},\"model\":{},\"dimensions\":{},\"metric\":{}}}",
             json_string(&args[2]),
             json_string(&space.model),
             space.dimensions,
@@ -533,15 +528,12 @@ fn document_command(args: &[String]) -> Result<()> {
             let report = collection.search(
                 &query,
                 k,
-                SearchOptions {
-                    strategy,
-                    ef_search,
-                    ..SearchOptions::default()
-                },
-                DocumentFilter {
-                    source,
-                    tags: &tags,
-                },
+                SearchOptions::default()
+                    .with_strategy(strategy)
+                    .with_ef_search(ef_search),
+                DocumentFilter::default()
+                    .with_optional_source(source)
+                    .with_tags(&tags),
             )?;
             let documents = report
                 .neighbors
@@ -556,7 +548,7 @@ fn document_command(args: &[String]) -> Result<()> {
                 .collect::<Vec<_>>()
                 .join(",");
             println!(
-                "{{\"search\":{},\"matches\":[{}]}}",
+                "{{\"schema_version\":1,\"search\":{},\"matches\":[{}]}}",
                 search_json(&report.search),
                 documents
             );
@@ -589,19 +581,16 @@ fn search_json(report: &vecnook::SearchReport) -> String {
         .iter()
         .map(|n| {
             format!(
-                "{{\"id\":{},\"distance\":{},\"metadata\":{}}}",
-                n.id,
+                "{{\"schema_version\":1,\"id\":{},\"distance\":{},\"metadata\":{}}}",
+                json_string(&n.id.to_string()),
                 n.distance,
                 json_string(&n.metadata)
             )
         })
         .collect();
     format!(
-        "{{\"mode\":\"{}\",\"metric\":\"{}\",\"complete\":{},\"eligible_count\":{},\"distance_computations\":{},\"filter_evaluations\":{},\"reason\":\"{:?}\",\"neighbors\":[{}]}}",
-        match report.mode {
-            SearchMode::Exact => "exact",
-            SearchMode::Hnsw => "hnsw",
-        },
+        "{{\"schema_version\":1,\"mode\":\"{}\",\"metric\":\"{}\",\"complete\":{},\"eligible_count\":{},\"distance_computations\":{},\"filter_evaluations\":{},\"reason\":\"{:?}\",\"neighbors\":[{}]}}",
+        report.mode.name(),
         report.metric.name(),
         report.complete,
         report.eligible_count,

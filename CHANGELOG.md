@@ -2,6 +2,8 @@
 
 ## 0.4.0-beta.1 — unreleased
 
+- Prepare extensible constructors and typed error categories; publish the bounded app worker and CLI JSON v1 with decimal string IDs.
+
 - Offline prepared-query CLI demo with actual EmbeddingGemma outputs, original Markdown, checkpoint/reopen and generation provenance. Requires a development checkout until this version is published.
 
 ## 0.3.0-beta.2 — 2026-10-06

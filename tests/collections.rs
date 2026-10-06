@@ -31,19 +31,15 @@ fn large_tag_intersections_use_graph_paths_and_exact_results_match_an_independen
         .map(|(document, vector)| DocumentMutation::Put { document, vector })
         .collect();
     collection.write_batch(&operations).unwrap();
-    let filter = DocumentFilter {
-        source: None,
-        tags: &["all", "even"],
-    };
+    let filter = DocumentFilter::default()
+        .with_optional_source(None)
+        .with_tags(&["all", "even"]);
     let query = [123.4f32];
     let exact = collection
         .search(
             &query,
             10,
-            SearchOptions {
-                strategy: vecnook::SearchStrategy::Exact,
-                ..SearchOptions::default()
-            },
+            SearchOptions::default().with_strategy(vecnook::SearchStrategy::Exact),
             filter,
         )
         .unwrap();
@@ -77,10 +73,9 @@ fn large_tag_intersections_use_graph_paths_and_exact_results_match_an_independen
             &query,
             10,
             SearchOptions::default(),
-            DocumentFilter {
-                source: Some("a.md"),
-                tags: &["even"],
-            },
+            DocumentFilter::default()
+                .with_optional_source(Some("a.md"))
+                .with_tags(&["even"]),
         )
         .unwrap();
     assert_eq!(intersected.search.eligible_count, 100);
@@ -144,10 +139,9 @@ fn collection_model_namespace_tags_source_backup_and_reopen_are_enforced() {
             &[1.0, 0.0],
             10,
             SearchOptions::default(),
-            DocumentFilter {
-                source: Some("a.md"),
-                tags: &["rust", "storage", "rust"],
-            },
+            DocumentFilter::default()
+                .with_optional_source(Some("a.md"))
+                .with_tags(&["rust", "storage", "rust"]),
         )
         .unwrap();
     assert_eq!(report.neighbors[0].document, a);
@@ -159,10 +153,9 @@ fn collection_model_namespace_tags_source_backup_and_reopen_are_enforced() {
                 &[1.0, 0.0],
                 10,
                 SearchOptions::default(),
-                DocumentFilter {
-                    source: None,
-                    tags: &["missing"]
-                }
+                DocumentFilter::default()
+                    .with_optional_source(None)
+                    .with_tags(&["missing"])
             )
             .unwrap()
             .neighbors
@@ -199,7 +192,7 @@ fn collection_model_namespace_tags_source_backup_and_reopen_are_enforced() {
     ] {
         assert!(matches!(
             Collection::open(temp.path(), "first", &wrong),
-            Err(Error::InvalidInput(_))
+            Err(Error::EmbeddingMismatch)
         ));
     }
 }
@@ -250,10 +243,9 @@ fn ordered_batch_updates_postings_atomically_and_compaction_preserves_them() {
                     &[1.0, 0.0],
                     10,
                     SearchOptions::default(),
-                    DocumentFilter {
-                        source: None,
-                        tags: &["old"]
-                    }
+                    DocumentFilter::default()
+                        .with_optional_source(None)
+                        .with_tags(&["old"])
                 )
                 .unwrap()
                 .neighbors
@@ -265,10 +257,9 @@ fn ordered_batch_updates_postings_atomically_and_compaction_preserves_them() {
                     &[1.0, 0.0],
                     10,
                     SearchOptions::default(),
-                    DocumentFilter {
-                        source: Some("new.md"),
-                        tags: &["new"]
-                    }
+                    DocumentFilter::default()
+                        .with_optional_source(Some("new.md"))
+                        .with_tags(&["new"])
                 )
                 .unwrap()
                 .neighbors

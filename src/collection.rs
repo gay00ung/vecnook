@@ -14,6 +14,7 @@ use std::{
 /// Identity of a compatible embedding space. Include model digest and prompt
 /// convention in `model`; equal dimensions alone do not imply compatibility.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct EmbeddingSpace {
     /// Nonempty application-defined model/version/prompt identity, at most 512 UTF-8 bytes.
     pub model: String,
@@ -31,7 +32,8 @@ impl EmbeddingSpace {
             metric,
         }
     }
-    fn validate(&self) -> Result<()> {
+    /// Validate identity bounds before creating or opening a collection.
+    pub fn validate(&self) -> Result<()> {
         if self.model.is_empty() || self.model.len() > 512 || self.model.contains('\0') {
             return Err(Error::InvalidInput(
                 "model identity must contain 1..512 UTF-8 bytes without NUL".into(),
@@ -45,6 +47,7 @@ impl EmbeddingSpace {
 
 /// Indexed source equality and all-tag intersection. An empty filter is unfiltered.
 #[derive(Clone, Copy, Debug, Default)]
+#[non_exhaustive]
 pub struct DocumentFilter<'a> {
     /// Exact original source identifier, if specified.
     pub source: Option<&'a str>,
@@ -52,8 +55,27 @@ pub struct DocumentFilter<'a> {
     pub tags: &'a [&'a str],
 }
 
+impl<'a> DocumentFilter<'a> {
+    /// Select exact source equality; tags, if any, must also match.
+    pub fn with_source(mut self, source: &'a str) -> Self {
+        self.source = Some(source);
+        self
+    }
+    /// Select an optional source, useful for application request adapters.
+    pub fn with_optional_source(mut self, source: Option<&'a str>) -> Self {
+        self.source = source;
+        self
+    }
+    /// Require every listed tag.
+    pub fn with_tags(mut self, tags: &'a [&'a str]) -> Self {
+        self.tags = tags;
+        self
+    }
+}
+
 /// Borrowed document mutations in an atomic ordered collection batch.
 #[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
 pub enum DocumentMutation<'a> {
     /// Insert or replace a complete chunk and its vector.
     Put {
@@ -71,6 +93,7 @@ pub enum DocumentMutation<'a> {
 
 /// A matched original document and its distance.
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct DocumentNeighbor {
     /// Decoded chunk with source and tags.
     pub document: Document,
@@ -79,6 +102,7 @@ pub struct DocumentNeighbor {
 }
 /// A typed result plus the underlying execution/work report.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct DocumentSearchReport {
     /// Original documents in distance/ID order.
     pub neighbors: Vec<DocumentNeighbor>,
@@ -188,9 +212,7 @@ impl Collection {
         let path = collection_path(root.as_ref(), name)?;
         let space = read_header(&path, name)?;
         if &space != expected {
-            return Err(Error::InvalidInput(
-                "embedding space mismatch: model, dimensions and metric must match".into(),
-            ));
+            return Err(Error::EmbeddingMismatch);
         }
         let db = Database::open(&path)?;
         if db.config().dimensions != space.dimensions || db.config().metric != space.metric {
@@ -263,9 +285,11 @@ impl Collection {
     /// changed only after success and observe same-ID operation ordering.
     pub fn write_batch(&mut self, operations: &[DocumentMutation<'_>]) -> Result<BatchReport> {
         if operations.len() > 1024 {
-            return Err(Error::InvalidInput(
-                "document batch exceeds 1024 operations".into(),
-            ));
+            return Err(Error::Capacity {
+                resource: "batch_operations",
+                limit: 1024,
+                required: operations.len(),
+            });
         }
         let mut states: BTreeMap<u64, Option<(String, Vec<String>)>> = BTreeMap::new();
         let mut payloads = Vec::with_capacity(operations.len());
