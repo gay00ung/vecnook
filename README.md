@@ -5,30 +5,30 @@ A small embedded vector database for Rust applications, built with the standard 
 [![CI](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml/badge.svg)](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml)
 [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
 
-**0.3 is an early beta.** It is intended for local applications with one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS and Linux. The index stays in RAM; this is not a distributed service.
+**0.3 is an early beta.** It is intended for local applications with one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS, Linux and Windows. The index stays in RAM; this is not a distributed service.
 
 ## Get started
 
 Requires Rust 1.89 or later. The package, library, and executable are all named `vecnook`.
 
 ```bash
-cargo install --git https://github.com/gay00ung/vecnook --branch main --locked
+cargo install --git https://github.com/gay00ung/vecnook --tag v0.3.0-beta.1 --locked
 ```
 
 For a Rust application, add the Git dependency:
 
 ```bash
-cargo add vecnook --git https://github.com/gay00ung/vecnook --branch main
+cargo add vecnook --git https://github.com/gay00ung/vecnook --tag v0.3.0-beta.1
 ```
 
 Or edit `Cargo.toml`:
 
 ```toml
 [dependencies]
-vecnook = { git = "https://github.com/gay00ung/vecnook", branch = "main" }
+vecnook = { git = "https://github.com/gay00ung/vecnook", tag = "v0.3.0-beta.1" }
 ```
 
-Registry publication is pending authentication; `cargo add vecnook` from crates.io is not available yet. These Git instructions install the current beta; commit your lockfile to pin its revision. See the [API guide](docs/api.md) and [release procedure](docs/releasing.md). To build a checkout:
+Registry publication is pending authentication; `cargo add vecnook` from crates.io is not available yet. These Git instructions pin the source release; commit your application lockfile as well. See the [API guide](docs/api.md) and [release procedure](docs/releasing.md). To build a checkout:
 
 ```bash
 cargo build --offline --release
@@ -68,6 +68,8 @@ fn main() -> Result<()> {
 ```
 
 `create` refuses to overwrite a database; use `open` for an existing one. Reads use `&self` and mutations use `&mut self`. Share a persistent handle between threads with application synchronization such as `RwLock`. An immutable index supports concurrent readers. An exclusive OS file lock prevents a second handle or process from opening the same database directory.
+
+For an event-loop or GUI application, the [`local_app` example](examples/local_app.rs) moves one collection onto a worker with a bounded 32-request queue. Cloneable clients submit without waiting for search, receive typed documents and shut down without reopening the locked directory. Run it twice against the same path to exercise restart; see the [application integration guide](docs/app-integration.md).
 
 ## Search and filtering
 
@@ -110,6 +112,8 @@ Putting an existing ID replaces its vector and metadata. Updates append a node a
 | `snapshot.tmp`, `index.tmp` | Temporary checkpoint files |
 
 A successful write synchronizes the WAL before changing memory. A checkpoint synchronizes and renames a new snapshot and graph cache, synchronizes the directory, then clears and syncs the WAL. Opening restores a valid cached graph and inserts new WAL nodes. Missing, stale, or damaged caches rebuild from the authoritative records and record the reason in `RecoveryInfo`. Reopening without a checkpoint can still require substantial WAL replay and graph construction.
+
+On Windows, directory synchronization uses a writable directory handle opened with `FILE_FLAG_BACKUP_SEMANTICS` through the standard library. Synchronization errors propagate; WAL truncation does not silently bypass them. Use an application-owned directory on a local filesystem. NTFS on Windows Server 2025 is exercised in CI; other filesystems, network shares and hardware power loss have not been validated.
 
 Recovery trims only an incomplete final WAL frame at EOF. A complete checksum error, invalid record or sequence, damaged snapshot, or missing WAL fails opening. After a write or checkpoint I/O failure, the handle refuses further writes. Reopen and inspect the affected IDs: an operation that returned an I/O error may have persisted. CRC32 detects accidental damage; it does not authenticate files.
 
@@ -170,7 +174,7 @@ The node and snapshot limits both apply; dimension and metadata size may make th
 
 ## Compatibility and validation
 
-0.2 reads 0.1 L2 snapshots and single-change WAL frames. It writes v2 snapshots and introduces batch WAL frames that 0.1 cannot read. Keep a copy of all database files before upgrading; downgrade requires that copy. The package/executable was renamed from `vector` to `vecnook`, and recovery counters now count frames rather than operations.
+0.3 retains the 0.2 snapshot/WAL format and reads 0.1 L2 snapshots and single-change WAL frames. Versions 0.2 and 0.3 write v2 snapshots and batch WAL frames that 0.1 cannot read. Typed collections add a separate immutable header and document payload schema; 0.2 does not expose those typed APIs. Keep a copy of all database files before upgrading; downgrade requires that copy. The 0.2 package/executable rename from `vector` to `vecnook` and frame-based recovery counters still apply.
 
 ```bash
 cargo test --offline
@@ -181,7 +185,7 @@ cargo package --offline
 cargo tree --offline
 ```
 
-Tests cover all three metrics against independent distance oracles, filtered Top-K, batch preflight and every byte boundary of a torn batch, graph cache validation and fallback, backups, file locks, v1 upgrades, and 900 model-checked mutation/maintenance/restart steps. Separate CLI processes are killed immediately after successful single-write and batch acknowledgements to verify recovery. CI runs on Linux and macOS with stable Rust and the declared 1.89 MSRV.
+Tests cover all three metrics against independent distance oracles, filtered Top-K, batch preflight and every byte boundary of a torn batch, graph cache validation and fallback, backups, file locks, v1 upgrades, and 900 model-checked mutation/maintenance/restart steps. Separate processes are killed after acknowledged writes and during observed WAL growth, checkpoint and compaction. CI runs on Linux, macOS and Windows with stable Rust and the declared 1.89 MSRV, including the document client and application-backend restart.
 
 The [0.3 text benchmark](docs/text-benchmarks.md) uses 5,183 SciFact document embeddings, 768 dimensions and 300 independent test claims. At efSearch=64, Vecnook measured 99.7667% Recall@10 and 0.534209 ms median p95 across three runs on an Apple M4 Pro. An independent f64 oracle agreed with every exact Top-10 ID/distance. A same-machine USearch Python comparison met the same ≥99% target and was faster; runtime and memory scopes differ. See the full method and limits, plus [historical SIFT measurements](docs/benchmarks.md), before drawing broader conclusions.
 

@@ -42,7 +42,7 @@ impl fmt::Display for Error {
                 "a previous storage failure requires closing and reopening this database"
             ),
             Self::UnsupportedPlatform => {
-                write!(f, "persistent storage currently supports macOS/Linux")
+                write!(f, "persistent storage supports macOS/Linux/Windows")
             }
         }
     }

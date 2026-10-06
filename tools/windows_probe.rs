@@ -29,6 +29,9 @@ fn main() -> std::io::Result<()> {
             .open(&root)
             .and_then(|directory| directory.sync_all());
         println!("directory access={name}, open+sync_all={result:?}");
+        if name == "write" {
+            result?;
+        }
     }
     fs::remove_dir_all(root)?;
     Ok(())

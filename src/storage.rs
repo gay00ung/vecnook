@@ -115,7 +115,11 @@ impl<'a> Reader<'a> {
 }
 
 pub(crate) fn ensure_platform() -> Result<()> {
-    if cfg!(any(target_os = "macos", target_os = "linux")) {
+    if cfg!(any(
+        target_os = "macos",
+        target_os = "linux",
+        target_os = "windows"
+    )) {
         Ok(())
     } else {
         Err(Error::UnsupportedPlatform)
@@ -123,7 +127,21 @@ pub(crate) fn ensure_platform() -> Result<()> {
 }
 
 pub(crate) fn sync_directory(path: &Path) -> Result<()> {
-    File::open(path)?.sync_all()?;
+    #[cfg(target_os = "windows")]
+    let directory = {
+        use std::os::windows::fs::OpenOptionsExt;
+        // CreateFileW needs BACKUP_SEMANTICS for a directory handle, and
+        // FlushFileBuffers needs GENERIC_WRITE. Propagate either failure;
+        // clearing the WAL must never silently skip this synchronization.
+        const FILE_FLAG_BACKUP_SEMANTICS: u32 = 0x02000000;
+        OpenOptions::new()
+            .write(true)
+            .custom_flags(FILE_FLAG_BACKUP_SEMANTICS)
+            .open(path)?
+    };
+    #[cfg(not(target_os = "windows"))]
+    let directory = File::open(path)?;
+    directory.sync_all()?;
     Ok(())
 }
 

@@ -24,16 +24,20 @@ jobs:
       - name: Observe standard-library directory synchronization
         shell: pwsh
         run: |
+          Get-Volume | Select-Object DriveLetter,FileSystem
           rustc tools/windows_probe.rs -o windows-probe.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           ./windows-probe.exe
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   check:
     name: ${{ matrix.os }} / Rust ${{ matrix.rust }}
+    defaults:
+      run:
+        shell: bash
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         rust: [stable, '1.89.0']
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
@@ -43,6 +47,10 @@ jobs:
           persist-credentials: false
       - name: Install Rust
         run: rustup toolchain install "${{ matrix.rust }}" --profile minimal --component rustfmt --component clippy
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
       - name: Format
         run: cargo +${{ matrix.rust }} fmt --check
       - name: Test
@@ -57,10 +65,14 @@ jobs:
         run: cargo +${{ matrix.rust }} build --offline --release
       - name: Document search integration
         env:
-          VECNOOK_BINARY: target/release/vecnook
-        run: python3 -m unittest discover -s examples/documents -p 'test_*.py'
+          VECNOOK_BINARY: target/release/vecnook${{ runner.os == 'Windows' && '.exe' || '' }}
+        run: python -m unittest discover -s examples/documents -p 'test_*.py'
+      - name: Application backend and restart
+        run: |
+          cargo +${{ matrix.rust }} run --offline --example local_app -- work/ci-app
+          cargo +${{ matrix.rust }} run --offline --example local_app -- work/ci-app
       - name: Verify package
         run: |
-          python3 tools/check_package.py --prepare-decoys
+          python tools/check_package.py --prepare-decoys
           cargo +${{ matrix.rust }} package --offline
-          python3 tools/check_package.py
+          python tools/check_package.py

@@ -4,7 +4,7 @@ Vecnook is an early embedded database. Changes should preserve the observable co
 
 ## Build and check
 
-Use Rust 1.89 or later on macOS or Linux. The project uses only the Rust standard library; no dependency downloads are needed after cloning.
+Use Rust 1.89 or later on macOS, Linux or Windows. The project uses only the Rust standard library; no dependency downloads are needed after cloning. CI exercises all three systems with current stable and the minimum supported Rust version.
 
 ```bash
 cargo fmt --check

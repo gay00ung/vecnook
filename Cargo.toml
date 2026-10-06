@@ -9,7 +9,7 @@ homepage = "https://github.com/gay00ung/vecnook"
 readme = "README.md"
 keywords = ["vector", "database", "hnsw", "embedded", "similarity"]
 categories = ["database-implementations", "algorithms"]
-include = ["/src/**", "/examples/*.rs", "/examples/documents/*.py", "/examples/documents/**/*.md", "/tests/**", "/docs/*.md", "/tools/*.py", "/tools/*.rs", "/tools/*.txt", "/Cargo.toml", "/Cargo.lock", "/README.md", "/LICENSE", "/CHANGELOG.md", "/CONTRIBUTING.md"]
+include = ["/src/**", "/examples/*.rs", "/examples/support/*.rs", "/examples/documents/*.py", "/examples/documents/**/*.md", "/tests/**", "/docs/*.md", "/tools/*.py", "/tools/*.rs", "/tools/*.txt", "/Cargo.toml", "/Cargo.lock", "/README.md", "/LICENSE", "/CHANGELOG.md", "/CONTRIBUTING.md"]
 description = "A vector database with a from-scratch HNSW index and durable storage"
 
 [lib]
@@ -24,7 +24,7 @@ path = "src/main.rs"
 
 [package.metadata.docs.rs]
 rustdoc-args = ["-D", "warnings"]
-targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin", "x86_64-pc-windows-msvc"]
 
 [profile.release]
 lto = "thin"
