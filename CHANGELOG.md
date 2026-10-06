@@ -2,6 +2,8 @@
 
 ## 0.4.0-beta.1 — unreleased
 
+- Validate storage failure points, seeded parser mutations and actual 0.1/0.2/0.3 upgrade files; add a mixed-workload runner with independently replayed ACK logs.
+
 - Add read-only diagnostics, snapshot/node headroom, bounded logical export/import and collection backup commands.
 
 - Add paginated documents, optimistic batch writes and source-atomic Markdown sync with explicit namespace-restricted pruning.

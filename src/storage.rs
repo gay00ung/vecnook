@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
-    io::{BufReader, Read, Seek, SeekFrom, Write},
+    io::{BufReader, Read, Seek, SeekFrom},
     path::Path,
 };
 
@@ -127,6 +127,7 @@ pub(crate) fn ensure_platform() -> Result<()> {
 }
 
 pub(crate) fn sync_directory(path: &Path) -> Result<()> {
+    crate::storage_io::check("directory.sync")?;
     #[cfg(target_os = "windows")]
     let directory = {
         use std::os::windows::fs::OpenOptionsExt;
@@ -198,9 +199,11 @@ pub(crate) fn write_snapshot(path: &Path, index: &VectorIndex, sequence: u64) ->
         .create(true)
         .truncate(true)
         .open(&temporary)?;
-    file.write_all(&bytes)?;
+    crate::storage_io::write(&mut file, &bytes, "snapshot.write")?;
+    crate::storage_io::check("snapshot.sync")?;
     file.sync_all()?;
     drop(file);
+    crate::storage_io::check("snapshot.rename")?;
     fs::rename(&temporary, path.join("snapshot.bin"))?;
     sync_directory(path)?;
     graph::write(path, index, sequence, checksum)
@@ -397,14 +400,17 @@ fn decode_operation(opcode: u8, fields: &mut Reader<'_>, config: &Config) -> Res
 
 pub(crate) fn append_frame(file: &mut File, frame: &[u8]) -> Result<()> {
     file.seek(SeekFrom::End(0))?;
-    file.write_all(frame)?;
+    crate::storage_io::write(file, frame, "wal.write")?;
+    crate::storage_io::check("wal.sync")?;
     file.sync_all()?;
     Ok(())
 }
 
 pub(crate) fn clear_wal(file: &mut File) -> Result<()> {
+    crate::storage_io::check("wal.truncate")?;
     file.set_len(0)?;
     file.seek(SeekFrom::Start(0))?;
+    crate::storage_io::check("wal.clear_sync")?;
     file.sync_all()?;
     Ok(())
 }

@@ -6,7 +6,7 @@ use crate::{
 use std::{
     collections::BTreeSet,
     fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    io::Read,
     path::Path,
 };
 
@@ -76,7 +76,8 @@ pub(crate) fn write(
                 e.into()
             }
         })?;
-    file.write_all(&bytes)?;
+    crate::storage_io::write(&mut file, &bytes, "export.write")?;
+    crate::storage_io::check("export.sync")?;
     file.sync_all()?;
     storage::sync_directory(
         path.parent()

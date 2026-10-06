@@ -64,6 +64,9 @@ mod math;
 mod rng;
 mod search;
 mod storage;
+#[cfg(test)]
+mod storage_fault_tests;
+mod storage_io;
 mod transfer;
 
 pub use batch::{BatchReport, Mutation};

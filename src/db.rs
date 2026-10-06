@@ -418,7 +418,8 @@ impl Database {
                 .create_new(true)
                 .write(true)
                 .open(destination.join(name))?;
-            std::io::copy(&mut source, &mut target)?;
+            crate::storage_io::copy(&mut source, &mut target)?;
+            crate::storage_io::check("backup.sync")?;
             target.sync_all()?;
         }
         OpenOptions::new()

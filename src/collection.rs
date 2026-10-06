@@ -7,7 +7,7 @@ use crate::{
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    io::Read,
     path::{Path, PathBuf},
 };
 
@@ -486,7 +486,8 @@ fn write_header(path: &Path, name: &str, space: &EmbeddingSpace) -> Result<()> {
         .write(true)
         .create_new(true)
         .open(path.join("collection.bin"))?;
-    file.write_all(&bytes)?;
+    crate::storage_io::write(&mut file, &bytes, "collection.write")?;
+    crate::storage_io::check("collection.sync")?;
     file.sync_all()?;
     storage::sync_directory(path)
 }
