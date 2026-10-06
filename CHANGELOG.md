@@ -4,6 +4,7 @@
 
 - Local Markdown search demo with Ollama, source line ranges, model digest checks and restart persistence.
 - CLI `search --json` with escaped UTF-8 metadata and full-precision distances.
+- Unfiltered Auto search skips predicate scanning; exact metadata equality uses a maintained inverted index. Added explicit-ID subset search and filter evaluation counts.
 
 ## 0.2.0 — 2026-10-03
 

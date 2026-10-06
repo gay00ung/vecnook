@@ -89,7 +89,9 @@ Neighbors sort by distance, then ID. Use `search_exact` as an exact reference an
 | `Hnsw` | Search the graph; report an insufficient candidate count without switching modes |
 | `Auto` (default) | Exact scan when eligible count ≤256 or K exceeds efSearch; otherwise HNSW, with exact repair if too few candidates are found |
 
-A filter predicate runs once per active record before vector search. Ineligible and deleted nodes may still serve as graph paths, but never appear in results. Filtering currently costs O(active records); there is no separate metadata index. Metadata is an opaque UTF-8 string, and a predicate is not an access-control mechanism.
+`search_metadata` uses a maintained inverted index for exact equality of the complete metadata string. Only matching hash-bucket candidates are compared, with full string checks to reject collisions. `search_ids` accepts an application-selected subset and skips other records when preparing eligibility. Unfiltered `search` does not evaluate a predicate across all records. These indexes are rebuilt from authoritative records on open and updated through mutations and compaction.
+
+`search_filtered` evaluates an arbitrary predicate once per active record, which costs O(active records). Ineligible/deleted nodes can be traversed but are not returned. Auto scans small eligible sets exactly. `filter_evaluations` reports predicate/metadata comparison counts; it does not count every graph operation. Graph traversal still initializes a visited bitmap proportional to physical node count. A predicate is not an access-control mechanism.
 
 Results expose `mode`, `reason`, `eligible_count`, `distance_computations`, and `complete`. **`complete=true` means min(K, eligible count) results were returned; it does not certify recall.** Auto repairs a missing result count, not inaccurate full-length approximate results. K=0 returns no neighbors; K above the eligible count is capped at that count. For forced HNSW, efSearch must be at least the capped K.
 

@@ -18,6 +18,8 @@ Coordinates are finite `f32`. Dimension mismatch, NaN/infinity, and a zero vecto
 
 Results sort by ascending distance then ID. K=0 is empty and K larger than the eligible set is capped. `SearchStrategy::Hnsw` requires efSearch≥min(K, eligible count) and efSearch in 1..=4096. Exact strategy ignores efSearch. Auto uses exact search for small sets or oversized K and repairs an underfilled graph result. `complete` describes candidate count, not recall.
 
+Use `search_metadata(query, k, options, value)` for indexed equality of a complete metadata string, or `search_ids(query, k, options, ids)` for an application-selected subset. Unfiltered `search` prepares eligibility without a full record predicate scan. Arbitrary `search_filtered` still evaluates its predicate once per active record. The report's `filter_evaluations` counts these predicate/equality comparisons separately from vector distance evaluations.
+
 ```rust
 use vecnook::{Config, Metric, SearchOptions, VectorIndex};
 

@@ -1,6 +1,7 @@
 use std::{
     cmp::{Ordering, Reverse},
-    collections::{BTreeMap, BinaryHeap},
+    collections::{BTreeMap, BTreeSet, BinaryHeap},
+    hash::{DefaultHasher, Hash, Hasher},
 };
 
 use crate::{
@@ -29,6 +30,28 @@ pub struct Record {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn metadata_bucket_candidates_are_checked_against_the_complete_string() {
+        let mut index = VectorIndex::new(Config::new(1)).unwrap();
+        index.put(1, &[1.0], "project-a").unwrap();
+        index.put(2, &[0.0], "project-b").unwrap();
+        // Simulate a colliding candidate in the same bucket; equality must still reject it.
+        let other = index.active[&2];
+        index
+            .metadata_index
+            .entry(metadata_key("project-a"))
+            .or_default()
+            .insert(other);
+        let result = index
+            .search_metadata(&[0.0], 10, SearchOptions::default(), "project-a")
+            .unwrap();
+        assert_eq!(
+            result.neighbors.iter().map(|n| n.id).collect::<Vec<_>>(),
+            [1]
+        );
+        assert_eq!(result.filter_evaluations, 2);
+    }
 
     #[test]
     fn auto_reports_exact_repair_but_forced_hnsw_keeps_underfill_visible() {
@@ -113,6 +136,8 @@ pub struct SearchReport {
     pub neighbors: Vec<Neighbor>,
     /// Number of vector distance evaluations, including graph traversal and repair.
     pub distance_computations: usize,
+    /// Record predicate/metadata comparisons; zero for unfiltered and explicit-ID queries.
+    pub filter_evaluations: usize,
     /// True when min(K, eligible_count) candidates were found; this is not recall.
     pub complete: bool,
     /// Fixed distance function.
@@ -190,6 +215,7 @@ pub struct VectorIndex {
     config: Config,
     nodes: Vec<Node>,
     active: BTreeMap<u64, usize>,
+    metadata_index: BTreeMap<u64, BTreeSet<usize>>,
     entry: Option<usize>,
     rng: Rng,
     encoded_bytes: usize,
@@ -204,6 +230,7 @@ impl VectorIndex {
             config,
             nodes: Vec::new(),
             active: BTreeMap::new(),
+            metadata_index: BTreeMap::new(),
             entry: None,
             rng,
             encoded_bytes: 0,
@@ -261,7 +288,7 @@ impl VectorIndex {
         if let Some(old) = previous {
             self.nodes[old].record.deleted = true;
         }
-        self.active.insert(id, node);
+        self.register_active(id, node);
         Ok(previous.is_none())
     }
 
@@ -325,6 +352,7 @@ impl VectorIndex {
     /// A missing ID is a no-op; graph links remain available for traversal.
     pub fn delete(&mut self, id: u64) -> bool {
         if let Some(node) = self.active.remove(&id) {
+            self.remove_metadata_posting(node);
             self.nodes[node].record.deleted = true;
             true
         } else {
@@ -378,15 +406,83 @@ impl VectorIndex {
         Ok(self.report(best, target, computations, SearchMode::Hnsw))
     }
 
-    /// Choose exact or HNSW search and expose Auto decisions in the report.
-    /// Auto repairs graph candidate underfill with exact search.
+    /// Choose exact or HNSW without evaluating a predicate over all active records.
+    /// Auto repairs graph underfill exactly. Graph traversal still uses a node-sized visited bitmap.
     pub fn search(&self, query: &[f32], k: usize, options: SearchOptions) -> Result<SearchReport> {
-        self.search_filtered(query, k, options, |_| true)
+        self.config.validate_vector(query)?;
+        options.validate()?;
+        let target = k.min(self.len());
+        let reason = exact_reason(options, self.len(), target);
+        let mut report = if let Some(reason) = reason {
+            let mut report = self.search_exact(query, k)?;
+            report.reason = reason;
+            report
+        } else {
+            let mut report = self.search_hnsw(query, k, options.ef_search)?;
+            report.reason = if options.strategy == SearchStrategy::Auto {
+                SearchReason::GraphSelected
+            } else {
+                SearchReason::HnswRequested
+            };
+            if !report.complete && options.strategy == SearchStrategy::Auto {
+                let graph_work = report.distance_computations;
+                report = self.search_exact(query, k)?;
+                report.distance_computations += graph_work;
+                report.reason = SearchReason::InsufficientGraphCandidates;
+            }
+            report
+        };
+        report.filter_evaluations = 0;
+        Ok(report)
     }
 
-    /// Evaluate the predicate once per active record, before vector search.
-    /// Ineligible nodes can still serve as traversal paths. No metadata index
-    /// is maintained; evaluating predicates costs O(active records).
+    /// Search an exact metadata value through an inverted hash-bucket index.
+    /// Only bucket candidates are compared; full strings are checked to reject hash collisions.
+    /// The derived index is rebuilt on open and updated with every mutation.
+    pub fn search_metadata(
+        &self,
+        query: &[f32],
+        k: usize,
+        options: SearchOptions,
+        metadata: &str,
+    ) -> Result<SearchReport> {
+        self.config.validate_vector(query)?;
+        options.validate()?;
+        let bucket = self.metadata_index.get(&metadata_key(metadata));
+        let evaluations = bucket.map_or(0, BTreeSet::len);
+        let eligible = bucket
+            .into_iter()
+            .flatten()
+            .copied()
+            .filter(|&node| self.nodes[node].record.metadata == metadata)
+            .collect();
+        self.search_candidates(query, k, options, eligible, evaluations)
+    }
+
+    /// Search an application-selected subset without scanning other active records.
+    /// Missing IDs are ignored and duplicate IDs are deduplicated. At most 100,000 input IDs.
+    pub fn search_ids(
+        &self,
+        query: &[f32],
+        k: usize,
+        options: SearchOptions,
+        ids: &[u64],
+    ) -> Result<SearchReport> {
+        self.config.validate_vector(query)?;
+        options.validate()?;
+        if ids.len() > MAX_RECORDS {
+            return Err(Error::InvalidInput("subset exceeds 100000 IDs".into()));
+        }
+        let eligible: BTreeSet<_> = ids
+            .iter()
+            .filter_map(|id| self.active.get(id).copied())
+            .collect();
+        self.search_candidates(query, k, options, eligible.into_iter().collect(), 0)
+    }
+
+    /// Evaluate a predicate once per active record before vector search.
+    /// Ineligible nodes remain traversal paths. Predicate evaluation costs O(active records).
+    /// Use `search_metadata` or `search_ids` for indexed/application-selected subsets.
     pub fn search_filtered<F>(
         &self,
         query: &[f32],
@@ -399,40 +495,49 @@ impl VectorIndex {
     {
         self.config.validate_vector(query)?;
         options.validate()?;
-        let query = Query::new(query, self.config.metric);
-        let mut allowed = vec![false; self.nodes.len()];
-        let eligible: Vec<usize> = self
+        let eligible = self
             .active
             .values()
             .copied()
-            .filter(|&n| {
-                allowed[n] = filter(&self.nodes[n].record);
-                allowed[n]
-            })
+            .filter(|&n| filter(&self.nodes[n].record))
             .collect();
+        self.search_candidates(query, k, options, eligible, self.len())
+    }
+
+    fn search_candidates(
+        &self,
+        query: &[f32],
+        k: usize,
+        options: SearchOptions,
+        eligible: Vec<usize>,
+        evaluations: usize,
+    ) -> Result<SearchReport> {
+        let query = Query::new(query, self.config.metric);
         let target = k.min(eligible.len());
         if options.strategy == SearchStrategy::Hnsw && options.ef_search < target {
             return Err(Error::InvalidInput(
                 "efSearch is smaller than the eligible Top-K".into(),
             ));
         }
-        let reason = match options.strategy {
-            SearchStrategy::Exact => Some(SearchReason::ExactRequested),
-            SearchStrategy::Hnsw => None,
-            SearchStrategy::Auto if eligible.len() <= options.exact_threshold => {
-                Some(SearchReason::SmallEligibleSet)
-            }
-            SearchStrategy::Auto if target > options.ef_search => Some(SearchReason::LargeK),
-            SearchStrategy::Auto => None,
-        };
+        let reason = exact_reason(options, eligible.len(), target);
         let mut computations = 0;
         let mut report = if let Some(reason) = reason {
             let mut report = self.exact_subset(&query, target, &eligible, &mut computations);
             report.reason = reason;
             report
         } else if target == 0 {
-            self.report(Vec::new(), 0, 0, SearchMode::Hnsw)
+            let mut report = self.report(Vec::new(), 0, 0, SearchMode::Hnsw);
+            report.reason = if options.strategy == SearchStrategy::Auto {
+                SearchReason::GraphSelected
+            } else {
+                SearchReason::HnswRequested
+            };
+            report
         } else {
+            let mut allowed = vec![false; self.nodes.len()];
+            for &node in &eligible {
+                allowed[node] = true;
+            }
             let mut entry = self.entry.expect("eligible records imply an entry");
             for layer in (1..self.nodes[entry].links.len()).rev() {
                 entry = self.greedy(&query, entry, layer, &mut computations);
@@ -458,7 +563,26 @@ impl VectorIndex {
             report
         };
         report.eligible_count = eligible.len();
+        report.filter_evaluations = evaluations;
         Ok(report)
+    }
+
+    fn register_active(&mut self, id: u64, node: usize) {
+        if let Some(old) = self.active.insert(id, node) {
+            self.remove_metadata_posting(old);
+        }
+        let key = metadata_key(&self.nodes[node].record.metadata);
+        self.metadata_index.entry(key).or_default().insert(node);
+    }
+
+    fn remove_metadata_posting(&mut self, node: usize) {
+        let key = metadata_key(&self.nodes[node].record.metadata);
+        if let Some(postings) = self.metadata_index.get_mut(&key) {
+            postings.remove(&node);
+            if postings.is_empty() {
+                self.metadata_index.remove(&key);
+            }
+        }
     }
 
     fn exact_subset(
@@ -530,7 +654,7 @@ impl VectorIndex {
             let active = !record.deleted;
             let node = result.append_node(record);
             if active {
-                result.active.insert(id, node);
+                result.register_active(id, node);
             }
         }
         Ok(result)
@@ -564,19 +688,20 @@ impl VectorIndex {
             } else {
                 0.0
             };
-            if !record.deleted
-                && result
-                    .active
-                    .insert(record.id, result.nodes.len())
-                    .is_some()
-            {
+            if !record.deleted && result.active.contains_key(&record.id) {
                 return Err(Error::Corrupt("duplicate active cache ID".into()));
             }
+            let active = !record.deleted;
+            let id = record.id;
+            let node = result.nodes.len();
             result.nodes.push(Node {
                 record,
                 links,
                 inverse_norm: norm,
             });
+            if active {
+                result.register_active(id, node);
+            }
         }
         result.entry = graph.entry;
         result.rng = Rng::new(graph.rng_state);
@@ -587,7 +712,7 @@ impl VectorIndex {
             let active = !record.deleted;
             let node = result.append_node(record);
             if active {
-                result.active.insert(id, node);
+                result.register_active(id, node);
             }
         }
         Ok(result)
@@ -613,6 +738,24 @@ impl VectorIndex {
                     }
                 }
             }
+        }
+        let mut indexed = 0;
+        for (&key, postings) in &self.metadata_index {
+            if postings.is_empty() {
+                return Err(Error::Corrupt("empty metadata bucket".into()));
+            }
+            for &node in postings {
+                if node >= self.nodes.len()
+                    || self.nodes[node].record.deleted
+                    || metadata_key(&self.nodes[node].record.metadata) != key
+                {
+                    return Err(Error::Corrupt("invalid metadata posting".into()));
+                }
+                indexed += 1;
+            }
+        }
+        if indexed != self.len() {
+            return Err(Error::Corrupt("metadata posting count mismatch".into()));
         }
         if let Some(entry) = self.entry {
             if entry >= self.nodes.len() {
@@ -655,6 +798,7 @@ impl VectorIndex {
             mode,
             metric: self.config.metric,
             eligible_count: self.len(),
+            filter_evaluations: 0,
             reason: if mode == SearchMode::Exact {
                 SearchReason::ExactRequested
             } else {
@@ -847,5 +991,23 @@ impl VectorIndex {
             self.entry = Some(node);
         }
         node
+    }
+}
+
+fn metadata_key(metadata: &str) -> u64 {
+    let mut hash = DefaultHasher::new();
+    metadata.hash(&mut hash);
+    hash.finish()
+}
+
+fn exact_reason(options: SearchOptions, eligible: usize, target: usize) -> Option<SearchReason> {
+    match options.strategy {
+        SearchStrategy::Exact => Some(SearchReason::ExactRequested),
+        SearchStrategy::Hnsw => None,
+        SearchStrategy::Auto if eligible <= options.exact_threshold => {
+            Some(SearchReason::SmallEligibleSet)
+        }
+        SearchStrategy::Auto if target > options.ef_search => Some(SearchReason::LargeK),
+        SearchStrategy::Auto => None,
     }
 }

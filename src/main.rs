@@ -225,21 +225,20 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
             } else {
                 None
             };
-            let found = db.search_filtered(
-                &query,
-                k,
-                SearchOptions {
-                    strategy,
-                    ef_search: ef,
-                    ..SearchOptions::default()
-                },
-                |r| filter.is_none_or(|value| r.metadata == value),
-            )?;
+            let options = SearchOptions {
+                strategy,
+                ef_search: ef,
+                ..SearchOptions::default()
+            };
+            let found = match filter {
+                Some(value) => db.search_metadata(&query, k, options, value)?,
+                None => db.search(&query, k, options)?,
+            };
             if json {
                 return Ok(search_json(&found));
             }
             let mut output = format!(
-                "mode={} requested={k} returned={} complete={} distance_computations={} metric={} eligible={} reason={:?}",
+                "mode={} requested={k} returned={} complete={} distance_computations={} filter_evaluations={} metric={} eligible={} reason={:?}",
                 match found.mode {
                     SearchMode::Exact => "exact",
                     SearchMode::Hnsw => "hnsw",
@@ -247,6 +246,7 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
                 found.neighbors.len(),
                 found.complete,
                 found.distance_computations,
+                found.filter_evaluations,
                 found.metric.name(),
                 found.eligible_count,
                 found.reason
@@ -380,7 +380,7 @@ fn search_json(report: &vecnook::SearchReport) -> String {
         })
         .collect();
     format!(
-        "{{\"mode\":\"{}\",\"metric\":\"{}\",\"complete\":{},\"eligible_count\":{},\"distance_computations\":{},\"reason\":\"{:?}\",\"neighbors\":[{}]}}",
+        "{{\"mode\":\"{}\",\"metric\":\"{}\",\"complete\":{},\"eligible_count\":{},\"distance_computations\":{},\"filter_evaluations\":{},\"reason\":\"{:?}\",\"neighbors\":[{}]}}",
         match report.mode {
             SearchMode::Exact => "exact",
             SearchMode::Hnsw => "hnsw",
@@ -389,6 +389,7 @@ fn search_json(report: &vecnook::SearchReport) -> String {
         report.complete,
         report.eligible_count,
         report.distance_computations,
+        report.filter_evaluations,
         report.reason,
         neighbors.join(",")
     )

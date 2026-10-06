@@ -58,3 +58,18 @@ These medians describe this checkpointed dataset only. A database with a large p
 SIFT descriptors are not modern text embeddings, and 100 queries are a small evaluation set. A synthetic uniform fixture with 10,000 vectors, 128 dimensions, 100 independent queries, seed=42, and efSearch=128 produced only 88.60% Recall@10 in both 0.1 and 0.2. Its identical edge count and mean distance computations provide a regression check, not proof of general accuracy. Full result counts do not guarantee nearest-neighbor quality.
 
 The measurements establish neither superiority over Qdrant, pgvector, USearch, nor any other engine. There is no same-machine third-party benchmark here. Million-vector workloads, maximum configured resource use, peak RSS, storage latency, power-loss recovery, and sustained concurrent application workloads have not been characterized. Evaluate representative queries and filters against exact search before choosing parameters.
+
+## Eligibility preparation (0.3 beta)
+
+`cargo run --release --offline --example search_paths` generates 10,000 eight-dimensional vectors and 500 independent queries with seed 42, M=16, efConstruction=200, K=10 and efSearch=128. It compares unfiltered Auto, an all-true predicate, indexed metadata equality, and predicate equality. Equality selects 50 records (0.5%) and Auto scans those vectors exactly. Each path runs 20 unfiltered warmup calls before measuring sequential search-call durations. Corpus construction, persistence and embeddings are outside the timed scope.
+
+One run on the same Apple M4 Pro, macOS 26.6.2, Rust 1.99 release build (thin LTO, one codegen unit):
+
+| Path | p50 ms | p95 ms | Mean filter evaluations | Mean distances |
+| --- | ---: | ---: | ---: | ---: |
+| Unfiltered Auto | 0.029500 | 0.038000 | 0 | 1092 |
+| All-true predicate | 0.044500 | 0.055250 | 10,000 | 1092 |
+| Indexed equality | 0.001500 | 0.001792 | 50 | 50 |
+| Predicate equality | 0.017334 | 0.018833 | 10,000 | 50 |
+
+The corresponding pre-change API code at commit `951e940` measured unfiltered p95 0.075458 ms and scanned-equality p95 0.029041 ms in a separate identical compiler/profile run. These short synthetic timings are sensitive to run order and host activity. The invariant improvement is removal of the full record predicate scan for unfiltered queries and reduction of equality comparisons to the matching hash bucket. Graph search still initializes a physical-node-sized visited bitmap. This is not a modern text embedding or third-party engine benchmark.

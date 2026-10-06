@@ -209,6 +209,28 @@ impl Database {
     pub fn search(&self, query: &[f32], k: usize, options: SearchOptions) -> Result<SearchReport> {
         self.index.search(query, k, options)
     }
+    /// Search exact metadata equality through the maintained inverted index.
+    /// Hash bucket candidates are checked against the full string.
+    pub fn search_metadata(
+        &self,
+        query: &[f32],
+        k: usize,
+        options: SearchOptions,
+        metadata: &str,
+    ) -> Result<SearchReport> {
+        self.index.search_metadata(query, k, options, metadata)
+    }
+    /// Search only selected IDs; absent and duplicate IDs are ignored.
+    /// Rejects more than 100,000 input IDs. Other records are not scanned for eligibility.
+    pub fn search_ids(
+        &self,
+        query: &[f32],
+        k: usize,
+        options: SearchOptions,
+        ids: &[u64],
+    ) -> Result<SearchReport> {
+        self.index.search_ids(query, k, options, ids)
+    }
     /// Evaluate a predicate once per active record before selecting Top-K.
     /// Ineligible nodes can serve as graph paths. Predicate evaluation costs O(active count).
     /// Auto repairs an underfilled result exactly; complete approximate results can still have low recall.
