@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.4.0-beta.1 — unreleased
+
+- Offline prepared-query CLI demo with actual EmbeddingGemma outputs, original Markdown, checkpoint/reopen and generation provenance. Requires a development checkout until this version is published.
+
 ## 0.3.0-beta.2 — 2026-10-06
 
 - First crates.io release, with exact-version registry installation instructions and links to hosted API documentation.

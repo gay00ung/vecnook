@@ -13,8 +13,12 @@ use vecnook::{
     bench::{self, BenchConfig, Dataset},
 };
 
+mod demo;
+mod demo_data;
+
 const HELP: &str = "vecnook: dependency-free vector database\n\
 Usage:\n\
+  vecnook demo [demo-root] [prepared-query=1..3]\n\
   vecnook init <db-dir> <dimensions> [m] [ef-construction] [seed] [--metric l2|cosine|ip]\n\
   vecnook put <db-dir> <id> <comma-separated-vector> [metadata]\n\
   vecnook get <db-dir> <id>\n\
@@ -62,6 +66,9 @@ fn run(args: &[String]) -> Result<()> {
     }
     if command.starts_with("docs-") {
         return document_command(args);
+    }
+    if command == "demo" {
+        return demo::run(&args[1..]);
     }
     if command == "init" {
         require_count(

@@ -25,7 +25,7 @@ def check(path):
             if len(relative.parts) > 1:
                 top = relative.parts[0]
                 allowed = ((top in {"src", "tests"} and relative.suffix == ".rs")
-                           or (top == "docs" and len(relative.parts) == 2 and relative.suffix == ".md")
+                           or (top == "docs" and len(relative.parts) == 2 and (relative.suffix == ".md" or name == "demo-provenance.json"))
                            or (top == "examples" and relative.suffix in {".rs", ".md", ".py"})
                            or (top == "tools" and len(relative.parts) == 2 and relative.suffix in {".rs", ".py", ".txt"}))
             if not allowed:

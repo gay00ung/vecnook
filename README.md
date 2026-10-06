@@ -9,6 +9,8 @@ A small embedded vector database for Rust applications, built with the standard 
 
 ## Get started
 
+The development branch adds an [offline prepared-query demo](docs/quickstart.md). It requires a development checkout; registry instructions below install the published `0.3.0-beta.2`.
+
 Requires Rust 1.89 or later. The package, library, and executable are all named `vecnook`.
 
 ```bash
