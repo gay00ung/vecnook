@@ -15,7 +15,28 @@
 //! assert_eq!(index.search_exact(&[1.0, 0.1, 0.0], 2)?.neighbors[0].id, 2);
 //! # Ok::<(), vecnook::Error>(())
 //! ```
+//!
+//! Use [`SearchOptions`] for Auto search and inspect [`SearchReport::reason`].
+//! Candidate completeness is independent of approximate search recall:
+//!
+//! ```
+//! use vecnook::{Config, Metric, SearchOptions, VectorIndex};
+//! let mut index = VectorIndex::new(Config::new(2).with_metric(Metric::Cosine))?;
+//! index.put(7, &[1.0, 0.0], "project-a")?;
+//! index.put(8, &[0.0, 1.0], "project-b")?;
+//! let result = index.search_filtered(&[0.9, 0.1], 10, SearchOptions::default(), |r| {
+//!     r.metadata == "project-a"
+//! })?;
+//! assert_eq!(result.eligible_count, 1);
+//! assert_eq!(result.neighbors[0].id, 7);
+//! # Ok::<(), vecnook::Error>(())
+//! ```
+//!
+//! [`Database`] adds synchronization, exclusive ownership, WAL recovery and backups.
+//! A storage [`Error::Io`] can mean a write persisted before the failure; close the
+//! poisoned handle, reopen and inspect the affected ID before retrying.
 #![forbid(unsafe_code)]
+#![deny(missing_docs)]
 
 mod batch;
 pub mod bench;

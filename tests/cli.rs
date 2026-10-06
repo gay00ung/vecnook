@@ -126,7 +126,7 @@ fn cli_metric_batch_filtered_search_backup_and_version_are_usable() {
     assert!(version.status.success());
     assert_eq!(
         String::from_utf8(version.stdout).unwrap().trim(),
-        "vecnook 0.2.0"
+        format!("vecnook {}", env!("CARGO_PKG_VERSION"))
     );
     assert!(
         run(&["init", path, "2", "--metric", "cosine"])

@@ -13,13 +13,18 @@ use crate::{
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Corpus construction method for a benchmark.
 pub enum Dataset {
+    /// Random points around seeded cluster centers.
     Clustered,
+    /// Independent uniform random coordinates.
     Uniform,
+    /// Separate external corpus/query fvecs prefixes.
     File,
 }
 
 impl Dataset {
+    /// Stable dataset name used in benchmark output.
     pub fn name(self) -> &'static str {
         match self {
             Self::Clustered => "clustered",
@@ -30,13 +35,21 @@ impl Dataset {
 }
 
 #[derive(Clone, Debug)]
+/// Bounded corpus/query sizes, construction seed and distance metric.
 pub struct BenchConfig {
+    /// Corpus prefix size in 1..=100000, also subject to payload byte limits.
     pub count: usize,
+    /// Fixed coordinate count in 1..=4096.
     pub dimensions: usize,
+    /// Query prefix size in 1..=10000.
     pub queries: usize,
+    /// Candidate pool in 1..=4096; exact strategy ignores it.
     pub ef_search: usize,
+    /// Deterministic graph level seed.
     pub seed: u64,
+    /// Synthetic distribution or external fvecs input.
     pub dataset: Dataset,
+    /// Fixed distance function.
     pub metric: Metric,
 }
 
@@ -55,10 +68,13 @@ impl Default for BenchConfig {
 }
 
 #[derive(Debug)]
+/// Sequential search-call latency and throughput, excluding data loading.
 pub struct Timing {
     /// Query count / sum of timed search-call durations; no concurrent clients.
     pub sequential_qps: f64,
+    /// Nearest-rank median latency in milliseconds.
     pub p50_ms: f64,
+    /// Nearest-rank 95th percentile latency in milliseconds.
     pub p95_ms: f64,
 }
 
@@ -78,16 +94,27 @@ impl Timing {
 }
 
 #[derive(Debug)]
+/// Exact-oracle recall, graph size, build cost and search timings.
 pub struct BenchReport {
+    /// Effective benchmark configuration.
     pub config: BenchConfig,
+    /// Top-K used for recall, at most ten and capped to corpus size.
     pub k: usize,
+    /// Index construction wall time in seconds, excluding input loading.
     pub build_seconds: f64,
+    /// Fraction of exact Top-K IDs returned by HNSW.
     pub recall_at_k: f64,
+    /// Queries returning fewer than min(K, corpus count) candidates.
     pub incomplete_queries: usize,
+    /// Sequential exact-search timings.
     pub exact: Timing,
+    /// Sequential HNSW-search timings.
     pub hnsw: Timing,
+    /// Average distance evaluations per exact query.
     pub mean_exact_computations: f64,
+    /// Average distance evaluations per HNSW query.
     pub mean_hnsw_computations: f64,
+    /// Graph and record counts after build.
     pub index_stats: IndexStats,
 }
 
@@ -174,6 +201,10 @@ pub fn read_fvecs(path: impl AsRef<Path>, limit: usize) -> Result<Vec<Vec<f32>>>
     Ok(vectors)
 }
 
+/// Benchmark a bounded prefix of separate corpus/query fvecs files.
+/// K=10 capped to corpus count, M=16, efConstruction=200 and seed=42.
+/// Reports exact-oracle recall and sequential timings; ingestion and file reads are excluded
+/// from query timings. Rejects malformed vectors or count/ef limits with [`Error::InvalidInput`].
 pub fn run_fvecs(
     base: impl AsRef<Path>,
     query: impl AsRef<Path>,

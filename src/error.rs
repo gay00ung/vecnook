@@ -1,15 +1,25 @@
 use std::{fmt, io};
 
+/// Convenience result type for Vecnook operations.
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
+/// Input, corruption, storage and ownership failures.
+/// I/O failure on a mutation can be ambiguous; close and reopen before writing again.
 pub enum Error {
+    /// Caller input violates dimensions, finite values or documented limits.
     InvalidInput(String),
+    /// Authoritative file or in-memory invariant validation failed.
     Corrupt(String),
+    /// Filesystem or synchronization failure; a write may have persisted.
     Io(io::Error),
+    /// Another handle/process holds the database exclusive OS lock.
     Locked,
+    /// Create or backup refuses an existing destination.
     AlreadyExists,
+    /// A prior storage failure requires closing and reopening before writing.
     Poisoned,
+    /// Persistent operations are unavailable on this platform.
     UnsupportedPlatform,
 }
 

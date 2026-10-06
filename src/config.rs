@@ -13,12 +13,16 @@ pub(crate) const MAX_BATCH_BYTES: usize = 8 * 1024 * 1024;
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Metric {
     #[default]
+    /// Sum of squared coordinate differences (default).
     SquaredL2,
+    /// One minus normalized dot product; zero vectors are rejected.
     Cosine,
+    /// Negative dot product, preserving ascending distance order.
     InnerProduct,
 }
 
 impl Metric {
+    /// Stable distance label used in CLI output.
     pub fn name(self) -> &'static str {
         match self {
             Self::SquaredL2 => "squared_l2",
@@ -29,20 +33,29 @@ impl Metric {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+/// Fixed construction settings for an index and its persisted database.
 pub struct Config {
+    /// Fixed coordinate count in 1..=4096.
     pub dimensions: usize,
+    /// Graph neighbor bound in 2..=64; layer zero allows up to 2*M neighbors.
     pub m: usize,
+    /// Insertion candidate pool in M..=4096.
     pub ef_construction: usize,
+    /// Deterministic graph level seed.
     pub seed: u64,
+    /// Fixed distance function.
     pub metric: Metric,
 }
 
 impl Config {
+    /// Select the distance metric before creating an index or database.
     pub fn with_metric(mut self, metric: Metric) -> Self {
         self.metric = metric;
         self
     }
 
+    /// Set dimensions with M=16, efConstruction=200, seed=42 and squared L2.
+    /// The constructor is infallible; call `validate` or create an index to check limits.
     pub fn new(dimensions: usize) -> Self {
         Self {
             dimensions,
@@ -53,6 +66,8 @@ impl Config {
         }
     }
 
+    /// Check dimensions (1..4096), M (2..64) and efConstruction (M..4096).
+    /// Returns [`Error::InvalidInput`] for an out-of-range field.
     pub fn validate(&self) -> Result<()> {
         if !(1..=MAX_DIMENSIONS).contains(&self.dimensions) {
             return Err(Error::InvalidInput(format!(

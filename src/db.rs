@@ -10,19 +10,31 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Default)]
+/// What opening recovered, trimmed or rebuilt.
 pub struct RecoveryInfo {
+    /// Complete WAL frames applied after the snapshot sequence.
     pub replayed_frames: usize,
+    /// Complete WAL frames already represented by the snapshot.
     pub skipped_frames: usize,
+    /// Bytes discarded from an incomplete final WAL frame.
     pub truncated_tail_bytes: u64,
+    /// Whether a validated checkpoint graph avoided a rebuild.
     pub graph_cache_loaded: bool,
+    /// Nodes restored from the graph cache before WAL insertion.
     pub cached_nodes: usize,
+    /// Reason a missing/stale/invalid disposable cache was rebuilt.
     pub graph_cache_note: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug)]
+/// Thresholds for explicit synchronous maintenance. Defaults: 64 MiB WAL,
+/// 128 tombstones and 20% tombstones; no background worker is started.
 pub struct MaintenancePolicy {
+    /// Current WAL size, or byte threshold when used in a policy.
     pub wal_bytes: u64,
+    /// Minimum deleted-node count before recommending compaction.
     pub min_tombstones: usize,
+    /// Deleted/physical ratio, or threshold when used in a policy.
     pub tombstone_ratio: f64,
 }
 impl Default for MaintenancePolicy {
@@ -35,21 +47,33 @@ impl Default for MaintenancePolicy {
     }
 }
 #[derive(Clone, Debug)]
+/// Observed storage pressure and maintenance recommendations.
 pub struct MaintenanceStatus {
+    /// Current WAL size, or byte threshold when used in a policy.
     pub wal_bytes: u64,
+    /// Deleted/physical ratio, or threshold when used in a policy.
     pub tombstone_ratio: f64,
+    /// Whether the WAL meets the checkpoint threshold.
     pub checkpoint_recommended: bool,
+    /// Whether both compaction thresholds are met.
     pub compact_recommended: bool,
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Action performed by an explicit maintenance call.
 pub enum MaintenanceAction {
+    /// Thresholds did not require maintenance.
     None,
+    /// Persisted the current state and cleared the WAL.
     Checkpoint,
+    /// Rebuilt active records and reclaimed deleted nodes.
     Compact,
 }
 #[derive(Clone, Debug)]
+/// Result of synchronous maintenance.
 pub struct MaintenanceReport {
+    /// Action actually performed.
     pub action: MaintenanceAction,
+    /// Nodes reclaimed by compaction, zero for other actions.
     pub removed_nodes: usize,
 }
 
@@ -66,6 +90,9 @@ pub struct Database {
 }
 
 impl Database {
+    /// Create a database and hold its exclusive OS lock.
+    /// Creates missing directories; refuses existing database files without overwriting them.
+    /// Returns [`Error::Locked`], [`Error::AlreadyExists`], invalid configuration, platform or I/O errors.
     pub fn create(path: impl AsRef<Path>, config: Config) -> Result<Self> {
         storage::ensure_platform()?;
         let index = VectorIndex::new(config)?;
@@ -105,6 +132,9 @@ impl Database {
         })
     }
 
+    /// Open a database, validate its files, recover the WAL and hold an exclusive lock.
+    /// Only an incomplete final WAL frame is trimmed. Complete corruption fails with
+    /// [`Error::Corrupt`]; a missing WAL is an I/O error. Even readers need the exclusive lock.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         storage::ensure_platform()?;
         let path = path.as_ref().to_path_buf();
@@ -143,30 +173,45 @@ impl Database {
         })
     }
 
+    /// Persisted dimensions, metric and graph construction parameters.
     pub fn config(&self) -> &Config {
         self.index.config()
     }
+    /// Current record, graph and coordinate-payload counts.
     pub fn stats(&self) -> IndexStats {
         self.index.stats()
     }
+    /// Last committed WAL frame sequence; one sequence per nonempty batch.
     pub fn sequence(&self) -> u64 {
         self.sequence
     }
+    /// Recovery and graph cache observations from the most recent open.
     pub fn recovery_info(&self) -> &RecoveryInfo {
         &self.recovery
     }
+    /// Find an active ID. Deleted and replaced versions are not returned.
     pub fn get(&self, id: u64) -> Option<&Record> {
         self.index.get(id)
     }
+    /// Exhaustively search active vectors, ordered by distance then ID.
+    /// K is capped to active count; K=0 returns no neighbors. Invalid queries return [`Error::InvalidInput`].
     pub fn search_exact(&self, query: &[f32], k: usize) -> Result<SearchReport> {
         self.index.search_exact(query, k)
     }
+    /// Force approximate graph search with an efSearch candidate pool.
+    /// Requires efSearch in 1..4096 and at least min(K, active count).
+    /// `complete` reports candidate count; measure recall separately.
     pub fn search_hnsw(&self, query: &[f32], k: usize, ef: usize) -> Result<SearchReport> {
         self.index.search_hnsw(query, k, ef)
     }
+    /// Search with the requested strategy and report Auto fallback reasons.
+    /// Invalid dimensions, nonfinite coordinates or search options return [`Error::InvalidInput`].
     pub fn search(&self, query: &[f32], k: usize, options: SearchOptions) -> Result<SearchReport> {
         self.index.search(query, k, options)
     }
+    /// Evaluate a predicate once per active record before selecting Top-K.
+    /// Ineligible nodes can serve as graph paths. Predicate evaluation costs O(active count).
+    /// Auto repairs an underfilled result exactly; complete approximate results can still have low recall.
     pub fn search_filtered<F>(
         &self,
         query: &[f32],
@@ -179,10 +224,15 @@ impl Database {
     {
         self.index.search_filtered(query, k, options, filter)
     }
+    /// Validate active IDs, vector values, graph bounds and layer structure.
+    /// Reports [`Error::Corrupt`] on an inconsistent in-memory index.
     pub fn check_invariants(&self) -> Result<()> {
         self.index.check_invariants()
     }
 
+    /// Insert or replace an ID after syncing its WAL frame; true means a new active ID.
+    /// Input errors leave storage unchanged. An I/O error poisons writes and may have persisted:
+    /// close, reopen and inspect the ID. Metadata is bounded to 16 KiB of UTF-8.
     pub fn put(&mut self, id: u64, vector: &[f32], metadata: &str) -> Result<bool> {
         self.ensure_writable()?;
         self.index.validate_put(vector, metadata)?;
@@ -209,6 +259,8 @@ impl Database {
         }
     }
 
+    /// Durably delete an active ID; false means it was already absent and no frame was written.
+    /// An I/O failure may have persisted and poisons further writes.
     pub fn delete(&mut self, id: u64) -> Result<bool> {
         self.ensure_writable()?;
         if self.index.get(id).is_none() {
@@ -288,6 +340,8 @@ impl Database {
         Ok(())
     }
 
+    /// Inspect WAL size and tombstones without changing files.
+    /// Rejects zero byte/count thresholds or a ratio outside 0..=1.
     pub fn maintenance_status(&self, policy: MaintenancePolicy) -> Result<MaintenanceStatus> {
         if policy.wal_bytes == 0
             || policy.min_tombstones == 0
@@ -311,6 +365,8 @@ impl Database {
         })
     }
 
+    /// Synchronously compact if recommended, otherwise checkpoint if recommended.
+    /// Does no background work. I/O errors poison further writes.
     pub fn maintain(&mut self, policy: MaintenancePolicy) -> Result<MaintenanceReport> {
         self.ensure_writable()?;
         let status = self.maintenance_status(policy)?;
@@ -328,6 +384,8 @@ impl Database {
         })
     }
 
+    /// Sync a snapshot and graph cache, then truncate and sync the WAL.
+    /// I/O failure poisons writes; reopen to determine the persisted state.
     pub fn checkpoint(&mut self) -> Result<()> {
         self.ensure_writable()?;
         let result = storage::write_snapshot(&self.path, &self.index, self.sequence)
@@ -338,6 +396,8 @@ impl Database {
         result
     }
 
+    /// Rebuild active records, persist them and reclaim tombstones; returns removed node count.
+    /// Temporarily holds a second index. I/O failure poisons writes.
     pub fn compact(&mut self) -> Result<usize> {
         self.ensure_writable()?;
         let replacement = self.index.compacted()?;

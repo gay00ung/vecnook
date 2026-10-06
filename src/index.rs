@@ -15,9 +15,13 @@ use crate::{
 };
 
 #[derive(Clone, Debug, PartialEq)]
+/// Original vector and opaque UTF-8 metadata for an active ID.
 pub struct Record {
+    /// Application-assigned ID, unique among active records.
     pub id: u64,
+    /// Original finite f32 coordinates; dimensionality is fixed by configuration.
     pub vector: Vec<f32>,
+    /// Opaque UTF-8 application payload, limited to 16 KiB.
     pub metadata: String,
     pub(crate) deleted: bool,
 }
@@ -81,36 +85,56 @@ impl Record {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+/// Search result ordered by ascending distance and then ID.
 pub struct Neighbor {
+    /// Application-assigned ID, unique among active records.
     pub id: u64,
+    /// Distance in the configured metric; smaller sorts first.
     pub distance: f64,
+    /// Opaque UTF-8 application payload, limited to 16 KiB.
     pub metadata: String,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// Algorithm that actually produced the returned neighbors.
 pub enum SearchMode {
+    /// Exhaustive distance ordering over the eligible set.
     Exact,
+    /// Approximate graph traversal over original vectors.
     Hnsw,
 }
 
 #[derive(Debug)]
+/// Neighbors, actual execution mode and work counts for one query.
 pub struct SearchReport {
+    /// Actual algorithm used for this report.
     pub mode: SearchMode,
+    /// Top candidates in ascending distance/ID order.
     pub neighbors: Vec<Neighbor>,
+    /// Number of vector distance evaluations, including graph traversal and repair.
     pub distance_computations: usize,
     /// True when min(K, eligible_count) candidates were found; this is not recall.
     pub complete: bool,
+    /// Fixed distance function.
     pub metric: Metric,
+    /// Number of active records eligible under the filter.
     pub eligible_count: usize,
+    /// Selection/fallback reason; inspect alongside mode.
     pub reason: SearchReason,
 }
 
 #[derive(Clone, Debug)]
+/// Record and graph counts; coordinate bytes do not include total memory use.
 pub struct IndexStats {
+    /// Number of currently visible IDs.
     pub active_records: usize,
+    /// Allocated graph nodes including superseded and deleted versions.
     pub physical_nodes: usize,
+    /// Physical nodes that are no longer active.
     pub tombstones: usize,
+    /// Number of layers in the graph.
     pub layers: usize,
+    /// Sum of directed neighbor links across all layers.
     pub directed_edges: usize,
     /// Raw coordinate payload only; this is not total process RSS.
     pub vector_bytes: usize,
@@ -161,6 +185,7 @@ impl Ord for Scored {
     }
 }
 
+/// In-memory, from-scratch HNSW index with active-ID lookup and original vectors.
 pub struct VectorIndex {
     config: Config,
     nodes: Vec<Node>,
@@ -171,6 +196,7 @@ pub struct VectorIndex {
 }
 
 impl VectorIndex {
+    /// Create an empty in-memory index; invalid configuration returns [`Error::InvalidInput`].
     pub fn new(config: Config) -> Result<Self> {
         config.validate()?;
         let rng = Rng::new(config.seed);
@@ -184,15 +210,19 @@ impl VectorIndex {
         })
     }
 
+    /// Fixed dimensions, metric and graph construction parameters.
     pub fn config(&self) -> &Config {
         &self.config
     }
+    /// Number of active IDs; old and deleted physical nodes are excluded.
     pub fn len(&self) -> usize {
         self.active.len()
     }
+    /// Whether there are no active records.
     pub fn is_empty(&self) -> bool {
         self.active.is_empty()
     }
+    /// Borrow the active record for an ID, or None if absent/deleted.
     pub fn get(&self, id: u64) -> Option<&Record> {
         self.active.get(&id).map(|&n| &self.nodes[n].record)
     }
@@ -302,6 +332,8 @@ impl VectorIndex {
         }
     }
 
+    /// Scan all active vectors. Ties sort by ID; K is capped to active count.
+    /// Queries must have matching dimensions and finite coordinates; cosine requires nonzero input.
     pub fn search_exact(&self, query: &[f32], k: usize) -> Result<SearchReport> {
         self.config.validate_vector(query)?;
         let query = Query::new(query, self.config.metric);
@@ -322,6 +354,8 @@ impl VectorIndex {
         Ok(self.report(best.into_vec(), target, computations, SearchMode::Exact))
     }
 
+    /// Force approximate HNSW search with efSearch in 1..4096 and at least min(K, len).
+    /// Candidate completeness is not a recall guarantee.
     pub fn search_hnsw(&self, query: &[f32], k: usize, ef: usize) -> Result<SearchReport> {
         self.config.validate_vector(query)?;
         let query = Query::new(query, self.config.metric);
@@ -344,6 +378,8 @@ impl VectorIndex {
         Ok(self.report(best, target, computations, SearchMode::Hnsw))
     }
 
+    /// Choose exact or HNSW search and expose Auto decisions in the report.
+    /// Auto repairs graph candidate underfill with exact search.
     pub fn search(&self, query: &[f32], k: usize, options: SearchOptions) -> Result<SearchReport> {
         self.search_filtered(query, k, options, |_| true)
     }
@@ -447,6 +483,7 @@ impl VectorIndex {
         self.report(best.into_vec(), target, *computations, SearchMode::Exact)
     }
 
+    /// Count active/deleted nodes, graph edges and raw vector coordinate bytes.
     pub fn stats(&self) -> IndexStats {
         IndexStats {
             active_records: self.len(),
@@ -458,6 +495,8 @@ impl VectorIndex {
         }
     }
 
+    /// Rebuild from active records and return the number of reclaimed nodes.
+    /// Temporarily allocates a replacement index; metadata and IDs are preserved.
     pub fn compact(&mut self) -> Result<usize> {
         let replacement = self.compacted()?;
         let removed = self.nodes.len() - replacement.nodes.len();

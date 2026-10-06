@@ -5,24 +5,30 @@ A small embedded vector database for Rust applications, built with the standard 
 [![CI](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml/badge.svg)](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml)
 [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
 
-**0.2 is an early beta.** It is intended for local applications with one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS and Linux. The index stays in RAM; this is not a distributed service.
+**0.3 is an early beta.** It is intended for local applications with one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS and Linux. The index stays in RAM; this is not a distributed service.
 
 ## Get started
 
 Requires Rust 1.89 or later. The package, library, and executable are all named `vecnook`.
 
 ```bash
-cargo install --git https://github.com/gay00ung/vecnook --tag v0.2.0 --locked
+cargo install --git https://github.com/gay00ung/vecnook --branch main --locked
 ```
 
-For a Rust application, use the Git tag in `Cargo.toml`:
+For a Rust application, add the Git dependency:
+
+```bash
+cargo add vecnook --git https://github.com/gay00ung/vecnook --branch main
+```
+
+Or edit `Cargo.toml`:
 
 ```toml
 [dependencies]
-vecnook = { git = "https://github.com/gay00ung/vecnook", tag = "v0.2.0" }
+vecnook = { git = "https://github.com/gay00ung/vecnook", branch = "main" }
 ```
 
-The release is distributed through GitHub; these instructions do not require a crates.io publication. To build a checkout:
+Registry publication is pending authentication; `cargo add vecnook` from crates.io is not available yet. These Git instructions install the current beta; commit your lockfile to pin its revision. See the [API guide](docs/api.md) and [release procedure](docs/releasing.md). To build a checkout:
 
 ```bash
 cargo build --offline --release

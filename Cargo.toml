@@ -1,10 +1,11 @@
 [package]
 name = "vecnook"
-version = "0.2.0"
+version = "0.3.0-beta.1"
 edition = "2024"
 rust-version = "1.89"
 license = "MIT"
 repository = "https://github.com/gay00ung/vecnook"
+homepage = "https://github.com/gay00ung/vecnook"
 readme = "README.md"
 keywords = ["vector", "database", "hnsw", "embedded", "similarity"]
 categories = ["database-implementations", "algorithms"]
@@ -20,6 +21,10 @@ name = "vecnook"
 path = "src/main.rs"
 
 [dependencies]
+
+[package.metadata.docs.rs]
+rustdoc-args = ["-D", "warnings"]
+targets = ["x86_64-unknown-linux-gnu", "aarch64-apple-darwin"]
 
 [profile.release]
 lto = "thin"
