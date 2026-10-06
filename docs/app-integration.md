@@ -9,15 +9,17 @@ cargo run --offline --example local_app -- data/local-app
 cargo run --offline --example local_app -- data/local-app
 ```
 
-Both runs return the original text from `recovery.md`. These three-dimensional vectors are a fixture for the integration contract. For text-derived embeddings, use the [local Ollama document demo](../examples/documents/README.md).
+Both runs enqueue a live atomic document update, return its new text from `recovery.md`, delete a temporary note, checkpoint, drain and reopen. These three-dimensional vectors are a fixture for the integration contract. For text-derived embeddings, use the [complete local Markdown workflow](../examples/documents/README.md#complete-application-flow).
 
 ## Requests and ownership
 
-`start(collection)` returns a cloneable `SearchClient` and a worker `JoinHandle<Collection>`. The worker owns the only persistent handle. It searches sequentially; multiple application callers can submit at the same time. This example is a query worker, so perform writes before starting it or after joining it. An application that needs live mutation can extend the message protocol with owned write requests and return storage errors through the same response channel.
+`start(collection)` returns a cloneable `SearchClient` and a worker `JoinHandle<Collection>`. The worker owns the only persistent handle. Searches, writes and checkpoints execute sequentially in one queue; multiple callers can submit at the same time. Sequential submissions from one caller preserve that caller's order. Racing callers must coordinate ordering themselves. A search submitted after an accepted write executes after that write finishes. Inspect both responses: acceptance means queued, and a successful write response means acknowledged persistence.
+
+Use `submit_batch(model, Vec<WriteOperation>, expected_sequence)` for owned `Put { document, vector }` and `Delete { id }` requests. Each batch is atomic. `Some(sequence)` rejects stale writes with `Error::Conflict`; `None` writes at the current state. The app queue accepts 1–64 operations and at most 256 KiB of encoded documents/coordinates per batch. Larger imports use the collection API outside the event loop. Model, dimensions and payload bounds are checked before enqueueing; vector values, capacity and sequence conflicts are validated by the worker and reported through the receiver. `checkpoint()` uses the same queue and returns a result receiver.
 
 `SearchClient::submit` takes the expected model identity, an owned vector, K, an optional exact source filter and required tags. It uses `try_send` on a 32-request queue and returns a one-result receiver. In an event loop, poll the receiver with `try_recv`, or wait on a background task and dispatch the result back to the UI. Calling blocking `recv` or `join` on the UI thread would freeze it. Obtain and validate query embeddings off the UI thread as well.
 
-The example caps K at 100, tags at 32, source at 1,024 UTF-8 bytes and each tag at 128 bytes. Dimensions and the full model identity must match the collection. With the core's 4,096-dimension limit, the queue can retain at most about 512 KiB of vector coordinates plus strings, channel overhead and result receivers; callers and search results can retain additional memory. An abandoned receiver does not stop the worker. Closing a receiver does not cancel an already queued search.
+Queries cap K at 100, tags at 32, source at 1,024 UTF-8 bytes and each tag at 128 bytes. Dimensions and the full model identity must match the collection. At 4,096 dimensions, 32 queued queries hold up to 512 KiB of coordinates plus strings. Maximum-size writes hold up to 8 MiB of encoded-equivalent payload across the queue, plus Rust objects, temporary encodings, channels and receivers. The active request, callers and results retain additional memory. Closing a receiver does not cancel an accepted search, write or checkpoint.
 
 | Outcome | Caller behavior |
 | --- | --- |
@@ -25,6 +27,7 @@ The example caps K at 100, tags at 32, source at 1,024 UTF-8 bytes and each tag 
 | `SubmitError::Busy` | Keep the UI responsive and retry later or discard an outdated query |
 | `SubmitError::Stopped` | Stop submitting; inspect worker termination |
 | `Error::InvalidInput` through the receiver | Correct a non-finite or zero cosine vector |
+| `Error::Io` / `Error::Poisoned` from a write | Stop submissions, drain/close, reopen and inspect affected IDs before retrying ambiguous writes |
 | Response channel disconnects | Inspect worker termination; no result was delivered |
 
 Drop every client clone to close submissions. The worker drains queued requests and exits; join it from application shutdown/background code to recover the collection. Checkpoint if needed, then drop the collection to release its lock. The example's tests exercise eight clients, the held lock, rejected requests, queue saturation, abandoned receivers, queued work during shutdown and reopening original documents.

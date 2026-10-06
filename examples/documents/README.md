@@ -35,6 +35,20 @@ Imports store a reserved `vecnook:sync:v1:` tag identifying the managed folder. 
 
 Pruning requires an explicit flag and a complete successful directory scan. Access errors, symlink directories/files and model errors abort it. Changing a file to empty removes its old chunks as an explicit update. Deleting a file requires `--prune`. The stored model digest, prompts, dimensions and metric must match; a changed model requires a new collection. Omit `sync --model` to infer the existing model. A sequence precondition rejects intervening writes: rerun the sync after a conflict. Successful batches are durable before the command reports completion; a checkpoint is separate maintenance. Completion reports changed, unchanged, deleted and failed file counts.
 
+## Complete application flow
+
+With Ollama running and `embeddinggemma` installed, use a new application directory:
+
+```bash
+python3 examples/documents/workflow.py data/document-app --binary target/release/vecnook
+```
+
+This runnable command copies the five MIT samples into its own folder, imports them, checks unchanged sync, modifies a copy, searches by source and tag, reopens, makes an independent named backup, exports and restores to a new collection. Assertions compare original text and results after each restore. The input samples remain available for another run. Each CLI call closes its handle; a Rust app should retain one worker as shown in the [backend example](../../docs/app-integration.md).
+
+The same sources and tools are in the Cargo archive. Extract the `.crate`, run the command from its root and pass `--binary` pointing to the CLI installed from that version. The optional model is separately installed; it is not bundled with the source archive.
+
+When the model digest or its prompts change, create a new collection and run the initial import again. Query the new collection, verify originals and relevant results, then move the application's chosen collection path. Retain the old database and a checked backup until migration succeeds.
+
 Run the offline integration tests with a locally built binary:
 
 ```bash

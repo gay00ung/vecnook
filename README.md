@@ -178,7 +178,7 @@ Replace `<TAB>` with a literal tab. Metadata is optional and may contain tabs, b
 | M / efConstruction / efSearch | 2–64 / M–4096 / 1–4096 |
 | Atomic batch | 1024 operations and 8 MiB WAL payload |
 
-The node and snapshot limits both apply; dimension and metadata size may make the byte limit bind first. `stats.vector_bytes` counts coordinates only, not total RSS. The WAL has no hard total-size cap; applications must call maintenance. Maximum-scale memory and latency are not characterized.
+The node and snapshot limits both apply; dimension and metadata size may make the byte limit bind first. `stats.vector_bytes` counts coordinates only, not total RSS. The WAL has no hard total-size cap; applications must call maintenance. The development [operating-range guide](docs/operating-range.md) measures vector workloads through 50,000 records and document workloads through 10,000, including filter, update, recovery and memory costs. Larger configurations remain uncharacterized.
 
 ## Compatibility and validation
 
@@ -199,4 +199,4 @@ The [0.3 text benchmark](docs/text-benchmarks.md) uses 5,183 SciFact document em
 
 Vecnook currently has no SIMD kernels, quantization, mmap storage, embedding model, network API, replication, or multi-process readers. See [CONTRIBUTING.md](CONTRIBUTING.md) to report reproducible problems or contribute.
 
-Development guides: [API compatibility](docs/compatibility.md), [incremental Markdown sync](examples/documents/README.md#incremental-updates), and [diagnostics and restore](docs/operations.md). These additions require the 0.4 development checkout until published.
+Development guides: [API compatibility](docs/compatibility.md), [complete Markdown app](examples/documents/README.md#complete-application-flow), [incremental sync](examples/documents/README.md#incremental-updates), [diagnostics and restore](docs/operations.md), and [choosing an engine](docs/choosing.md). These additions require the 0.4 development checkout until published.

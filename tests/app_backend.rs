@@ -5,6 +5,150 @@ use std::time::Duration;
 use support::TempDir;
 use vecnook::{Collection, Config, Document, EmbeddingSpace, Error, Metric};
 
+#[test]
+fn ordered_live_batches_are_atomic_and_abandoned_writes_drain_before_restart() {
+    use vecnook::app::WriteOperation;
+    let temp = TempDir::new();
+    let schema = space();
+    let collection = Collection::create(
+        temp.path(),
+        "app",
+        Config::new(2).with_metric(schema.metric),
+        &schema.model,
+    )
+    .unwrap();
+    let (client, worker) = backend::start(collection).unwrap();
+    let doc = Document::new(u64::MAX, "updated original\r\n한글", "notes.md");
+    let accepted = client
+        .submit_batch(
+            "fixture-v1",
+            vec![WriteOperation::Put {
+                document: doc.clone(),
+                vector: vec![1.0, 0.0],
+            }],
+            Some(0),
+        )
+        .unwrap();
+    let after_write = client
+        .submit("fixture-v1", vec![1.0, 0.0], 1, None, vec![])
+        .unwrap();
+    accepted
+        .recv_timeout(Duration::from_secs(10))
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        after_write
+            .recv_timeout(Duration::from_secs(10))
+            .unwrap()
+            .unwrap()
+            .neighbors[0]
+            .document,
+        doc
+    );
+    let conflict = client
+        .submit_batch(
+            "fixture-v1",
+            vec![WriteOperation::Delete { id: u64::MAX }],
+            Some(0),
+        )
+        .unwrap();
+    assert!(matches!(
+        conflict.recv_timeout(Duration::from_secs(10)).unwrap(),
+        Err(Error::Conflict { .. })
+    ));
+    // A valid delete followed by invalid coordinates must not partially delete the old document.
+    let invalid = client
+        .submit_batch(
+            "fixture-v1",
+            vec![
+                WriteOperation::Delete { id: u64::MAX },
+                WriteOperation::Put {
+                    document: Document::new(2, "bad", "b.md"),
+                    vector: vec![f32::NAN, 0.0],
+                },
+            ],
+            None,
+        )
+        .unwrap();
+    assert!(matches!(
+        invalid.recv_timeout(Duration::from_secs(10)).unwrap(),
+        Err(Error::InvalidInput(_))
+    ));
+    drop(
+        client
+            .submit_batch(
+                "fixture-v1",
+                vec![WriteOperation::Put {
+                    document: Document::new(3, "drained", "c.md"),
+                    vector: vec![0.0, 1.0],
+                }],
+                None,
+            )
+            .unwrap(),
+    );
+    let checkpoint = client.checkpoint().unwrap();
+    drop(client);
+    checkpoint
+        .recv_timeout(Duration::from_secs(10))
+        .unwrap()
+        .unwrap();
+    let collection = worker.join().unwrap();
+    assert_eq!(collection.sequence(), 2);
+    assert_eq!(collection.get(u64::MAX).unwrap(), Some(doc.clone()));
+    assert!(collection.get(2).unwrap().is_none());
+    assert_eq!(collection.get(3).unwrap().unwrap().text, "drained");
+    drop(collection);
+    let reopened = Collection::open(temp.path(), "app", &schema).unwrap();
+    assert_eq!(reopened.get(u64::MAX).unwrap(), Some(doc));
+    assert_eq!(reopened.get(3).unwrap().unwrap().text, "drained");
+}
+
+#[test]
+fn oversized_app_write_requests_are_rejected_before_enqueueing() {
+    use vecnook::app::{SubmitError, WriteOperation};
+    let temp = TempDir::new();
+    let schema = space();
+    let collection = Collection::create(
+        temp.path(),
+        "app",
+        Config::new(2).with_metric(schema.metric),
+        &schema.model,
+    )
+    .unwrap();
+    let (client, worker) = backend::start(collection).unwrap();
+    let puts = || {
+        (0..64)
+            .map(|id| WriteOperation::Put {
+                document: Document::new(id, "x".repeat(6000), "a.md"),
+                vector: vec![1.0, 0.0],
+            })
+            .collect()
+    };
+    assert!(matches!(
+        client.submit_batch("fixture-v1", puts(), None),
+        Err(SubmitError::InvalidRequest)
+    ));
+    assert!(matches!(
+        client.submit_batch("other", vec![WriteOperation::Delete { id: 1 }], None),
+        Err(SubmitError::InvalidRequest)
+    ));
+    assert!(matches!(
+        client.submit_batch("fixture-v1", vec![], None),
+        Err(SubmitError::InvalidRequest)
+    ));
+    assert!(matches!(
+        client.submit_batch(
+            "fixture-v1",
+            vec![WriteOperation::Delete { id: 1 }; 65],
+            None
+        ),
+        Err(SubmitError::InvalidRequest)
+    ));
+    drop(client);
+    let collection = worker.join().unwrap();
+    assert_eq!(collection.sequence(), 0);
+}
+
 fn space() -> EmbeddingSpace {
     EmbeddingSpace::new("fixture-v1", 2, Metric::Cosine)
 }

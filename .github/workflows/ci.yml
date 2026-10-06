@@ -5,6 +5,12 @@ on:
     branches: [main]
     tags: ['v*']
   pull_request:
+  workflow_dispatch:
+    inputs:
+      registry_version:
+        description: Optional exact registry version to install and verify
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -78,3 +84,21 @@ jobs:
           python tools/check_package.py --prepare-decoys
           cargo +${{ matrix.rust }} package --offline
           python tools/check_package.py
+      - name: Public documentation links
+        run: python tools/check_links.py
+      - name: Fresh packaged consumers
+        run: |
+          package=$(find target/package -maxdepth 1 -name 'vecnook-*.crate' -print -quit)
+          python tools/check_distribution.py --crate "$package" --toolchain "${{ matrix.rust }}" --output work/packaged-consumer
+      - name: Actual registry consumers
+        if: github.event_name == 'workflow_dispatch' && inputs.registry_version != ''
+        env:
+          VECNOOK_REGISTRY_VERSION: ${{ inputs.registry_version }}
+        run: python tools/check_distribution.py --registry "$VECNOOK_REGISTRY_VERSION" --toolchain "${{ matrix.rust }}" --output work/registry-consumer
+      - name: Preserve registry distribution receipts
+        if: github.event_name == 'workflow_dispatch' && inputs.registry_version != ''
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: distribution-${{ matrix.os }}-${{ matrix.rust }}
+          path: work/registry-consumer/receipt.json
+          retention-days: 30
