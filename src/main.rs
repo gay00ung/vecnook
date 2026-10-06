@@ -8,8 +8,8 @@ use std::{
 };
 
 use vecnook::{
-    Config, Database, Error, MaintenancePolicy, Metric, Mutation, Result, SearchMode,
-    SearchOptions, SearchStrategy,
+    Collection, Config, Database, Document, DocumentFilter, DocumentMutation, EmbeddingSpace,
+    Error, MaintenancePolicy, Metric, Mutation, Result, SearchMode, SearchOptions, SearchStrategy,
     bench::{self, BenchConfig, Dataset},
 };
 
@@ -27,6 +27,11 @@ Usage:\n\
   vecnook checkpoint <db-dir>\n\
   vecnook compact <db-dir>\n\
   vecnook shell <db-dir>\n\
+  vecnook docs-init <root> <name> <dimensions> <model-identity> <l2|cosine|ip>\n\
+  vecnook docs-info <root> <name>\n\
+  vecnook docs-batch <root> <name> <dimensions> <model-identity> <metric> <tsv-file>\n\
+  vecnook docs-search <root> <name> <dimensions> <model-identity> <metric> <vector> [k] [ef] [auto|hnsw|exact] [--tag value] [--source value]\n\
+  vecnook docs-checkpoint <root> <name> <dimensions> <model-identity> <metric>\n\
   vecnook bench [count=10000] [dimensions=512] [queries=200] [ef=128] [seed=42] [clustered|uniform] [l2|cosine|ip]\n\
   vecnook bench-file <base.fvecs> <query.fvecs> [count=10000] [queries=200] [ef=128] [l2|cosine|ip]\n\n\
 Distances sort ascending. The shell accepts the same DB commands without <db-dir>, plus quit.\n";
@@ -54,6 +59,9 @@ fn run(args: &[String]) -> Result<()> {
     if matches!(command, "help" | "--help" | "-h") {
         print!("{HELP}");
         return Ok(());
+    }
+    if command.starts_with("docs-") {
+        return document_command(args);
     }
     if command == "init" {
         require_count(
@@ -364,6 +372,208 @@ fn json_string(value: &str) -> String {
     }
     result.push('"');
     result
+}
+
+fn document_json(document: &Document) -> String {
+    format!(
+        "{{\"id\":{},\"source\":{},\"text\":{},\"start_line\":{},\"end_line\":{},\"tags\":[{}]}}",
+        document.id,
+        json_string(&document.source),
+        json_string(&document.text),
+        document.start_line,
+        document.end_line,
+        document
+            .tags
+            .iter()
+            .map(|tag| json_string(tag))
+            .collect::<Vec<_>>()
+            .join(",")
+    )
+}
+
+fn document_command(args: &[String]) -> Result<()> {
+    let command = args[0].as_str();
+    if command == "docs-info" {
+        require_count(args, 3, 3, "docs-info <root> <name>")?;
+        let space = Collection::describe(&args[1], &args[2])?;
+        println!(
+            "{{\"name\":{},\"model\":{},\"dimensions\":{},\"metric\":{}}}",
+            json_string(&args[2]),
+            json_string(&space.model),
+            space.dimensions,
+            json_string(space.metric.name())
+        );
+        return Ok(());
+    }
+    require_count(
+        args,
+        6,
+        79,
+        "docs-<command> <root> <name> <dimensions> <model-identity> <metric> [parameters]",
+    )?;
+    let space = EmbeddingSpace::new(&args[4], parse(&args[3], "dimensions")?, metric(&args[5])?);
+    if command == "docs-init" {
+        require_count(
+            args,
+            6,
+            6,
+            "docs-init <root> <name> <dimensions> <model-identity> <metric>",
+        )?;
+        Collection::create(
+            &args[1],
+            &args[2],
+            Config::new(space.dimensions).with_metric(space.metric),
+            &space.model,
+        )?;
+        println!("OK initialized collection={}", args[2]);
+        return Ok(());
+    }
+    if !matches!(
+        command,
+        "docs-batch" | "docs-search" | "docs-checkpoint" | "docs-get" | "docs-compact"
+    ) {
+        return Err(Error::InvalidInput("unknown document command".into()));
+    }
+    let mut collection = Collection::open(&args[1], &args[2], &space)?;
+    let extra = &args[6..];
+    match command {
+        "docs-batch" => {
+            require_count(extra, 1, 1, "docs-batch ... <tsv-file>")?;
+            let rows = read_batch(&extra[0])?;
+            let documents = rows
+                .iter()
+                .map(|r| {
+                    if r.vector.is_some() {
+                        let doc = Document::from_payload(&r.metadata)?;
+                        if doc.id != r.id {
+                            return Err(Error::InvalidInput(
+                                "document ID differs from batch ID".into(),
+                            ));
+                        }
+                        Ok(Some(doc))
+                    } else {
+                        Ok(None)
+                    }
+                })
+                .collect::<Result<Vec<_>>>()?;
+            let operations: Vec<_> = rows
+                .iter()
+                .zip(&documents)
+                .map(|(row, doc)| match doc {
+                    Some(doc) => DocumentMutation::Put {
+                        document: doc,
+                        vector: row.vector.as_ref().unwrap(),
+                    },
+                    None => DocumentMutation::Delete { id: row.id },
+                })
+                .collect();
+            let report = collection.write_batch(&operations)?;
+            println!(
+                "OK documents inserted={} updated={} deleted={} sequence={}",
+                report.inserted, report.updated, report.deleted, report.sequence
+            );
+        }
+        "docs-search" => {
+            require_count(
+                extra,
+                1,
+                70,
+                "docs-search ... <vector> [k] [ef] [strategy] [--tag value] [--source value]",
+            )?;
+            let query = vector_values(&extra[0])?;
+            let flag = extra
+                .iter()
+                .position(|s| s.starts_with("--"))
+                .unwrap_or(extra.len());
+            let positional = &extra[..flag];
+            require_count(
+                positional,
+                1,
+                4,
+                "docs-search ... <vector> [k] [ef] [strategy]",
+            )?;
+            let k = optional(positional, 1, 10, "K")?;
+            let ef_search = optional(positional, 2, 128, "efSearch")?;
+            let strategy = match positional.get(3).map_or("auto", String::as_str) {
+                "auto" => SearchStrategy::Auto,
+                "exact" => SearchStrategy::Exact,
+                "hnsw" => SearchStrategy::Hnsw,
+                _ => {
+                    return Err(Error::InvalidInput(
+                        "invalid document search strategy".into(),
+                    ));
+                }
+            };
+            let flags = &extra[flag..];
+            if !flags.len().is_multiple_of(2) {
+                return Err(Error::InvalidInput(
+                    "document filter flags need values".into(),
+                ));
+            }
+            let mut source = None;
+            let mut tags = Vec::new();
+            for pair in flags.as_chunks::<2>().0 {
+                match pair[0].as_str() {
+                    "--source" if source.is_none() => source = Some(pair[1].as_str()),
+                    "--tag" => tags.push(pair[1].as_str()),
+                    _ => {
+                        return Err(Error::InvalidInput(
+                            "unknown/duplicate document filter flag".into(),
+                        ));
+                    }
+                }
+            }
+            let report = collection.search(
+                &query,
+                k,
+                SearchOptions {
+                    strategy,
+                    ef_search,
+                    ..SearchOptions::default()
+                },
+                DocumentFilter {
+                    source,
+                    tags: &tags,
+                },
+            )?;
+            let documents = report
+                .neighbors
+                .iter()
+                .map(|n| {
+                    format!(
+                        "{{\"distance\":{},\"document\":{}}}",
+                        n.distance,
+                        document_json(&n.document)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            println!(
+                "{{\"search\":{},\"matches\":[{}]}}",
+                search_json(&report.search),
+                documents
+            );
+        }
+        "docs-get" => {
+            require_count(extra, 1, 1, "docs-get ... <id>")?;
+            let id = parse(&extra[0], "ID")?;
+            let doc = collection
+                .get(id)?
+                .ok_or_else(|| Error::InvalidInput("document ID not found".into()))?;
+            println!("{}", document_json(&doc));
+        }
+        "docs-checkpoint" => {
+            require_count(extra, 0, 0, "docs-checkpoint ...")?;
+            collection.checkpoint()?;
+            println!("OK checkpoint");
+        }
+        "docs-compact" => {
+            require_count(extra, 0, 0, "docs-compact ...")?;
+            println!("OK removed={}", collection.compact()?);
+        }
+        _ => unreachable!(),
+    }
+    Ok(())
 }
 
 fn search_json(report: &vecnook::SearchReport) -> String {

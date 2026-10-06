@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import json
 import math
 from pathlib import Path
+import struct
 import subprocess
 import sys
 import tempfile
@@ -141,6 +142,27 @@ def coordinates(vector):
     return ",".join(format(value, ".9g") for value in vector)
 
 
+def encode_document(identifier, chunk, tags):
+    if not 0 <= identifier <= 2**64 - 1 or len(tags) > 32 or len(set(tags)) != len(tags):
+        raise ValueError("document ID/tag limits exceeded")
+    data = struct.pack("<QII", identifier, chunk.start_line, chunk.end_line)
+    def string(value, limit):
+        raw = value.encode("utf-8")
+        if len(raw) > limit:
+            raise ValueError("document field byte limit exceeded")
+        return struct.pack("<I", len(raw)) + raw
+    data += string(chunk.source, 1024) + string(chunk.text, 6000)
+    data += struct.pack("<I", len(tags))
+    for tag in tags:
+        if not tag or "\0" in tag:
+            raise ValueError("document tags must be nonempty and contain no NUL")
+        data += string(tag, 128)
+    payload = "VDOC1:" + data.hex()
+    if len(payload) > 16 * 1024:
+        raise ValueError("encoded document payload exceeds 16 KiB")
+    return payload
+
+
 def index_documents(args, client):
     db = Path(args.db)
     if db.exists():
@@ -156,45 +178,48 @@ def index_documents(args, client):
         raise ValueError("model returned inconsistent embedding dimensions")
     if client.digest(args.model) != digest:
         raise ValueError("model changed while indexing; retry with a fixed model")
-    cli(args.binary, "init", db, len(vectors[0]), "--metric", "cosine")
+    identity = json.dumps({"provider": "ollama", "model": args.model, "digest": digest,
+                           "prompt_version": 1}, separators=(",", ":"))
+    space = [db.parent, db.name, len(vectors[0]), identity, "cosine"]
+    cli(args.binary, "docs-init", *space)
     with tempfile.TemporaryDirectory(prefix="vecnook-import-") as temporary:
         batch = Path(temporary) / "chunks.tsv"
         for offset in range(0, len(chunks), 256):
             rows = []
             for index in range(offset, min(offset + 256, len(chunks))):
-                payload = json.dumps(vars(chunks[index]), ensure_ascii=False, separators=(",", ":"))
-                if len(payload.encode("utf-8")) > 16 * 1024:
-                    raise ValueError("chunk payload exceeds the Vecnook metadata limit")
+                payload = encode_document(index, chunks[index], getattr(args, "tags", []))
                 rows.append(f"put\t{index}\t{coordinates(vectors[index])}\t{payload}\n")
             batch.write_text("".join(rows), encoding="utf-8")
-            cli(args.binary, "batch", db, batch)
-    cli(args.binary, "checkpoint", db)
-    manifest = {"format": 1, "model": args.model, "model_digest": digest,
-                "dimensions": len(vectors[0]), "chunks": len(chunks)}
-    (db / "documents.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+            cli(args.binary, "docs-batch", *space, batch)
+    cli(args.binary, "docs-checkpoint", *space)
     print(f"Indexed {len(chunks)} chunks, {len(vectors[0])} dimensions, model {args.model}")
 
 
 def search_documents(args, client):
-    manifest_path = Path(args.db) / "documents.json"
-    if manifest_path.stat().st_size > 16 * 1024:
-        raise ValueError("invalid document manifest size")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if manifest.get("format") != 1:
-        raise ValueError("unsupported document manifest")
-    model = manifest["model"]
-    if client.digest(model) != manifest["model_digest"]:
+    db = Path(args.db)
+    manifest = json.loads(cli(args.binary, "docs-info", db.parent, db.name))
+    identity = json.loads(manifest["model"])
+    if identity.get("provider") != "ollama" or identity.get("prompt_version") != 1:
+        raise ValueError("unsupported document embedding identity")
+    model = identity["model"]
+    if client.digest(model) != identity["digest"]:
         raise ValueError("embedding model changed; rebuild this document database")
     if not args.query.strip() or len(args.query.encode("utf-8")) > CHUNK_BYTES:
         raise ValueError("query must contain 1..3000 UTF-8 bytes")
     query = client.embed(model, [query_input(model, args.query)])[0]
     if len(query) != manifest["dimensions"]:
         raise ValueError("query embedding dimensions differ from the indexed model")
-    result = json.loads(cli(args.binary, "search", args.db, coordinates(query), args.k,
-                            128, "auto", "--json"))
-    for neighbor in result["neighbors"]:
-        payload = json.loads(neighbor.pop("metadata"))
-        neighbor.update(payload)
+    filters = []
+    for tag in getattr(args, "tags", []):
+        filters.extend(["--tag", tag])
+    if getattr(args, "source", None) is not None:
+        filters.extend(["--source", args.source])
+    response = json.loads(cli(args.binary, "docs-search", db.parent, db.name,
+                              manifest["dimensions"], manifest["model"], "cosine",
+                              coordinates(query), args.k, 128, "auto", *filters))
+    result = response["search"]
+    result["neighbors"] = [dict(match["document"], distance=match["distance"])
+                           for match in response["matches"]]
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
@@ -213,11 +238,14 @@ def main():
     index.add_argument("documents")
     index.add_argument("--db", required=True)
     index.add_argument("--model", default=DEFAULT_MODEL)
+    index.add_argument("--tag", dest="tags", action="append", default=[])
     search = commands.add_parser("search")
     search.add_argument("query")
     search.add_argument("--db", required=True)
     search.add_argument("--k", type=int, choices=range(1, 101), default=3, metavar="1..100")
     search.add_argument("--json", action="store_true")
+    search.add_argument("--tag", dest="tags", action="append", default=[])
+    search.add_argument("--source", help="exact source-relative path")
     args = parser.parse_args()
     try:
         client = Ollama(args.ollama_url)

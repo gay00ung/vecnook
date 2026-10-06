@@ -181,6 +181,14 @@ impl Database {
     pub fn stats(&self) -> IndexStats {
         self.index.stats()
     }
+    /// Number of active IDs, without scanning graph edges.
+    pub fn len(&self) -> usize {
+        self.index.len()
+    }
+    /// Whether no records are active.
+    pub fn is_empty(&self) -> bool {
+        self.index.is_empty()
+    }
     /// Last committed WAL frame sequence; one sequence per nonempty batch.
     pub fn sequence(&self) -> u64 {
         self.sequence
@@ -192,6 +200,10 @@ impl Database {
     /// Find an active ID. Deleted and replaced versions are not returned.
     pub fn get(&self, id: u64) -> Option<&Record> {
         self.index.get(id)
+    }
+    /// Iterate active original records in ascending ID order while borrowing this handle.
+    pub fn iter(&self) -> impl Iterator<Item = &Record> {
+        self.index.iter()
     }
     /// Exhaustively search active vectors, ordered by distance then ID.
     /// K is capped to active count; K=0 returns no neighbors. Invalid queries return [`Error::InvalidInput`].

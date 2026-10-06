@@ -253,6 +253,10 @@ impl VectorIndex {
     pub fn get(&self, id: u64) -> Option<&Record> {
         self.active.get(&id).map(|&n| &self.nodes[n].record)
     }
+    /// Iterate active original records in ascending ID order, excluding old/deleted nodes.
+    pub fn iter(&self) -> impl Iterator<Item = &Record> {
+        self.active.values().map(|&node| &self.nodes[node].record)
+    }
 
     pub(crate) fn validate_put(&self, vector: &[f32], metadata: &str) -> Result<()> {
         self.config.validate_vector(vector)?;

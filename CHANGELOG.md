@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Typed document chunks, independently named collections, immutable embedding-space binding and indexed source/all-tag filters. Collection backups retain model identity.
+
 - Local Markdown search demo with Ollama, source line ranges, model digest checks and restart persistence.
 - CLI `search --json` with escaped UTF-8 metadata and full-precision distances.
 - Unfiltered Auto search skips predicate scanning; exact metadata equality uses a maintained inverted index. Added explicit-ID subset search and filter evaluation counts.

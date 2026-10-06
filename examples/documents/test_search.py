@@ -104,6 +104,25 @@ class IntegrationTests(unittest.TestCase):
             search.search_documents(self.args, self.client)
         self.assertEqual(len(self.server.inputs), before)
 
+    def test_indexed_tags_and_source_can_restrict_results_after_restart(self):
+        self.args.tags = ["rust", "notes"]
+        with contextlib.redirect_stdout(io.StringIO()):
+            search.index_documents(self.args, self.client)
+        self.args.tags = ["rust", "missing"]
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            search.search_documents(self.args, self.client)
+        self.assertEqual(json.loads(output.getvalue())["neighbors"], [])
+        self.args.tags = ["rust", "notes"]
+        self.args.source = '한글 "notes".md'
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            search.search_documents(self.args, self.client)
+        data = json.loads(output.getvalue())
+        self.assertEqual(data["eligible_count"], 1)
+        self.assertEqual(data["filter_evaluations"], 0)
+        self.assertEqual(data["neighbors"][0]["tags"], ["rust", "notes"])
+
     def test_long_unicode_lines_keep_valid_utf8_and_source_line_numbers(self):
         original = "한글🚀" * 1300
         for file in self.documents.iterdir():

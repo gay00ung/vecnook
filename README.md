@@ -119,6 +119,10 @@ Recovery trims only an incomplete final WAL frame at EOF. A complete checksum er
 
 Use a local filesystem and keep all database files together. Tests cover process kills, truncated WAL frames, and injected corruption. Hardware power loss, network filesystems, and secure erasure are not validated. Compaction temporarily holds a replacement index and can increase peak memory use.
 
+## Documents and collections
+
+Use `Collection` to keep original text, source paths, line ranges and tags with vectors. Each named collection binds its model identity, dimensions and metric; opening with a different embedding space fails. Source/tag filters use maintained posting lists. See the [collection guide](docs/collections.md) and runnable `collections` example. The underlying snapshot/WAL format is unchanged.
+
 ## Search real documents
 
 The [Markdown search demo](examples/documents/README.md) uses a local Ollama embedding model, stores source paths and line ranges, and prints original chunks for natural-language queries. Python uses only its standard library; the Rust database keeps zero external dependencies.
@@ -181,4 +185,4 @@ Tests cover all three metrics against independent distance oracles, filtered Top
 
 The release benchmark uses 10,000 SIFT vectors, 128 dimensions, and 100 queries. At efSearch=128, measured Recall@10 was 100% with 0.146166 ms HNSW p95 on an Apple M4 Pro. See [benchmark methodology and limits](docs/benchmarks.md) before comparing these figures. This is not evidence of superiority over other databases, real embedding workloads, or larger datasets.
 
-Vecnook currently has no SIMD kernels, quantization, mmap storage, typed payload index, embedding model, network API, replication, or multi-process readers. See [CONTRIBUTING.md](CONTRIBUTING.md) to report reproducible problems or contribute.
+Vecnook currently has no SIMD kernels, quantization, mmap storage, embedding model, network API, replication, or multi-process readers. See [CONTRIBUTING.md](CONTRIBUTING.md) to report reproducible problems or contribute.
