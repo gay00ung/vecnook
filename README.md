@@ -3,7 +3,7 @@
 A small embedded vector database for Rust applications, built with the standard library. Vecnook implements its own HNSW graph, exact search, and persistent storage. It has no external crates or vector search library dependencies.
 
 [![CI](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml/badge.svg)](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml)
-[MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
+[crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/0.3.0-beta.2/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
 
 **0.3 is an early beta.** It is intended for local applications with one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS, Linux and Windows. The index stays in RAM; this is not a distributed service.
 
@@ -12,23 +12,29 @@ A small embedded vector database for Rust applications, built with the standard 
 Requires Rust 1.89 or later. The package, library, and executable are all named `vecnook`.
 
 ```bash
-cargo install --git https://github.com/gay00ung/vecnook --tag v0.3.0-beta.1 --locked
+cargo install vecnook --version '=0.3.0-beta.2' --locked
 ```
 
-For a Rust application, add the Git dependency:
+For a Rust application, add the registry dependency:
 
 ```bash
-cargo add vecnook --git https://github.com/gay00ung/vecnook --tag v0.3.0-beta.1
+cargo add vecnook@=0.3.0-beta.2
 ```
 
 Or edit `Cargo.toml`:
 
 ```toml
 [dependencies]
-vecnook = { git = "https://github.com/gay00ung/vecnook", tag = "v0.3.0-beta.1" }
+vecnook = "=0.3.0-beta.2"
 ```
 
-Registry publication is pending authentication; `cargo add vecnook` from crates.io is not available yet. These Git instructions pin the source release; commit your application lockfile as well. See the [API guide](docs/api.md) and [release procedure](docs/releasing.md). To build a checkout:
+The explicit prerelease version pins this beta; commit your application lockfile as well. The [API reference](https://docs.rs/vecnook/0.3.0-beta.2/vecnook/) documents exported types and methods. See the [API guide](docs/api.md) and [release procedure](docs/releasing.md). Versioned source is also available through the Git tag:
+
+```bash
+cargo install --git https://github.com/gay00ung/vecnook --tag v0.3.0-beta.2 --locked
+```
+
+To build a checkout:
 
 ```bash
 cargo build --offline --release

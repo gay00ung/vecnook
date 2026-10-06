@@ -1,6 +1,6 @@
 # Release a checked source package
 
-Vecnook is currently distributed from GitHub. crates.io publication requires a verified registry account and publishing credentials. GitHub push access alone does not provide those credentials. Do not advertise a registry version until its public registry entry has been verified.
+Vecnook is distributed as versioned registry packages and GitHub source releases. crates.io publication requires a verified registry account and publishing credentials. GitHub push access alone does not provide those credentials. Prepare the version and installation documentation locally, then verify the public registry entry before pushing or announcing the release.
 
 ## Verify the version
 
@@ -24,7 +24,7 @@ Follow the [Cargo publishing instructions](https://doc.rust-lang.org/cargo/refer
 
 The `Publish` workflow uses `workflow_dispatch`. Its default mode verifies the package without uploading it. Select `publish=true` on the intended commit only after checking CI and credentials. The publishing step refuses an empty credential and uses Cargo's environment credential provider. It is never run for a pull request.
 
-After publication, verify the version at `https://crates.io/crates/vecnook` and the build at `https://docs.rs/vecnook`. Test a fresh `cargo add vecnook@VERSION` and a small runnable consumer. Only then change the installation instructions. Registry versions cannot be overwritten; see [Cargo's permanence rules](https://doc.rust-lang.org/cargo/reference/publishing.html).
+Before publication, the source package must contain installation instructions for its own version. Verify the public version at `https://crates.io/crates/vecnook` and the build at `https://docs.rs/vecnook`. Test a fresh `cargo add vecnook@=VERSION`, a small runnable consumer and a registry CLI installation. Only then push and announce the prepared release documentation. Registry versions cannot be overwritten; see [Cargo's permanence rules](https://doc.rust-lang.org/cargo/reference/publishing.html).
 
 ## GitHub source release
 

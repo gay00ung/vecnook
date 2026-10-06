@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0-beta.2 — 2026-10-06
+
+- First crates.io release, with exact-version registry installation instructions and links to hosted API documentation.
+- Retains the beta.1 Rust implementation and storage formats. The version and distribution documentation are updated; existing GitHub beta.1 source remains available.
+
 ## 0.3.0-beta.1 — 2026-10-06
 
 - Windows persistence with explicit writable directory synchronization, stable/MSRV CI on three systems and a bounded Rust application query worker with restart coverage.
