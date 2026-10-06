@@ -71,7 +71,7 @@ class IntegrationTests(unittest.TestCase):
         result = json.loads(first.getvalue())
         record = result["neighbors"][0]
         self.assertEqual(record["source"], '한글 notes 🚀.md')
-        self.assertEqual(record["text"], (self.documents / record["source"]).read_text(encoding="utf-8"))
+        self.assertEqual(record["text"], (self.documents / record["source"]).read_bytes().decode("utf-8"))
         self.assertEqual((record["start_line"], record["end_line"]), (1, 3))
         self.assertEqual(record["distance"], 0.0)
         self.assertTrue(result["complete"])
@@ -79,6 +79,18 @@ class IntegrationTests(unittest.TestCase):
         self.assertTrue(self.server.inputs[0]["input"][0].startswith("title:"))
         self.assertTrue(self.server.inputs[-1]["input"][0].startswith("task: search result | query:"))
         self.assertIn("graph_cache_loaded=true", search.cli(self.args.binary, "stats", self.args.db))
+
+    def test_original_mixed_line_endings_survive_cli_restart(self):
+        body = '# 제목\r\nquoted "line"\ntrailing\tline\r\n'
+        (self.documents / '한글 notes 🚀.md').write_bytes(body.encode("utf-8"))
+        with contextlib.redirect_stdout(io.StringIO()):
+            search.index_documents(self.args, self.client)
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            search.search_documents(self.args, self.client)
+        record = json.loads(output.getvalue())["neighbors"][0]
+        self.assertEqual(record["text"], body)
+        self.assertEqual((record["start_line"], record["end_line"]), (1, 3))
 
     def test_existing_database_is_never_overwritten(self):
         self.args.db.mkdir()
