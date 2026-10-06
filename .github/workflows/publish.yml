@@ -34,7 +34,9 @@ jobs:
           cargo +stable test --offline
           cargo +stable clippy --offline --all-targets -- -D warnings
           cargo +stable doc --offline --no-deps
+          python3 tools/check_package.py --prepare-decoys
           cargo +stable package --offline
+          python3 tools/check_package.py
       - name: Publish authenticated package
         if: inputs.publish
         env:

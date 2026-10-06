@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reproducible real-text embedding benchmark, independent cosine oracle and optional USearch comparison at a shared recall target. Added process interruption coverage for WAL writes, checkpoint and compaction.
+
 - Typed document chunks, independently named collections, immutable embedding-space binding and indexed source/all-tag filters. Collection backups retain model identity.
 
 - Local Markdown search demo with Ollama, source line ranges, model digest checks and restart persistence.

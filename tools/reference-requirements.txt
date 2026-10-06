@@ -1,0 +1,5 @@
+# Optional comparison/oracle environment, never a Vecnook dependency.
+usearch==2.26.4
+numpy==2.5.3
+numkong==7.8.5
+tqdm==4.70.1

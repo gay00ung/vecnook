@@ -14,6 +14,20 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  windows-directory-probe:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Observe standard-library directory synchronization
+        shell: pwsh
+        run: |
+          rustc tools/windows_probe.rs -o windows-probe.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./windows-probe.exe
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
   check:
     name: ${{ matrix.os }} / Rust ${{ matrix.rust }}
     strategy:
@@ -46,4 +60,7 @@ jobs:
           VECNOOK_BINARY: target/release/vecnook
         run: python3 -m unittest discover -s examples/documents -p 'test_*.py'
       - name: Verify package
-        run: cargo +${{ matrix.rust }} package --offline
+        run: |
+          python3 tools/check_package.py --prepare-decoys
+          cargo +${{ matrix.rust }} package --offline
+          python3 tools/check_package.py

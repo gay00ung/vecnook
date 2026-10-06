@@ -57,7 +57,7 @@ These medians describe this checkpointed dataset only. A database with a large p
 
 SIFT descriptors are not modern text embeddings, and 100 queries are a small evaluation set. A synthetic uniform fixture with 10,000 vectors, 128 dimensions, 100 independent queries, seed=42, and efSearch=128 produced only 88.60% Recall@10 in both 0.1 and 0.2. Its identical edge count and mean distance computations provide a regression check, not proof of general accuracy. Full result counts do not guarantee nearest-neighbor quality.
 
-The measurements establish neither superiority over Qdrant, pgvector, USearch, nor any other engine. There is no same-machine third-party benchmark here. Million-vector workloads, maximum configured resource use, peak RSS, storage latency, power-loss recovery, and sustained concurrent application workloads have not been characterized. Evaluate representative queries and filters against exact search before choosing parameters.
+The measurements establish neither superiority over Qdrant, pgvector, USearch, nor any other engine. A separate [0.3 text embedding evaluation](text-benchmarks.md) compares a ≥99% recall target with USearch on the same machine and reports peak process RSS. Million-vector workloads, maximum configured resource use, hardware power-loss recovery, and sustained concurrent application workloads have not been characterized. Evaluate representative queries and filters against exact search before choosing parameters.
 
 ## Eligibility preparation (0.3 beta)
 
