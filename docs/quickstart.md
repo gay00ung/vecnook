@@ -2,11 +2,11 @@
 
 [Watch the 36-second recorded demo](media/offline-demo.mp4). It uses actual macOS CLI output, paced for reading.
 
-Install the exact release candidate with Rust 1.89 or later, then run the prepared
+Install the exact release version with Rust 1.89 or later, then run the prepared
 queries. The demo needs no embedding server or network connection after installation.
 
 ```bash
-cargo install vecnook --version '=1.0.0-rc.1' --locked
+cargo install vecnook --version '=1.0.0' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```

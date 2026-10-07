@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.0.0
+
+- Preserve the public API, JSON v1 and storage/model contracts from `1.0.0-rc.1`; runtime source, tests and build settings remain identical after normalizing the package version.
+- Provide exact stable-version installation instructions. Publication requires the completed candidate-bound distribution, Windows 11 NTFS and 24-hour/100k-mutation evidence described in [candidate validation](docs/release-readiness.md).
+
 ## 1.0.0-rc.1 — 2026-10-07
 
 This candidate freezes the public API, CLI JSON v1 and storage/model compatibility contracts. Stable 1.0 publication additionally requires candidate-bound registry checks on all six OS/toolchain pairs, a completed 24-hour/100k acknowledged-mutation workload and Windows 11 NTFS installation/restore evidence. External adoption remains unmeasured.

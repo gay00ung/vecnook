@@ -1,6 +1,6 @@
 # Inspect, export and restore
 
-These commands are included in `1.0.0-rc.1`. After registry installation:
+These commands are included in `1.0.0`. After registry installation:
 
 ```bash
 vecnook demo data/offline-demo

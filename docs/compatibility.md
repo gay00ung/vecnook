@@ -1,7 +1,7 @@
 # Compatibility contracts
 
-The `1.0.0-rc.1` candidate freezes the public Rust API, CLI JSON v1 and storage/model
-contracts described here. A runtime change before stable publication requires a
+Stable `1.0.0` preserves the public Rust API, CLI JSON v1 and storage/model
+contracts validated in `1.0.0-rc.1`. A runtime change before stable publication requires a
 new candidate and validation. Stable 1.x releases preserve compatible public APIs;
 breaking API or required JSON changes require a new major version.
 
