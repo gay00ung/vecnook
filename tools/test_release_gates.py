@@ -3,6 +3,8 @@ import copy
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
+import check_publication
 from check_distribution import fingerprint
 from check_release import CHECKS, validate
 
@@ -76,6 +78,18 @@ class ReleaseGateTests(unittest.TestCase):
                 (root / name).write_bytes(content)
             (root / "Cargo.toml.orig").write_text(manifest.replace("VERSION", "1.0.0").replace('"1.89"', '"1.90"'))
             self.assertNotEqual(fingerprint(root), original)
+
+    def test_stable_workflow_requires_matching_rc_before_registry_access(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "Cargo.toml").write_text('[package]\nname="vecnook"\nversion="1.0.0"\n')
+            with patch.object(check_publication, "__file__", str(root / "tools/check_publication.py")), \
+                    patch.object(check_publication, "download") as download:
+                for candidate in ["", "1.0.0", "1.0.1-rc.1", "1.0.0-rc.x"]:
+                    with patch("sys.argv", ["check_publication.py", "--candidate-version", candidate]):
+                        with self.assertRaises(ValueError):
+                            check_publication.main()
+                download.assert_not_called()
 
 
 if __name__ == "__main__":

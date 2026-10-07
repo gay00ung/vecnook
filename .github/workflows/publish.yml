@@ -8,6 +8,11 @@ on:
         required: true
         type: boolean
         default: false
+      candidate_version:
+        description: Checked VERSION-rc.N whose registry distribution and soak receipts are release assets (stable only)
+        required: false
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -26,6 +31,10 @@ jobs:
           persist-credentials: false
       - name: Install Rust
         run: rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+      - name: Install Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.12'
       - name: Verify
         env:
           RUSTDOCFLAGS: -D warnings
@@ -37,6 +46,14 @@ jobs:
           python3 tools/check_package.py --prepare-decoys
           cargo +stable package --offline
           python3 tools/check_package.py
+          python3 tools/check_links.py
+          python3 -m unittest discover -s tools -p 'test_*.py'
+      - name: Require evidence for stable publication
+        if: inputs.publish
+        env:
+          VECNOOK_CANDIDATE: ${{ inputs.candidate_version }}
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/check_publication.py --candidate-version "$VECNOOK_CANDIDATE"
       - name: Publish authenticated package
         if: inputs.publish
         env:
