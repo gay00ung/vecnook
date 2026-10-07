@@ -107,6 +107,8 @@ jobs:
           python tools/check_package.py
       - name: Public documentation links
         run: python tools/check_links.py
+      - name: Release evidence contracts
+        run: python -m unittest discover -s tools -p 'test_*.py'
       - name: Fresh packaged consumers
         run: |
           package=$(find target/package -maxdepth 1 -name 'vecnook-*.crate' -print -quit)
