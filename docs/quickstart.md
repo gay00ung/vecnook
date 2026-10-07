@@ -1,16 +1,17 @@
-# First search in a development checkout
+# First search after installation
 
 [Watch the 36-second recorded demo](media/offline-demo.mp4). It uses actual macOS CLI output, paced for reading.
 
-The `codex/v1-readiness` branch contains the upcoming `0.4.0-beta.1` implementation. These commands require this checkout; the published `0.3.0-beta.2` CLI does not include `demo`.
+Install the exact release candidate with Rust 1.89 or later, then run the prepared
+queries. The demo needs no embedding server or network connection after installation.
 
 ```bash
-cargo build --release --offline
-./target/release/vecnook demo data/first-demo
-./target/release/vecnook demo data/first-demo 1
+cargo install vecnook --version '=1.0.0-rc.1' --locked
+vecnook demo data/first-demo
+vecnook demo data/first-demo 1
 ```
 
-On Windows use `target/release/vecnook.exe`. Select query 1, 2 or 3, or omit the number to run all three. The demo creates a named collection, stores the authored Markdown, checkpoints it and performs HNSW queries. A later invocation reopens it and prints the original source text. An existing directory containing unrelated files is refused.
+Select query 1, 2 or 3, or omit the number to run all three. The demo creates a named collection, stores the authored Markdown, checkpoints it and performs HNSW queries. A later invocation reopens it and prints the original source text. An existing directory containing unrelated files is refused. In a source checkout, `cargo build --release --offline` builds the same executable under `target/release` (`vecnook.exe` on Windows).
 
 The queries and document embeddings were generated ahead of time by the local EmbeddingGemma model. This is a prepared-query demonstration; it does not embed arbitrary text or require a network connection at runtime. The generator, model digest and authored document checksums are in `tools/generate_demo.py` and `docs/demo-provenance.json`. Model weights and user documents are not included.
 

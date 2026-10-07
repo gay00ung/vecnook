@@ -3,37 +3,39 @@
 A small embedded vector database for Rust applications, built with the standard library. Vecnook implements its own HNSW graph, exact search, and persistent storage. It has no external crates or vector search library dependencies.
 
 [![CI](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml/badge.svg)](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml)
-[crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/0.3.0-beta.2/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
+[crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/1.0.0-rc.1/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
 
-**0.3 is an early beta.** It is intended for local applications with one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS, Linux and Windows. The index stays in RAM; this is not a distributed service.
+**1.0.0-rc.1 is a release candidate.** It targets local applications with one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS, Linux and Windows. The index stays in RAM. Stable publication requires the additional [candidate validation](docs/release-readiness.md), including a full 24-hour workload and Windows 11 NTFS verification.
 
 ## Get started
 
-The development branch adds an [offline prepared-query demo](docs/quickstart.md). It requires a development checkout; registry instructions below install the published `0.3.0-beta.2`.
+Install the candidate and run an [offline prepared-query demo](docs/quickstart.md) with original Markdown, source references and checkpoint/restart behavior:
 
 Requires Rust 1.89 or later. The package, library, and executable are all named `vecnook`.
 
 ```bash
-cargo install vecnook --version '=0.3.0-beta.2' --locked
+cargo install vecnook --version '=1.0.0-rc.1' --locked
+vecnook demo data/first-demo
+vecnook demo data/first-demo 1
 ```
 
 For a Rust application, add the registry dependency:
 
 ```bash
-cargo add vecnook@=0.3.0-beta.2
+cargo add vecnook@=1.0.0-rc.1
 ```
 
 Or edit `Cargo.toml`:
 
 ```toml
 [dependencies]
-vecnook = "=0.3.0-beta.2"
+vecnook = "=1.0.0-rc.1"
 ```
 
-The explicit prerelease version pins this beta; commit your application lockfile as well. The [API reference](https://docs.rs/vecnook/0.3.0-beta.2/vecnook/) documents exported types and methods. See the [API guide](docs/api.md) and [release procedure](docs/releasing.md). Versioned source is also available through the Git tag:
+The explicit prerelease version pins this candidate; commit your application lockfile as well. The [API reference](https://docs.rs/vecnook/1.0.0-rc.1/vecnook/) documents exported types and methods. See the [API guide](docs/api.md), [compatibility contracts](docs/compatibility.md) and [release procedure](docs/releasing.md). Versioned source is also available through the Git tag:
 
 ```bash
-cargo install --git https://github.com/gay00ung/vecnook --tag v0.3.0-beta.2 --locked
+cargo install --git https://github.com/gay00ung/vecnook --tag v1.0.0-rc.1 --locked
 ```
 
 To build a checkout:
@@ -199,4 +201,4 @@ The [0.3 text benchmark](docs/text-benchmarks.md) uses 5,183 SciFact document em
 
 Vecnook currently has no SIMD kernels, quantization, mmap storage, embedding model, network API, replication, or multi-process readers. See [CONTRIBUTING.md](CONTRIBUTING.md) to report reproducible problems or contribute.
 
-Development guides: [API compatibility](docs/compatibility.md), [complete Markdown app](examples/documents/README.md#complete-application-flow), [incremental sync](examples/documents/README.md#incremental-updates), [diagnostics and restore](docs/operations.md), and [choosing an engine](docs/choosing.md). These additions require the 0.4 development checkout until published.
+Application guides: [API compatibility](docs/compatibility.md), [complete Markdown app](examples/documents/README.md#complete-application-flow), [incremental sync](examples/documents/README.md#incremental-updates), [diagnostics and restore](docs/operations.md), and [choosing an engine](docs/choosing.md).

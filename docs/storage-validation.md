@@ -1,6 +1,6 @@
 # Storage validation and remaining release gates
 
-The development branch adds explicit failure-point tests around standard-library
+The 1.0 candidate includes explicit failure-point tests around standard-library
 I/O. Test controls are thread-local and compiled only under `cfg(test)`; the
 published library has no environment-controlled fault injection.
 

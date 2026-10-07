@@ -1,6 +1,12 @@
 # Changelog
 
-## 0.4.0-beta.1 — unreleased
+## 1.0.0-rc.1 — 2026-10-07
+
+This candidate freezes the public API, CLI JSON v1 and storage/model compatibility contracts. Stable 1.0 publication additionally requires candidate-bound registry checks on all six OS/toolchain pairs, a completed 24-hour/100k acknowledged-mutation workload and Windows 11 NTFS installation/restore evidence. External adoption remains unmeasured.
+
+- Complete document-folder sync/query/backup/restore and Rust application write/query/checkpoint/restart workflows; verify fresh packaged consumers and exact registry CLI/library resolution.
+- Measure 13 operating-range cases with repeated independent processes, filtered/churn workloads and a pinned USearch Rust comparison. Expose p99 timings and constant-time capacity reports; avoid ID-subset preparation when collection filters cover every active document.
+- Add feature and usage feedback forms, an engine-selection guide and an evidence-based release procedure.
 
 - Validate storage failure points, seeded parser mutations and actual 0.1/0.2/0.3 upgrade files; add a mixed-workload runner with independently replayed ACK logs.
 
@@ -10,7 +16,11 @@
 
 - Prepare extensible constructors and typed error categories; publish the bounded app worker and CLI JSON v1 with decimal string IDs.
 
-- Offline prepared-query CLI demo with actual EmbeddingGemma outputs, original Markdown, checkpoint/reopen and generation provenance. Requires a development checkout until this version is published.
+- Offline prepared-query CLI demo with actual EmbeddingGemma outputs, original Markdown, checkpoint/reopen and generation provenance, available after registry installation.
+
+### Migrating from 0.3
+
+Use configuration/filter builders and wildcard branches for non-exhaustive public enums. CLI JSON IDs and sequences are decimal strings. Import the public `vecnook::app` worker rather than copying the example helper. Existing database and collection files retain their formats; see [compatibility](docs/compatibility.md).
 
 ## 0.3.0-beta.2 — 2026-10-06
 

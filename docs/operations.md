@@ -1,11 +1,10 @@
 # Inspect, export and restore
 
-These commands require the 0.4 development branch until it is published.
+These commands are included in `1.0.0-rc.1`. After registry installation:
 
 ```bash
-cargo build --release --offline
-target/release/vecnook demo data/offline-demo
-target/release/vecnook doctor data/offline-demo/demo
+vecnook demo data/offline-demo
+vecnook doctor data/offline-demo/demo
 ```
 
 `doctor` returns JSON v1 containing model, dimensions, metric, active/physical
@@ -39,11 +38,11 @@ are omitted; imports rebuild a fresh graph and begin at sequence zero.
 For a vector database:
 
 ```bash
-target/release/vecnook init data/raw 2
-target/release/vecnook put data/raw 18446744073709551615 1,0 'original text'
-target/release/vecnook export data/raw data/raw.export
-target/release/vecnook import data/raw.export data/restored
-target/release/vecnook search data/restored 1,0 1 128 exact --json
+vecnook init data/raw 2
+vecnook put data/raw 18446744073709551615 1,0 'original text'
+vecnook export data/raw data/raw.export
+vecnook import data/raw.export data/restored
+vecnook search data/restored 1,0 1 128 exact --json
 ```
 
 For document collections, use `docs-export` with the same identity arguments as

@@ -1,8 +1,9 @@
 # Compatibility contracts
 
-These contracts are being prepared on the 0.4 development branch. The published
-0.3 beta remains available. The 1.0 release candidate will freeze the public API
-and JSON v1 described here after the release checks pass.
+The `1.0.0-rc.1` candidate freezes the public Rust API, CLI JSON v1 and storage/model
+contracts described here. A runtime change before stable publication requires a
+new candidate and validation. Stable 1.x releases preserve compatible public APIs;
+breaking API or required JSON changes require a new major version.
 
 Construct configuration with `Config::new`, chain `with_*` methods, then call
 `validate` or create an index. Use `SearchOptions::default()` and
@@ -10,8 +11,9 @@ Construct configuration with `Config::new`, chain `with_*` methods, then call
 and writable. Configuration, identity, document and result structs are
 `non_exhaustive`: downstream code cannot construct them with struct literals.
 Returned results are produced by the library. Match public enums with a wildcard
-for future variants. The benchmark module is a development measurement API;
-its configuration and output are outside the proposed 1.x application contract.
+for future variants. Exported Rust types in `bench` follow the same SemVer policy.
+Benchmark timings, human-readable reports, internal graph structure and Auto
+selection heuristics may change; they are not stable numerical or output contracts.
 
 `Error::kind()` distinguishes invalid input, capacity, embedding mismatch,
 corruption, I/O, ownership, destination, write conflict and poisoned-handle failures. Capacity
@@ -53,8 +55,8 @@ CLI output is outside the machine-readable contract.
 
 ## Storage and Rust support
 
-MSRV is Rust 1.89. The proposed 1.x policy maintains that MSRV; a required
-increase will be announced before changing it. CI exercises 1.89 and current
+MSRV is Rust 1.89. The 1.x policy retains that MSRV; a required increase is a
+major-version change. CI exercises 1.89 and current
 stable on Linux, macOS and Windows. The embedded core uses only Rust std.
 
 Snapshot v2 reads v1 squared-L2 snapshots. WAL operation formats include atomic

@@ -53,4 +53,4 @@ There are no implicit retries for storage failures. Dropping the handle releases
 
 See [embedded.rs](../examples/embedded.rs) for batch, reopen and backup, and the [document search demo](../examples/documents/README.md) for a real embedding client. Keep source data, embeddings and backups outside public source control.
 
-See [compatibility](compatibility.md) for the 0.4 constructor/JSON migration, and [operations](operations.md) for read-only diagnostics, capacity and logical transfer.
+See [compatibility](compatibility.md) for the 0.3-to-1.0 constructor/JSON migration, and [operations](operations.md) for read-only diagnostics, capacity and logical transfer.

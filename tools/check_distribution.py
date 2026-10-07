@@ -89,36 +89,57 @@ def main():
     with tarfile.open(archive) as package:
         package.extractall(root / "source", filter="data")
     source = next((root / "source").iterdir())
+    base_env = dict(os.environ)
+    if args.registry:
+        # Resolve both CLI and library through Cargo's public registry in a fresh cache.
+        base_env["CARGO_HOME"] = str(root / "cargo-home")
     def command(*parts, cwd=source, env=None):
         print("Running: "+" ".join(map(str, parts)), flush=True)
-        subprocess.run(list(map(str, parts)), cwd=cwd, env=env, check=True)
+        subprocess.run(list(map(str, parts)), cwd=cwd, env=env or base_env, check=True)
     cargo = ["cargo", "+"+args.toolchain]
-    command(*cargo, "install", "--offline", "--locked", "--path", source,
-            "--root", root / "install", "--target-dir", root / "build")
+    installation = ["vecnook", "--version", "="+args.registry] if args.registry else ["--offline", "--path", source]
+    command(*cargo, "install", *installation, "--locked", "--root", root / "install", "--target-dir", root / "build")
+    if args.registry:
+        cached = list((root / "cargo-home/registry/cache").glob(f"*/vecnook-{args.registry}.crate"))
+        if len(cached) != 1 or digest(cached[0]) != digest(archive):
+            raise ValueError("Cargo's installed registry archive differs from the independently checked download")
     binary = root / "install/bin" / ("vecnook.exe" if os.name == "nt" else "vecnook")
     version = subprocess.run([binary, "--version"], check=True, capture_output=True, text=True).stdout.strip().split()[-1]
+    compiler = subprocess.run(["rustc", "+"+args.toolchain, "-Vv"], env=base_env, check=True,
+                              capture_output=True, text=True).stdout.strip()
     if args.registry and version != args.registry:
         raise ValueError("installed version differs from downloaded registry version")
-    env = dict(os.environ, VECNOOK_BINARY=str(binary))
+    env = dict(base_env, VECNOOK_BINARY=str(binary))
     command(sys.executable, source / "tools/check_contracts.py", env=env)
     command(sys.executable, "-m", "unittest", "discover", "-s", source / "examples/documents", "-p", "test_*.py", env=env)
     command(*cargo, "test", "--offline", "--locked", "--manifest-path", source / "Cargo.toml",
             "--target-dir", root / "tests", "--test", "upgrade", "--test", "operations")
     consumer = root / "consumer"
     (consumer / "src").mkdir(parents=True)
+    dependency = 'version='+json.dumps("="+args.registry) if args.registry else 'path='+json.dumps(str(source))
     (consumer / "Cargo.toml").write_text('[package]\nname="vecnook-package-consumer"\nversion="0.0.0"\nedition="2024"\n'
-        '[dependencies]\nvecnook={path='+json.dumps(str(source))+'}\n')
+        '[dependencies]\nvecnook={'+dependency+'}\n')
     shutil.copyfile(source / "examples/local_app.rs", consumer / "src/main.rs")
     for _ in range(2):
         command(*cargo, "run", "--offline", "--manifest-path", consumer / "Cargo.toml", "--", root / "application", cwd=consumer)
     for _ in range(2):
         command(binary, "demo", root / "offline-demo")
+    if args.registry:
+        lock = tomllib.loads((consumer / "Cargo.lock").read_text())
+        resolved = [p for p in lock["package"] if p["name"] == "vecnook"]
+        if (len(resolved) != 1 or resolved[0].get("version") != args.registry
+                or resolved[0].get("source") != "registry+https://github.com/rust-lang/crates.io-index"
+                or resolved[0].get("checksum") != digest(archive)):
+            raise ValueError("consumer did not resolve the exact checked crates.io library")
+    checks = ["installed_cli", "json_contracts", "document_flow", "legacy_upgrade",
+              "doctor_export_import_backup", "external_app_restart", "offline_demo_restart"]
+    if args.registry:
+        checks += ["registry_cli_install", "registry_library_resolution"]
     receipt = dict(schema_version=1, passed=True, version=version, registry=bool(args.registry),
                    crate_sha256=digest(archive), source_sha256=fingerprint(source),
-                   binary_sha256=digest(binary), toolchain=args.toolchain,
+                   binary_sha256=digest(binary), toolchain=args.toolchain, compiler=compiler,
                    platform=dict(system=platform.system(), release=platform.release(), machine=platform.machine()),
-                   windows=windows_info(root), checks=["installed_cli", "json_contracts", "document_flow",
-                        "legacy_upgrade", "doctor_export_import_backup", "external_app_restart", "offline_demo_restart"])
+                   windows=windows_info(root), checks=checks)
     (root / "receipt.json").write_text(json.dumps(receipt, indent=2)+"\n")
     print("Distribution checks passed: "+str(root / "receipt.json"))
 
