@@ -1,10 +1,11 @@
 //! Synthetic operating-range runner. Fixture vectors/text are not semantic-quality evidence.
 #![forbid(unsafe_code)]
+#[cfg(unix)]
+use std::process::Command;
 use std::{
     fs,
     io::{BufWriter, Write},
     path::PathBuf,
-    process::Command,
     time::Instant,
 };
 use vecnook::{
