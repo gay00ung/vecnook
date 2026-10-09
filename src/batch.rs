@@ -1,5 +1,6 @@
 /// Borrowed operations in an atomic, ordered database batch.
 #[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
 pub enum Mutation<'a> {
     /// Insert/replace an ID, observing earlier batch operations.
     Put {
@@ -19,6 +20,7 @@ pub enum Mutation<'a> {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 /// Counts from an ordered atomic mutation batch.
+#[non_exhaustive]
 pub struct BatchReport {
     /// One sequence per committed batch, irrespective of operation count.
     pub sequence: u64,

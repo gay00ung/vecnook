@@ -11,6 +11,65 @@ fn space() -> EmbeddingSpace {
 }
 
 #[test]
+fn full_coverage_filters_preserve_results_after_mutations_and_restart() {
+    let temp = TempDir::new();
+    let mut c = Collection::create(temp.path(), "covered", Config::new(1), "fixture").unwrap();
+    let documents = (0..600)
+        .map(|id| doc(id, "a.md", &["all", "common"]))
+        .collect::<Vec<_>>();
+    let vectors = (0..600).map(|id| [id as f32]).collect::<Vec<_>>();
+    let operations = documents
+        .iter()
+        .zip(&vectors)
+        .map(|(document, vector)| DocumentMutation::Put { document, vector })
+        .collect::<Vec<_>>();
+    c.write_batch(&operations).unwrap();
+    let filter = DocumentFilter::default()
+        .with_source("a.md")
+        .with_tags(&["all", "common"]);
+    let options = SearchOptions::default();
+    let before = c.search(&[599.0], 10, options, filter).unwrap();
+    assert_eq!(before.search.eligible_count, 600);
+    assert_eq!(before.search.filter_evaluations, 0);
+    assert_eq!(
+        before.neighbors,
+        c.search(&[599.0], 10, options, DocumentFilter::default())
+            .unwrap()
+            .neighbors
+    );
+    c.put(&doc(599, "other.md", &["common"]), &[599.0]).unwrap();
+    let changed = c.search(&[599.0], 10, options, filter).unwrap();
+    assert_eq!(changed.search.eligible_count, 599);
+    // Posting-list selection does not count predicate evaluations. Validate
+    // the actual excluded result rather than treating that counter as allocation evidence.
+    assert!(changed.neighbors.iter().all(|n| n.document.id != 599
+        && n.document.source == "a.md"
+        && n.document.tags.contains(&"all".to_owned())));
+    c.delete(599).unwrap();
+    for _ in 0..2 {
+        let report = c.search(&[599.0], 10, options, filter).unwrap();
+        assert_eq!(report.search.eligible_count, 599);
+        assert_eq!(report.search.filter_evaluations, 0);
+        assert!(report.neighbors.iter().all(|n| n.document.id != 599));
+        c.check_invariants().unwrap();
+        c.checkpoint().unwrap();
+        let space = c.space().clone();
+        drop(c);
+        c = Collection::open(temp.path(), "covered", &space).unwrap();
+    }
+    let missing = c
+        .search(
+            &[599.0],
+            10,
+            options,
+            DocumentFilter::default().with_tags(&["missing"]),
+        )
+        .unwrap();
+    assert_eq!(missing.search.eligible_count, 0);
+    assert!(missing.neighbors.is_empty());
+}
+
+#[test]
 fn large_tag_intersections_use_graph_paths_and_exact_results_match_an_independent_oracle() {
     let temp = TempDir::new();
     let mut collection =
@@ -31,19 +90,15 @@ fn large_tag_intersections_use_graph_paths_and_exact_results_match_an_independen
         .map(|(document, vector)| DocumentMutation::Put { document, vector })
         .collect();
     collection.write_batch(&operations).unwrap();
-    let filter = DocumentFilter {
-        source: None,
-        tags: &["all", "even"],
-    };
+    let filter = DocumentFilter::default()
+        .with_optional_source(None)
+        .with_tags(&["all", "even"]);
     let query = [123.4f32];
     let exact = collection
         .search(
             &query,
             10,
-            SearchOptions {
-                strategy: vecnook::SearchStrategy::Exact,
-                ..SearchOptions::default()
-            },
+            SearchOptions::default().with_strategy(vecnook::SearchStrategy::Exact),
             filter,
         )
         .unwrap();
@@ -77,10 +132,9 @@ fn large_tag_intersections_use_graph_paths_and_exact_results_match_an_independen
             &query,
             10,
             SearchOptions::default(),
-            DocumentFilter {
-                source: Some("a.md"),
-                tags: &["even"],
-            },
+            DocumentFilter::default()
+                .with_optional_source(Some("a.md"))
+                .with_tags(&["even"]),
         )
         .unwrap();
     assert_eq!(intersected.search.eligible_count, 100);
@@ -144,10 +198,9 @@ fn collection_model_namespace_tags_source_backup_and_reopen_are_enforced() {
             &[1.0, 0.0],
             10,
             SearchOptions::default(),
-            DocumentFilter {
-                source: Some("a.md"),
-                tags: &["rust", "storage", "rust"],
-            },
+            DocumentFilter::default()
+                .with_optional_source(Some("a.md"))
+                .with_tags(&["rust", "storage", "rust"]),
         )
         .unwrap();
     assert_eq!(report.neighbors[0].document, a);
@@ -159,10 +212,9 @@ fn collection_model_namespace_tags_source_backup_and_reopen_are_enforced() {
                 &[1.0, 0.0],
                 10,
                 SearchOptions::default(),
-                DocumentFilter {
-                    source: None,
-                    tags: &["missing"]
-                }
+                DocumentFilter::default()
+                    .with_optional_source(None)
+                    .with_tags(&["missing"])
             )
             .unwrap()
             .neighbors
@@ -199,7 +251,7 @@ fn collection_model_namespace_tags_source_backup_and_reopen_are_enforced() {
     ] {
         assert!(matches!(
             Collection::open(temp.path(), "first", &wrong),
-            Err(Error::InvalidInput(_))
+            Err(Error::EmbeddingMismatch)
         ));
     }
 }
@@ -250,10 +302,9 @@ fn ordered_batch_updates_postings_atomically_and_compaction_preserves_them() {
                     &[1.0, 0.0],
                     10,
                     SearchOptions::default(),
-                    DocumentFilter {
-                        source: None,
-                        tags: &["old"]
-                    }
+                    DocumentFilter::default()
+                        .with_optional_source(None)
+                        .with_tags(&["old"])
                 )
                 .unwrap()
                 .neighbors
@@ -265,10 +316,9 @@ fn ordered_batch_updates_postings_atomically_and_compaction_preserves_them() {
                     &[1.0, 0.0],
                     10,
                     SearchOptions::default(),
-                    DocumentFilter {
-                        source: Some("new.md"),
-                        tags: &["new"]
-                    }
+                    DocumentFilter::default()
+                        .with_optional_source(Some("new.md"))
+                        .with_tags(&["new"])
                 )
                 .unwrap()
                 .neighbors

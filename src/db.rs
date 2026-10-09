@@ -11,6 +11,7 @@ use crate::{
 
 #[derive(Clone, Debug, Default)]
 /// What opening recovered, trimmed or rebuilt.
+#[non_exhaustive]
 pub struct RecoveryInfo {
     /// Complete WAL frames applied after the snapshot sequence.
     pub replayed_frames: usize,
@@ -29,6 +30,7 @@ pub struct RecoveryInfo {
 #[derive(Clone, Copy, Debug)]
 /// Thresholds for explicit synchronous maintenance. Defaults: 64 MiB WAL,
 /// 128 tombstones and 20% tombstones; no background worker is started.
+#[non_exhaustive]
 pub struct MaintenancePolicy {
     /// Current WAL size, or byte threshold when used in a policy.
     pub wal_bytes: u64,
@@ -46,8 +48,27 @@ impl Default for MaintenancePolicy {
         }
     }
 }
+impl MaintenancePolicy {
+    /// Set the WAL byte threshold for checkpoint recommendation.
+    pub fn with_wal_bytes(mut self, bytes: u64) -> Self {
+        self.wal_bytes = bytes;
+        self
+    }
+    /// Set the minimum tombstone count for compaction recommendation.
+    pub fn with_min_tombstones(mut self, count: usize) -> Self {
+        self.min_tombstones = count;
+        self
+    }
+    /// Set the minimum deleted/physical ratio for compaction recommendation.
+    pub fn with_tombstone_ratio(mut self, ratio: f64) -> Self {
+        self.tombstone_ratio = ratio;
+        self
+    }
+}
+
 #[derive(Clone, Debug)]
 /// Observed storage pressure and maintenance recommendations.
+#[non_exhaustive]
 pub struct MaintenanceStatus {
     /// Current WAL size, or byte threshold when used in a policy.
     pub wal_bytes: u64,
@@ -60,6 +81,7 @@ pub struct MaintenanceStatus {
 }
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Action performed by an explicit maintenance call.
+#[non_exhaustive]
 pub enum MaintenanceAction {
     /// Thresholds did not require maintenance.
     None,
@@ -70,6 +92,7 @@ pub enum MaintenanceAction {
 }
 #[derive(Clone, Debug)]
 /// Result of synchronous maintenance.
+#[non_exhaustive]
 pub struct MaintenanceReport {
     /// Action actually performed.
     pub action: MaintenanceAction,
@@ -94,9 +117,13 @@ impl Database {
     /// Creates missing directories; refuses existing database files without overwriting them.
     /// Returns [`Error::Locked`], [`Error::AlreadyExists`], invalid configuration, platform or I/O errors.
     pub fn create(path: impl AsRef<Path>, config: Config) -> Result<Self> {
-        storage::ensure_platform()?;
         let index = VectorIndex::new(config)?;
-        let path = path.as_ref().to_path_buf();
+        Self::create_from_index(path.as_ref(), index)
+    }
+
+    pub(crate) fn create_from_index(path: &Path, index: VectorIndex) -> Result<Self> {
+        storage::ensure_platform()?;
+        let path = path.to_path_buf();
         fs::create_dir_all(&path)?;
         let lock = storage::acquire_lock(&path)?;
         if [
@@ -180,6 +207,38 @@ impl Database {
     /// Current record, graph and coordinate-payload counts.
     pub fn stats(&self) -> IndexStats {
         self.index.stats()
+    }
+    /// Bounded snapshot/node headroom; this does not measure process RSS.
+    pub fn capacity(&self) -> crate::CapacityStatus {
+        self.index.capacity()
+    }
+    /// Export active IDs, original f32 coordinates and opaque metadata to a new file.
+    /// Failure can leave an incomplete export; import verifies it before writing.
+    pub fn export(&self, destination: impl AsRef<Path>) -> Result<()> {
+        self.ensure_writable()?;
+        crate::transfer::write(destination.as_ref(), &self.index, None)
+    }
+    /// Import a validated logical vector export into a new directory.
+    /// Existing destinations are never reused. A storage failure can leave a directory
+    /// requiring inspection/removal before retrying; no partially populated snapshot is written.
+    pub fn import(source: impl AsRef<Path>, destination: impl AsRef<Path>) -> Result<Self> {
+        let data = crate::transfer::read(source.as_ref())?;
+        if data.space.is_some() {
+            return Err(Error::InvalidInput(
+                "use Collection::import for a document export".into(),
+            ));
+        }
+        let index = VectorIndex::from_records(data.config, data.records)?;
+        crate::transfer::claim_directory(destination.as_ref())?;
+        Self::create_from_index(destination.as_ref(), index)
+    }
+    pub(crate) fn export_collection(
+        &self,
+        destination: &Path,
+        space: &crate::EmbeddingSpace,
+    ) -> Result<()> {
+        self.ensure_writable()?;
+        crate::transfer::write(destination, &self.index, Some(space))
     }
     /// Number of active IDs, without scanning graph edges.
     pub fn len(&self) -> usize {
@@ -359,7 +418,8 @@ impl Database {
                 .create_new(true)
                 .write(true)
                 .open(destination.join(name))?;
-            std::io::copy(&mut source, &mut target)?;
+            crate::storage_io::copy(&mut source, &mut target)?;
+            crate::storage_io::check("backup.sync")?;
             target.sync_all()?;
         }
         OpenOptions::new()

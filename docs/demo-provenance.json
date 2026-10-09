@@ -1,0 +1,37 @@
+{
+  "model": "embeddinggemma:latest",
+  "model_digest": "85462619ee721b466c5927d109d4cb765861907d5417b9109caebc4e614679f1",
+  "dimensions": 768,
+  "documents": [
+    {
+      "source": "embeddings.md",
+      "sha256": "e2bc77694a4e7b621ecda33040a53d87a49e244d6864bf36dbae5ec7882ef496"
+    },
+    {
+      "source": "filtering.md",
+      "sha256": "62cbc5717f8a85c6fa396767703836773ff77e7342a1b8b74903e322f62baa54"
+    },
+    {
+      "source": "maintenance.md",
+      "sha256": "e87f22195b68f7cf3e157f978fd15639298edcb8a7bd456feb1b9ad52e75ca17"
+    },
+    {
+      "source": "recovery.md",
+      "sha256": "8cdc9200e1dc8d11117e3f59c7d4aa97a2a5ddb8f7be683c7ee41c1c7820bf59"
+    },
+    {
+      "source": "tuning.md",
+      "sha256": "1af7fca0af893234d16ff178fe2ee030893338b337a2b128b474d1ed18c9897f"
+    }
+  ],
+  "queries": [
+    "How do I recover my records after a process crash?",
+    "How can I tune efSearch to improve recall and latency?",
+    "How can I restrict search to documents with specific tags?"
+  ],
+  "prompts": "EmbeddingGemma title/text and search-result query, version 1",
+  "coordinates": "Original generated f32 values; round-trip decimal literals",
+  "embedding_values_sha256": "365f02804f4aa9dc5aae2458c2090d98cf658c64ca694d73f31637a80ecfac8b",
+  "output_terms": "https://ai.google.dev/gemma/terms",
+  "license": "MIT for authored documents and generator; model weights are not redistributed"
+}

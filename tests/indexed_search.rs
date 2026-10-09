@@ -3,10 +3,7 @@ use support::TempDir;
 use vecnook::{Config, Database, Metric, Mutation, SearchOptions, SearchStrategy, VectorIndex};
 
 fn exact() -> SearchOptions {
-    SearchOptions {
-        strategy: SearchStrategy::Exact,
-        ..SearchOptions::default()
-    }
+    SearchOptions::default().with_strategy(SearchStrategy::Exact)
 }
 
 #[test]
@@ -51,11 +48,9 @@ fn indexed_metadata_agrees_with_predicates_after_mutations_and_recovery() {
                 for options in [
                     exact(),
                     SearchOptions::default(),
-                    SearchOptions {
-                        strategy: SearchStrategy::Hnsw,
-                        exact_threshold: 0,
-                        ..SearchOptions::default()
-                    },
+                    SearchOptions::default()
+                        .with_strategy(SearchStrategy::Hnsw)
+                        .with_exact_threshold(0),
                 ] {
                     let indexed = db.search_metadata(&[1.0, 3.0], 10, options, label).unwrap();
                     let scanned = db

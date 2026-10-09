@@ -109,6 +109,7 @@ impl Record {
 
 #[derive(Clone, Debug, PartialEq)]
 /// Search result ordered by ascending distance and then ID.
+#[non_exhaustive]
 pub struct Neighbor {
     /// Application-assigned ID, unique among active records.
     pub id: u64,
@@ -120,6 +121,7 @@ pub struct Neighbor {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 /// Algorithm that actually produced the returned neighbors.
+#[non_exhaustive]
 pub enum SearchMode {
     /// Exhaustive distance ordering over the eligible set.
     Exact,
@@ -127,8 +129,19 @@ pub enum SearchMode {
     Hnsw,
 }
 
+impl SearchMode {
+    /// Stable execution label used by CLI consumers.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Exact => "exact",
+            Self::Hnsw => "hnsw",
+        }
+    }
+}
+
 #[derive(Debug)]
 /// Neighbors, actual execution mode and work counts for one query.
+#[non_exhaustive]
 pub struct SearchReport {
     /// Actual algorithm used for this report.
     pub mode: SearchMode,
@@ -150,6 +163,7 @@ pub struct SearchReport {
 
 #[derive(Clone, Debug)]
 /// Record and graph counts; coordinate bytes do not include total memory use.
+#[non_exhaustive]
 pub struct IndexStats {
     /// Number of currently visible IDs.
     pub active_records: usize,
@@ -241,6 +255,15 @@ impl VectorIndex {
     pub fn config(&self) -> &Config {
         &self.config
     }
+    /// Constant-time snapshot/node budget, including deleted versions.
+    pub fn capacity(&self) -> crate::CapacityStatus {
+        crate::CapacityStatus::from_counts(
+            self.len(),
+            self.nodes.len(),
+            self.nodes.len() * self.config.dimensions * 4,
+            self.encoded_bytes + SNAPSHOT_HEADER_BYTES + 4,
+        )
+    }
     /// Number of active IDs; old and deleted physical nodes are excluded.
     pub fn len(&self) -> usize {
         self.active.len()
@@ -266,15 +289,19 @@ impl VectorIndex {
             )));
         }
         if self.nodes.len() >= MAX_RECORDS {
-            return Err(Error::InvalidInput(format!(
-                "physical node limit {MAX_RECORDS} reached; compact first"
-            )));
+            return Err(Error::Capacity {
+                resource: "physical_nodes",
+                limit: MAX_RECORDS,
+                required: self.nodes.len() + 1,
+            });
         }
         let additional = 13 + 4 * vector.len() + metadata.len();
         if self.encoded_bytes + additional + SNAPSHOT_HEADER_BYTES + 4 > MAX_SNAPSHOT_BYTES {
-            return Err(Error::InvalidInput(
-                "snapshot size limit reached; compact first".into(),
-            ));
+            return Err(Error::Capacity {
+                resource: "snapshot_bytes",
+                limit: MAX_SNAPSHOT_BYTES,
+                required: self.encoded_bytes + additional + SNAPSHOT_HEADER_BYTES + 4,
+            });
         }
         Ok(())
     }
@@ -298,7 +325,11 @@ impl VectorIndex {
 
     pub(crate) fn validate_batch(&self, operations: &[Mutation<'_>]) -> Result<BatchReport> {
         if operations.len() > MAX_BATCH_OPERATIONS {
-            return Err(Error::InvalidInput("batch exceeds 1024 operations".into()));
+            return Err(Error::Capacity {
+                resource: "batch_operations",
+                limit: MAX_BATCH_OPERATIONS,
+                required: operations.len(),
+            });
         }
         let mut report = BatchReport::default();
         let mut states = BTreeMap::new();
@@ -340,15 +371,26 @@ impl VectorIndex {
                 }
             }
         }
-        if count > MAX_RECORDS || bytes + SNAPSHOT_HEADER_BYTES + 4 > MAX_SNAPSHOT_BYTES {
-            return Err(Error::InvalidInput(
-                "batch exceeds storage limits; compact first".into(),
-            ));
+        if count > MAX_RECORDS {
+            return Err(Error::Capacity {
+                resource: "physical_nodes",
+                limit: MAX_RECORDS,
+                required: count,
+            });
+        }
+        if bytes + SNAPSHOT_HEADER_BYTES + 4 > MAX_SNAPSHOT_BYTES {
+            return Err(Error::Capacity {
+                resource: "snapshot_bytes",
+                limit: MAX_SNAPSHOT_BYTES,
+                required: bytes + SNAPSHOT_HEADER_BYTES + 4,
+            });
         }
         if payload > MAX_BATCH_BYTES {
-            return Err(Error::InvalidInput(
-                "batch exceeds 8 MiB WAL payload".into(),
-            ));
+            return Err(Error::Capacity {
+                resource: "batch_bytes",
+                limit: MAX_BATCH_BYTES,
+                required: payload,
+            });
         }
         Ok(report)
     }

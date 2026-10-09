@@ -30,10 +30,9 @@ fn main() -> vecnook::Result<()> {
         &[0.9, 0.1, 0.0],
         5,
         SearchOptions::default(),
-        DocumentFilter {
-            source: None,
-            tags: &["storage"],
-        },
+        DocumentFilter::default()
+            .with_optional_source(None)
+            .with_tags(&["storage"]),
     )?;
     assert_eq!(result.neighbors[0].document, doc);
     println!(
