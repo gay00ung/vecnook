@@ -1,6 +1,6 @@
 # Changelog
 
-## 1.0.0
+## 1.0.0 — 2026-10-09
 
 - Preserve the public API, JSON v1 and storage/model contracts from `1.0.0-rc.1`; runtime source, tests and build settings remain identical after normalizing the package version.
 - Provide exact stable-version installation instructions. Publication requires the completed candidate-bound distribution, Windows 11 NTFS and 24-hour/100k-mutation evidence described in [candidate validation](docs/release-readiness.md).
