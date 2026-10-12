@@ -1,7 +1,7 @@
 use std::{
     collections::BTreeMap,
     fs::{self, File, OpenOptions},
-    io::{BufReader, Read, Seek, SeekFrom, Write},
+    io::{BufReader, Read, Seek, SeekFrom},
     path::Path,
 };
 
@@ -84,7 +84,7 @@ impl<'a> Reader<'a> {
     pub(crate) fn u64(&mut self) -> Result<u64> {
         Ok(u64::from_le_bytes(self.take(8)?.try_into().unwrap()))
     }
-    fn vector(&mut self, dimensions: usize) -> Result<Vec<f32>> {
+    pub(crate) fn vector(&mut self, dimensions: usize) -> Result<Vec<f32>> {
         let raw = self.take(dimensions * 4)?;
         let values: Vec<_> = raw
             .as_chunks::<4>()
@@ -127,6 +127,7 @@ pub(crate) fn ensure_platform() -> Result<()> {
 }
 
 pub(crate) fn sync_directory(path: &Path) -> Result<()> {
+    crate::storage_io::check("directory.sync")?;
     #[cfg(target_os = "windows")]
     let directory = {
         use std::os::windows::fs::OpenOptionsExt;
@@ -198,9 +199,11 @@ pub(crate) fn write_snapshot(path: &Path, index: &VectorIndex, sequence: u64) ->
         .create(true)
         .truncate(true)
         .open(&temporary)?;
-    file.write_all(&bytes)?;
+    crate::storage_io::write(&mut file, &bytes, "snapshot.write")?;
+    crate::storage_io::check("snapshot.sync")?;
     file.sync_all()?;
     drop(file);
+    crate::storage_io::check("snapshot.rename")?;
     fs::rename(&temporary, path.join("snapshot.bin"))?;
     sync_directory(path)?;
     graph::write(path, index, sequence, checksum)
@@ -397,14 +400,17 @@ fn decode_operation(opcode: u8, fields: &mut Reader<'_>, config: &Config) -> Res
 
 pub(crate) fn append_frame(file: &mut File, frame: &[u8]) -> Result<()> {
     file.seek(SeekFrom::End(0))?;
-    file.write_all(frame)?;
+    crate::storage_io::write(file, frame, "wal.write")?;
+    crate::storage_io::check("wal.sync")?;
     file.sync_all()?;
     Ok(())
 }
 
 pub(crate) fn clear_wal(file: &mut File) -> Result<()> {
+    crate::storage_io::check("wal.truncate")?;
     file.set_len(0)?;
     file.seek(SeekFrom::Start(0))?;
+    crate::storage_io::check("wal.clear_sync")?;
     file.sync_all()?;
     Ok(())
 }
@@ -421,6 +427,14 @@ pub(crate) struct Recovered {
 }
 
 pub(crate) fn recover(path: &Path, wal: &mut File) -> Result<Recovered> {
+    recover_inner(path, wal, true)
+}
+
+pub(crate) fn inspect(path: &Path, wal: &mut File) -> Result<Recovered> {
+    recover_inner(path, wal, false)
+}
+
+fn recover_inner(path: &Path, wal: &mut File, repair: bool) -> Result<Recovered> {
     let Snapshot {
         config,
         sequence: snapshot_sequence,
@@ -538,7 +552,7 @@ pub(crate) fn recover(path: &Path, wal: &mut File) -> Result<Recovered> {
     }
     drop(reader);
     let truncated_bytes = file_length - offset;
-    if truncated_bytes != 0 {
+    if truncated_bytes != 0 && repair {
         wal.set_len(offset)?;
         wal.sync_all()?;
     }

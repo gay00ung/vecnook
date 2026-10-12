@@ -1,0 +1,32 @@
+name: Feature request
+description: Describe a concrete application need and the behavior that would help.
+title: '[Feature]: '
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+  - type: textarea
+    id: application
+    attributes:
+      label: Application and blocked task
+      description: What are you building, and which operation is difficult today?
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Proposed behavior
+      description: Give a small before/after example, including input and expected result.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and constraints
+      description: Existing workaround, data size, supported systems, and dependency or memory requirements.
+  - type: textarea
+    id: success
+    attributes:
+      label: How would you verify success?
+      description: A runnable sample, relevant queries, or an observable application outcome.

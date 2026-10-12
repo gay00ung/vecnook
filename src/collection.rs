@@ -7,13 +7,14 @@ use crate::{
 use std::{
     collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    io::Read,
     path::{Path, PathBuf},
 };
 
 /// Identity of a compatible embedding space. Include model digest and prompt
 /// convention in `model`; equal dimensions alone do not imply compatibility.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct EmbeddingSpace {
     /// Nonempty application-defined model/version/prompt identity, at most 512 UTF-8 bytes.
     pub model: String,
@@ -31,7 +32,8 @@ impl EmbeddingSpace {
             metric,
         }
     }
-    fn validate(&self) -> Result<()> {
+    /// Validate identity bounds before creating or opening a collection.
+    pub fn validate(&self) -> Result<()> {
         if self.model.is_empty() || self.model.len() > 512 || self.model.contains('\0') {
             return Err(Error::InvalidInput(
                 "model identity must contain 1..512 UTF-8 bytes without NUL".into(),
@@ -45,6 +47,7 @@ impl EmbeddingSpace {
 
 /// Indexed source equality and all-tag intersection. An empty filter is unfiltered.
 #[derive(Clone, Copy, Debug, Default)]
+#[non_exhaustive]
 pub struct DocumentFilter<'a> {
     /// Exact original source identifier, if specified.
     pub source: Option<&'a str>,
@@ -52,8 +55,27 @@ pub struct DocumentFilter<'a> {
     pub tags: &'a [&'a str],
 }
 
+impl<'a> DocumentFilter<'a> {
+    /// Select exact source equality; tags, if any, must also match.
+    pub fn with_source(mut self, source: &'a str) -> Self {
+        self.source = Some(source);
+        self
+    }
+    /// Select an optional source, useful for application request adapters.
+    pub fn with_optional_source(mut self, source: Option<&'a str>) -> Self {
+        self.source = source;
+        self
+    }
+    /// Require every listed tag.
+    pub fn with_tags(mut self, tags: &'a [&'a str]) -> Self {
+        self.tags = tags;
+        self
+    }
+}
+
 /// Borrowed document mutations in an atomic ordered collection batch.
 #[derive(Clone, Copy, Debug)]
+#[non_exhaustive]
 pub enum DocumentMutation<'a> {
     /// Insert or replace a complete chunk and its vector.
     Put {
@@ -71,6 +93,7 @@ pub enum DocumentMutation<'a> {
 
 /// A matched original document and its distance.
 #[derive(Clone, Debug, PartialEq)]
+#[non_exhaustive]
 pub struct DocumentNeighbor {
     /// Decoded chunk with source and tags.
     pub document: Document,
@@ -79,6 +102,7 @@ pub struct DocumentNeighbor {
 }
 /// A typed result plus the underlying execution/work report.
 #[derive(Debug)]
+#[non_exhaustive]
 pub struct DocumentSearchReport {
     /// Original documents in distance/ID order.
     pub neighbors: Vec<DocumentNeighbor>,
@@ -126,6 +150,16 @@ impl Postings {
             result.add(doc.id, &doc.source, &doc.tags);
         }
         Ok(result)
+    }
+    fn covers_all(&self, filter: DocumentFilter<'_>, active: usize) -> bool {
+        filter.source.is_none_or(|source| {
+            self.sources
+                .get(source)
+                .is_some_and(|ids| ids.len() == active)
+        }) && filter
+            .tags
+            .iter()
+            .all(|tag| self.tags.get(*tag).is_some_and(|ids| ids.len() == active))
     }
     fn select(&self, filter: DocumentFilter<'_>) -> Vec<u64> {
         let mut sets = Vec::new();
@@ -181,16 +215,14 @@ impl Collection {
         })
     }
     /// Open and validate the expected model identity, dimensions and metric.
-    /// A mismatch returns InvalidInput before accepting any document/query.
+    /// A mismatch returns EmbeddingMismatch before accepting any document/query.
     /// Malformed payloads or inconsistent headers return Corrupt.
     pub fn open(root: impl AsRef<Path>, name: &str, expected: &EmbeddingSpace) -> Result<Self> {
         expected.validate()?;
         let path = collection_path(root.as_ref(), name)?;
         let space = read_header(&path, name)?;
         if &space != expected {
-            return Err(Error::InvalidInput(
-                "embedding space mismatch: model, dimensions and metric must match".into(),
-            ));
+            return Err(Error::EmbeddingMismatch);
         }
         let db = Database::open(&path)?;
         if db.config().dimensions != space.dimensions || db.config().metric != space.metric {
@@ -229,9 +261,63 @@ impl Collection {
     pub fn stats(&self) -> IndexStats {
         self.db.stats()
     }
+    /// Estimated snapshot and physical-node headroom, including old versions.
+    pub fn capacity(&self) -> crate::CapacityStatus {
+        self.db.capacity()
+    }
+    /// Export original documents/vectors and embedding identity to a new file.
+    pub fn export(&self, destination: impl AsRef<Path>) -> Result<()> {
+        self.db.export_collection(destination.as_ref(), &self.space)
+    }
+    /// Validate and import a logical document export into a new named directory.
+    /// All documents are validated before claiming the destination. A storage failure
+    /// can leave an incomplete directory; it is never overwritten on retry.
+    pub fn import(source: impl AsRef<Path>, root: impl AsRef<Path>, name: &str) -> Result<Self> {
+        let data = crate::transfer::read(source.as_ref())?;
+        let space = data.space.ok_or_else(|| {
+            Error::InvalidInput("document import requires a collection export".into())
+        })?;
+        let index = crate::VectorIndex::from_records(data.config, data.records)?;
+        let path = collection_path(root.as_ref(), name)?;
+        crate::transfer::claim_directory(&path)?;
+        let db = Database::create_from_index(&path, index)?;
+        write_header(&path, name, &space)?;
+        let postings = Postings::from_db(&db)?;
+        Ok(Self {
+            db,
+            name: name.to_owned(),
+            space,
+            postings,
+        })
+    }
     /// Recovery observations from the underlying database open.
     pub fn recovery_info(&self) -> &RecoveryInfo {
         self.db.recovery_info()
+    }
+    /// Current committed WAL sequence, for optimistic write preconditions.
+    pub fn sequence(&self) -> u64 {
+        self.db.sequence()
+    }
+    /// Decode active documents in ascending ID order while borrowing this collection.
+    pub fn documents(&self) -> impl Iterator<Item = Result<Document>> + '_ {
+        self.db
+            .iter()
+            .map(|record| Document::from_payload(&record.metadata))
+    }
+    /// Commit only if no write occurred after the caller observed `expected`.
+    /// A conflict never changes RAM, WAL or derived postings.
+    pub fn write_batch_if_sequence(
+        &mut self,
+        expected: u64,
+        operations: &[DocumentMutation<'_>],
+    ) -> Result<BatchReport> {
+        if self.sequence() != expected {
+            return Err(Error::Conflict {
+                expected,
+                actual: self.sequence(),
+            });
+        }
+        self.write_batch(operations)
     }
     /// Borrow original active coordinates without decoding the text payload.
     pub fn vector(&self, id: u64) -> Option<&[f32]> {
@@ -263,9 +349,11 @@ impl Collection {
     /// changed only after success and observe same-ID operation ordering.
     pub fn write_batch(&mut self, operations: &[DocumentMutation<'_>]) -> Result<BatchReport> {
         if operations.len() > 1024 {
-            return Err(Error::InvalidInput(
-                "document batch exceeds 1024 operations".into(),
-            ));
+            return Err(Error::Capacity {
+                resource: "batch_operations",
+                limit: 1024,
+                required: operations.len(),
+            });
         }
         let mut states: BTreeMap<u64, Option<(String, Vec<String>)>> = BTreeMap::new();
         let mut payloads = Vec::with_capacity(operations.len());
@@ -322,7 +410,7 @@ impl Collection {
         if filter.tags.len() > 32 {
             return Err(Error::InvalidInput("filter exceeds 32 tags".into()));
         }
-        let search = if filter.source.is_none() && filter.tags.is_empty() {
+        let search = if self.postings.covers_all(filter, self.db.len()) {
             self.db.search(query, k, options)?
         } else {
             self.db
@@ -408,11 +496,12 @@ fn write_header(path: &Path, name: &str, space: &EmbeddingSpace) -> Result<()> {
         .write(true)
         .create_new(true)
         .open(path.join("collection.bin"))?;
-    file.write_all(&bytes)?;
+    crate::storage_io::write(&mut file, &bytes, "collection.write")?;
+    crate::storage_io::check("collection.sync")?;
     file.sync_all()?;
     storage::sync_directory(path)
 }
-fn read_header(path: &Path, name: &str) -> Result<EmbeddingSpace> {
+pub(crate) fn read_header(path: &Path, name: &str) -> Result<EmbeddingSpace> {
     let mut bytes = Vec::new();
     File::open(path.join("collection.bin"))?
         .take(1025)

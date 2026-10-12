@@ -3,10 +3,7 @@ use vecnook::{
 };
 
 fn options(strategy: SearchStrategy) -> SearchOptions {
-    SearchOptions {
-        strategy,
-        ..SearchOptions::default()
-    }
+    SearchOptions::default().with_strategy(strategy)
 }
 
 #[test]
@@ -110,6 +107,7 @@ fn oracle(metric: Metric, a: &[f32], b: &[f32]) -> f64 {
         Metric::SquaredL2 => l2,
         Metric::InnerProduct => -dot,
         Metric::Cosine => (1.0 - dot / (aa.sqrt() * bb.sqrt())).clamp(0.0, 2.0),
+        _ => panic!("oracle only covers the three fixture metrics"),
     }
 }
 
@@ -213,10 +211,7 @@ fn hnsw_can_cross_filter_rejected_nodes() {
         .search_filtered(
             &[110.0, 1.0],
             5,
-            SearchOptions {
-                ef_search: 4096,
-                ..options(SearchStrategy::Hnsw)
-            },
+            options(SearchStrategy::Hnsw).with_ef_search(4096),
             |r| r.metadata == "allowed",
         )
         .unwrap();
@@ -278,11 +273,10 @@ fn filtered_hnsw_validates_ef_against_eligible_count_not_whole_database() {
     for id in 0..20 {
         index.put(id, &[id as f32], "").unwrap();
     }
-    let small = SearchOptions {
-        strategy: SearchStrategy::Hnsw,
-        ef_search: 2,
-        exact_threshold: 0,
-    };
+    let small = SearchOptions::default()
+        .with_strategy(SearchStrategy::Hnsw)
+        .with_ef_search(2)
+        .with_exact_threshold(0);
     assert!(
         index
             .search_filtered(&[0.0], 10, small, |r| r.id < 2)
@@ -296,14 +290,7 @@ fn filtered_hnsw_validates_ef_against_eligible_count_not_whole_database() {
     for ef in [0, 4097] {
         assert!(
             index
-                .search(
-                    &[0.0],
-                    1,
-                    SearchOptions {
-                        ef_search: ef,
-                        ..SearchOptions::default()
-                    }
-                )
+                .search(&[0.0], 1, SearchOptions::default().with_ef_search(ef))
                 .is_err()
         );
     }

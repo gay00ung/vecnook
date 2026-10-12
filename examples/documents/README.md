@@ -20,7 +20,34 @@ The demo uses the public [document collection API](../../docs/collections.md). A
 
 Requests go to `http://127.0.0.1:11434` by default. Only local HTTP origins are accepted, proxy settings are bypassed, and [Ollama's embedding API](https://docs.ollama.com/api/embed) uses `truncate: false` so oversized input fails visibly. Model files have their own license; Vecnook does not distribute them.
 
-Limits: 512 UTF-8 Markdown files, 1 MiB per file, 32 MiB total, 10,000 chunks, and 3,000 UTF-8 bytes per chunk/query. Chunking follows lines, splitting long lines without breaking Unicode characters. It does not parse Markdown syntax or resolve links. Source text is a stored snapshot and may differ from a file edited after indexing. Importing many chunks uses multiple atomic batches, so interruption can leave a partial database; choose a new directory to retry.
+Limits: 512 UTF-8 Markdown files, 1 MiB per file, 32 MiB total, 10,000 chunks, and 3,000 UTF-8 bytes per chunk/query. Chunking follows lines, splitting long lines without breaking Unicode characters. It does not parse Markdown syntax or resolve links. Source text is a stored snapshot. Each source is committed in one atomic batch, limited to 1,024 operations, 8 MiB encoded WAL payload and 16 MiB TSV input. A file exceeding a limit fails without replacing its old chunks. Several files commit separately: interruption can leave some files updated and others unchanged. Rerun `sync` to reconcile; completed sources are derived from stored documents, without an external completion manifest.
+
+## Incremental updates
+
+```bash
+python3 examples/documents/search.py --binary target/release/vecnook sync examples/documents/sample --db data/documents
+python3 examples/documents/search.py --binary target/release/vecnook sync examples/documents/sample --db data/documents --prune
+```
+
+Use the same user tags as the original import. Unchanged source/chunk content, line ranges and tags skip embedding calls. Changed sources replace old chunks atomically; matching chunk positions keep their IDs and new positions get unused IDs after the existing source IDs. Removed positions disappear. IDs are allocated against full stored IDs, with collision checks rather than a hash. A rename is a new source plus a missing old source; `--prune` removes the old one.
+
+Imports store a reserved `vecnook:sync:v1:` tag identifying the managed folder. User-facing search hides this management tag; the collection API retains it. The default namespace derives from the absolute folder path. For portable folders, supply the same `--namespace my-notes` on the initial `index` and every `sync`. This namespace must own one source folder in the collection. Collections made by the older importer have no management tag: build a new collection rather than silently adopting their records. Unmanaged source collisions are rejected, and pruning only removes sources in the selected namespace.
+
+Pruning requires an explicit flag and a complete successful directory scan. Access errors, symlink directories/files and model errors abort it. Changing a file to empty removes its old chunks as an explicit update. Deleting a file requires `--prune`. The stored model digest, prompts, dimensions and metric must match; a changed model requires a new collection. Omit `sync --model` to infer the existing model. A sequence precondition rejects intervening writes: rerun the sync after a conflict. Successful batches are durable before the command reports completion; a checkpoint is separate maintenance. Completion reports changed, unchanged, deleted and failed file counts.
+
+## Complete application flow
+
+With Ollama running and `embeddinggemma` installed, use a new application directory:
+
+```bash
+python3 examples/documents/workflow.py data/document-app --binary target/release/vecnook
+```
+
+This runnable command copies the five MIT samples into its own folder, imports them, checks unchanged sync, modifies a copy, searches by source and tag, reopens, makes an independent named backup, exports and restores to a new collection. Assertions compare original text and results after each restore. The input samples remain available for another run. Each CLI call closes its handle; a Rust app should retain one worker as shown in the [backend example](../../docs/app-integration.md).
+
+The same sources and tools are in the Cargo archive. Extract the `.crate`, run the command from its root and pass `--binary` pointing to the CLI installed from that version. The optional model is separately installed; it is not bundled with the source archive.
+
+When the model digest or its prompts change, create a new collection and run the initial import again. Query the new collection, verify originals and relevant results, then move the application's chosen collection path. Retain the old database and a checked backup until migration succeeds.
 
 Run the offline integration tests with a locally built binary:
 

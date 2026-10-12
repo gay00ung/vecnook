@@ -49,11 +49,13 @@
 #![forbid(unsafe_code)]
 #![deny(missing_docs)]
 
+pub mod app;
 mod batch;
 pub mod bench;
 mod collection;
 mod config;
 mod db;
+mod diagnostics;
 mod document;
 mod error;
 mod graph;
@@ -62,6 +64,10 @@ mod math;
 mod rng;
 mod search;
 mod storage;
+#[cfg(test)]
+mod storage_fault_tests;
+mod storage_io;
+mod transfer;
 
 pub use batch::{BatchReport, Mutation};
 pub use collection::{
@@ -73,7 +79,8 @@ pub use db::{
     Database, MaintenanceAction, MaintenancePolicy, MaintenanceReport, MaintenanceStatus,
     RecoveryInfo,
 };
+pub use diagnostics::{CapacityStatus, DiagnosticReport, doctor};
 pub use document::Document;
-pub use error::{Error, Result};
+pub use error::{Error, ErrorKind, Result};
 pub use index::{IndexStats, Neighbor, Record, SearchMode, SearchReport, VectorIndex};
 pub use search::{SearchOptions, SearchReason, SearchStrategy};

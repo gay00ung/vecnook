@@ -1,0 +1,48 @@
+name: Usage feedback
+description: Share first-run results, adoption, or a step that blocked your application.
+title: '[Feedback]: '
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit and environment
+      description: OS, architecture, Rust version, and the Vecnook version or commit.
+    validations:
+      required: true
+  - type: dropdown
+    id: stage
+    attributes:
+      label: Furthest completed step
+      options:
+        - Installation
+        - Prepared demo search
+        - Search over my data
+        - App integration
+        - Reuse after a restart
+        - Updates and verified backup/restore
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Result and blocked steps
+      description: Commands tried, observed result, time to first search, and what you needed help with.
+    validations:
+      required: true
+  - type: textarea
+    id: reuse
+    attributes:
+      label: Reuse in your application
+      description: Optional duration, update/restore experience, and a public app link if you want to share it.
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Shareable reproduction or suggested change
+      description: Small authored data and commands; remove credentials and private document content.
+  - type: checkboxes
+    id: permission
+    attributes:
+      label: Optional case-study permission
+      options:
+        - label: Maintainers may quote this public report in Vecnook documentation with attribution to my GitHub handle.
+          required: false

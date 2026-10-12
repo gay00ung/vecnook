@@ -4,6 +4,8 @@
 import argparse
 from dataclasses import dataclass
 import json
+import hashlib
+import os
 import math
 from pathlib import Path
 import struct
@@ -28,13 +30,34 @@ class Chunk:
     text: str
 
 
-def read_chunks(root):
+def read_chunks(root, *, allow_empty=False, include_sources=False):
     """Read bounded UTF-8 Markdown files without following symlinks outside root."""
     root = Path(root).resolve(strict=True)
     if not root.is_dir():
         raise ValueError("document root must be a directory")
     chunks, total, files = [], 0, 0
-    for path in sorted(root.rglob("*.md")):
+    sources = []
+    paths, stack, directories = [], [root], 0
+    while stack:
+        directory = stack.pop()
+        directories += 1
+        if directories > 4096:
+            raise ValueError("document limit: 4096 directories")
+        # scandir reports access errors; rglob can silently suppress them.
+        with os.scandir(directory) as entries:
+            for entry in entries:
+                path = Path(entry.path)
+                if entry.is_symlink():
+                    raise ValueError(f"symlink document/directory rejected: {path.name}")
+                if entry.is_dir(follow_symlinks=False):
+                    stack.append(path)
+                elif path.suffix == ".md":
+                    if not entry.is_file(follow_symlinks=False):
+                        raise ValueError("document is not a regular file")
+                    paths.append(path)
+                    if len(paths) > 512:
+                        raise ValueError("document limit: 512 files")
+    for path in sorted(paths):
         if path.is_symlink() or not path.resolve().is_relative_to(root):
             raise ValueError(f"symlink document rejected: {path.name}")
         files += 1
@@ -45,6 +68,7 @@ def read_chunks(root):
         if len(raw) > MAX_FILE or total > MAX_TOTAL:
             raise ValueError("document byte limit exceeded")
         source = path.relative_to(root).as_posix()
+        sources.append(source)
         text, start, end = "", 1, 1
         for line_number, line in enumerate(raw.decode("utf-8").splitlines(keepends=True), 1):
             # A long Unicode line is split by UTF-8 bytes without breaking characters.
@@ -73,9 +97,9 @@ def read_chunks(root):
             chunks.append(Chunk(source, start, end, text))
         if len(chunks) > MAX_CHUNKS:
             raise ValueError("document limit: 10,000 chunks")
-    if not chunks:
+    if not chunks and not allow_empty:
         raise ValueError("no nonempty Markdown documents found")
-    return chunks
+    return (chunks, sources) if include_sources else chunks
 
 
 class Ollama:
@@ -163,11 +187,31 @@ def encode_document(identifier, chunk, tags):
     return payload
 
 
+SYNC_PREFIX = "vecnook:sync:v1:"
+
+
+def managed_tag(args):
+    namespace = getattr(args, "namespace", None)
+    if namespace is None:
+        namespace = hashlib.sha256(str(Path(args.documents).resolve(strict=True)).encode()).hexdigest()
+    if not namespace or len(namespace) > 64 or any(c not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-" for c in namespace):
+        raise ValueError("sync namespace must contain 1..64 ASCII letters/digits/_/-")
+    return SYNC_PREFIX + namespace
+
+
+def import_tags(args):
+    tags = list(getattr(args, "tags", []))
+    if len(tags) > 31 or any(t.startswith(SYNC_PREFIX) for t in tags):
+        raise ValueError("at most 31 user tags; the sync tag prefix is reserved")
+    return tags + [managed_tag(args)]
+
+
 def index_documents(args, client):
     db = Path(args.db)
     if db.exists():
         raise ValueError("index requires a new database directory; choose a new --db path")
     chunks = read_chunks(args.documents)
+    tags = import_tags(args)
     digest = client.digest(args.model)
     # Embed everything before creating storage, so model errors leave no partial database.
     vectors = []
@@ -181,18 +225,146 @@ def index_documents(args, client):
     identity = json.dumps({"provider": "ollama", "model": args.model, "digest": digest,
                            "prompt_version": 1}, separators=(",", ":"))
     space = [db.parent, db.name, len(vectors[0]), identity, "cosine"]
-    cli(args.binary, "docs-init", *space)
+    # Prepare and bound complete source batches before creating the database.
     with tempfile.TemporaryDirectory(prefix="vecnook-import-") as temporary:
-        batch = Path(temporary) / "chunks.tsv"
-        for offset in range(0, len(chunks), 256):
-            rows = []
-            for index in range(offset, min(offset + 256, len(chunks))):
-                payload = encode_document(index, chunks[index], getattr(args, "tags", []))
-                rows.append(f"put\t{index}\t{coordinates(vectors[index])}\t{payload}\n")
-            batch.write_text("".join(rows), encoding="utf-8")
-            cli(args.binary, "docs-batch", *space, batch)
+        grouped = {}
+        for index, (chunk, vector) in enumerate(zip(chunks, vectors)):
+            payload = encode_document(index, chunk, tags)
+            rows, size = grouped.setdefault(chunk.source, ([], [13]))
+            rows.append(f"put\t{index}\t{coordinates(vector)}\t{payload}\n")
+            size[0] += 13 + len(vector) * 4 + len(payload.encode())
+        prepared = []
+        for number, (source, (rows, size)) in enumerate(grouped.items()):
+            body = "".join(rows)
+            if len(rows) > 1024 or size[0] > 8 * MAX_FILE or len(body.encode()) > 16 * MAX_FILE:
+                raise ValueError(f"source exceeds atomic batch limits: {source}")
+            batch = Path(temporary) / f"source-{number}.tsv"
+            batch.write_text(body, encoding="utf-8")
+            prepared.append(batch)
+        cli(args.binary, "docs-init", *space)
+        for sequence, batch in enumerate(prepared):
+            cli(args.binary, "docs-batch", *space, batch, "--if-sequence", sequence)
     cli(args.binary, "docs-checkpoint", *space)
     print(f"Indexed {len(chunks)} chunks, {len(vectors[0])} dimensions, model {args.model}")
+    return len(grouped)
+
+
+def collection_state(args, manifest):
+    space = [Path(args.db).parent, Path(args.db).name, manifest["dimensions"], manifest["model"], "cosine"]
+    documents, after, sequence = [], "-", None
+    while True:
+        page = json.loads(cli(args.binary, "docs-list", *space, after, 128))
+        current = int(page["sequence"])
+        if sequence is not None and sequence != current:
+            raise ValueError("collection changed while listing; rerun sync")
+        sequence = current
+        documents.extend(page["documents"])
+        if len(documents) > MAX_CHUNKS:
+            raise ValueError("sync supports at most 10,000 stored chunks")
+        if page["next_after"] is None:
+            return documents, sequence, space
+        after = page["next_after"]
+
+
+def sync_documents(args, client):
+    # A full, successful scan precedes any writes or pruning, including empty files.
+    chunks, sources = read_chunks(args.documents, allow_empty=True, include_sources=True)
+    tag, tags = managed_tag(args), import_tags(args)
+    db = Path(args.db)
+    if not db.exists():
+        if not getattr(args, "model", None):
+            args.model = DEFAULT_MODEL
+        if not chunks:
+            raise ValueError("no nonempty Markdown documents found")
+        changed = index_documents(args, client)
+        print(f"Sync complete: changed={changed} unchanged=0 deleted=0 failed=0")
+        return
+    manifest = json.loads(cli(args.binary, "docs-info", db.parent, db.name))
+    identity = json.loads(manifest["model"])
+    if identity.get("provider") != "ollama" or identity.get("prompt_version") != 1:
+        raise ValueError("unsupported document embedding identity")
+    model = identity["model"]
+    if (getattr(args, "model", None) or model) != model or client.digest(model) != identity["digest"]:
+        raise ValueError("embedding model changed; rebuild into a new collection")
+    documents, sequence, space = collection_state(args, manifest)
+    stored, unmanaged = {}, set()
+    used = {int(d["id"]) for d in documents}
+    for document in documents:
+        if tag in document["tags"]:
+            stored.setdefault(document["source"], []).append(document)
+        else:
+            unmanaged.add(document["source"])
+    incoming = {source: [] for source in sources}
+    for chunk in chunks:
+        incoming[chunk.source].append(chunk)
+    changed = unchanged = deleted = 0
+    next_id = 0
+    with tempfile.TemporaryDirectory(prefix="vecnook-sync-") as temporary:
+        batch = Path(temporary) / "source.tsv"
+        try:
+            for source, source_chunks in incoming.items():
+                if source in unmanaged:
+                    raise ValueError(f"source belongs to an unmanaged import: {source}; use a new collection")
+                old = sorted(stored.get(source, []), key=lambda d: int(d["id"]))
+                if old:
+                    next_id = max(next_id, int(old[-1]["id"]) + 1)
+                old_content = [(d["text"], d["start_line"], d["end_line"], d["tags"]) for d in old]
+                new_content = [(c.text, c.start_line, c.end_line, tags) for c in source_chunks]
+                if old_content == new_content:
+                    unchanged += 1
+                    continue
+                operation_count = max(len(old), len(source_chunks))
+                if operation_count > 1024:
+                    raise ValueError(f"source exceeds 1024-operation atomic batch: {source}")
+                # Nothing for this source is written until all embeddings validate.
+                vectors = []
+                for offset in range(0, len(source_chunks), 16):
+                    vectors.extend(client.embed(model, [document_input(model, c)
+                                   for c in source_chunks[offset:offset + 16]]))
+                if any(len(v) != manifest["dimensions"] for v in vectors):
+                    raise ValueError("embedding dimensions changed")
+                if client.digest(model) != identity["digest"]:
+                    raise ValueError("embedding model changed during sync")
+                rows, payload_bytes = [], 13
+                for i, (chunk, vector) in enumerate(zip(source_chunks, vectors)):
+                    if i < len(old):
+                        identifier = int(old[i]["id"])
+                    else:
+                        while next_id in used:
+                            next_id += 1
+                        if next_id > 2**64 - 1:
+                            raise ValueError("document ID space exhausted")
+                        identifier = next_id
+                        used.add(identifier)
+                    payload = encode_document(identifier, chunk, tags)
+                    payload_bytes += 13 + 4 * len(vector) + len(payload.encode())
+                    rows.append(f"put\t{identifier}\t{coordinates(vector)}\t{payload}\n")
+                for document in old[len(source_chunks):]:
+                    rows.append(f"delete\t{document['id']}\n")
+                    payload_bytes += 9
+                body = "".join(rows)
+                if payload_bytes > 8 * MAX_FILE or len(body.encode()) > 16 * MAX_FILE:
+                    raise ValueError(f"source exceeds atomic batch byte limits: {source}")
+                if rows:
+                    batch.write_text(body, encoding="utf-8")
+                    cli(args.binary, "docs-batch", *space, batch, "--if-sequence", sequence)
+                    sequence += 1
+                changed += 1
+            # Pruning is restricted to this namespace and requires explicit opt-in.
+            if getattr(args, "prune", False):
+                for source in sorted(set(stored) - set(incoming)):
+                    old = stored[source]
+                    if len(old) > 1024:
+                        raise ValueError(f"prune source exceeds 1024 operations: {source}")
+                    batch.write_text("".join(f"delete\t{d['id']}\n" for d in old), encoding="utf-8")
+                    cli(args.binary, "docs-batch", *space, batch, "--if-sequence", sequence)
+                    sequence += 1
+                    deleted += 1
+        except (ValueError, OSError, subprocess.SubprocessError):
+            print(f"Sync incomplete: changed={changed} unchanged={unchanged} deleted={deleted} failed=1; rerun sync", file=sys.stderr)
+            raise
+    # Source batches are already durable; checkpointing is optional maintenance.
+    print(f"Sync complete: changed={changed} unchanged={unchanged} deleted={deleted} failed=0")
 
 
 def search_documents(args, client):
@@ -218,7 +390,8 @@ def search_documents(args, client):
                               manifest["dimensions"], manifest["model"], "cosine",
                               coordinates(query), args.k, 128, "auto", *filters))
     result = response["search"]
-    result["neighbors"] = [dict(match["document"], distance=match["distance"])
+    result["neighbors"] = [dict(match["document"], distance=match["distance"],
+                                tags=[t for t in match["document"]["tags"] if not t.startswith(SYNC_PREFIX)])
                            for match in response["matches"]]
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -239,6 +412,14 @@ def main():
     index.add_argument("--db", required=True)
     index.add_argument("--model", default=DEFAULT_MODEL)
     index.add_argument("--tag", dest="tags", action="append", default=[])
+    index.add_argument("--namespace", help="stable sync namespace when moving the document folder")
+    sync = commands.add_parser("sync")
+    sync.add_argument("documents")
+    sync.add_argument("--db", required=True)
+    sync.add_argument("--model", help="must match the existing model; inferred when omitted")
+    sync.add_argument("--tag", dest="tags", action="append", default=[])
+    sync.add_argument("--namespace", help="same namespace as the initial import")
+    sync.add_argument("--prune", action="store_true", help="delete missing sources managed by this folder/namespace")
     search = commands.add_parser("search")
     search.add_argument("query")
     search.add_argument("--db", required=True)
@@ -249,7 +430,7 @@ def main():
     args = parser.parse_args()
     try:
         client = Ollama(args.ollama_url)
-        (index_documents if args.command == "index" else search_documents)(args, client)
+        {"index": index_documents, "sync": sync_documents, "search": search_documents}[args.command](args, client)
     except (ValueError, OSError, KeyError, TypeError, subprocess.SubprocessError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1

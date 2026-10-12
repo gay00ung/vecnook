@@ -19,6 +19,10 @@ For local uncommitted changes, package verification can use `--allow-dirty`. CI 
 
 ## Report a problem
 
+The [feedback guide](docs/feedback.md) links bug, feature and usage forms. Reports
+connect reproduction, a regression check, the fixing release and user confirmation.
+Storage loss, incorrect results, filter leakage and restore failures are addressed first.
+
 Open an issue with the version or commit, OS/architecture, Rust version, metric, dimensions, M, efConstruction, efSearch, and a minimal runnable example. Explain expected and actual behavior, including error messages and `SearchReport` or `RecoveryInfo` fields when relevant. For persistence issues, distinguish acknowledged writes from writes that returned errors.
 
 Use generated or shareable example data. A quality report should compare HNSW against exact results for independent queries and state filter selectivity. `complete=true` reports the result count, not search recall. Performance reports need release builds, hardware, corpus/query provenance, K, warmup policy, and timed scope. Include build/recovery costs when those are the problem.

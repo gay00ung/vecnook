@@ -25,9 +25,10 @@ def check(path):
             if len(relative.parts) > 1:
                 top = relative.parts[0]
                 allowed = ((top in {"src", "tests"} and relative.suffix == ".rs")
-                           or (top == "docs" and len(relative.parts) == 2 and relative.suffix == ".md")
+                           or (top == "docs" and len(relative.parts) == 2 and (relative.suffix == ".md" or name == "demo-provenance.json"))
                            or (top == "examples" and relative.suffix in {".rs", ".md", ".py"})
                            or (top == "tools" and len(relative.parts) == 2 and relative.suffix in {".rs", ".py", ".txt"}))
+                allowed |= relative.as_posix() == "docs/media/offline-demo.mp4" and member.size <= 1024 * 1024
             if not allowed:
                 raise ValueError(f"unexpected public-source path: {relative}")
     print(f"Verified {path.name}: {len(members)} public source files")

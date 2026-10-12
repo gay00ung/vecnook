@@ -7,7 +7,7 @@ use crate::{
 };
 use std::{
     fs::{self, File, OpenOptions},
-    io::{Read, Write},
+    io::Read,
     path::Path,
 };
 
@@ -49,9 +49,11 @@ pub(crate) fn write(
         .truncate(true)
         .write(true)
         .open(&temporary)?;
-    file.write_all(&bytes)?;
+    crate::storage_io::write(&mut file, &bytes, "cache.write")?;
+    crate::storage_io::check("cache.sync")?;
     file.sync_all()?;
     drop(file);
+    crate::storage_io::check("cache.rename")?;
     fs::rename(temporary, path.join("index.bin"))?;
     sync_directory(path)
 }

@@ -9,12 +9,16 @@ use std::{
 
 use vecnook::{
     Collection, Config, Database, Document, DocumentFilter, DocumentMutation, EmbeddingSpace,
-    Error, MaintenancePolicy, Metric, Mutation, Result, SearchMode, SearchOptions, SearchStrategy,
+    Error, MaintenancePolicy, Metric, Mutation, Result, SearchOptions, SearchStrategy,
     bench::{self, BenchConfig, Dataset},
 };
 
+mod demo;
+mod demo_data;
+
 const HELP: &str = "vecnook: dependency-free vector database\n\
 Usage:\n\
+  vecnook demo [demo-root] [prepared-query=1..3]\n\
   vecnook init <db-dir> <dimensions> [m] [ef-construction] [seed] [--metric l2|cosine|ip]\n\
   vecnook put <db-dir> <id> <comma-separated-vector> [metadata]\n\
   vecnook get <db-dir> <id>\n\
@@ -23,13 +27,20 @@ Usage:\n\
   vecnook batch <db-dir> <tsv-file>\n\
   vecnook backup <db-dir> <new-backup-dir>\n\
   vecnook maintain <db-dir>\n\
+  vecnook doctor <db-or-collection-dir>\n\
+  vecnook export <db-dir> <new-export-file>\n\
+  vecnook import <export-file> <new-db-dir>\n\
+  vecnook docs-import <export-file> <root> <new-name>\n\
+  vecnook docs-export <root> <name> <dimensions> <model-identity> <metric> <new-export-file>\n\
+  vecnook docs-backup <root> <name> <dimensions> <model-identity> <metric> <backup-root> <new-name>\n\
   vecnook stats <db-dir>\n\
   vecnook checkpoint <db-dir>\n\
   vecnook compact <db-dir>\n\
   vecnook shell <db-dir>\n\
   vecnook docs-init <root> <name> <dimensions> <model-identity> <l2|cosine|ip>\n\
   vecnook docs-info <root> <name>\n\
-  vecnook docs-batch <root> <name> <dimensions> <model-identity> <metric> <tsv-file>\n\
+  vecnook docs-list <root> <name> <dimensions> <model-identity> <metric> [after-id|-] [limit=128]\n\
+  vecnook docs-batch <root> <name> <dimensions> <model-identity> <metric> <tsv-file> [--if-sequence N]\n\
   vecnook docs-search <root> <name> <dimensions> <model-identity> <metric> <vector> [k] [ef] [auto|hnsw|exact] [--tag value] [--source value]\n\
   vecnook docs-checkpoint <root> <name> <dimensions> <model-identity> <metric>\n\
   vecnook bench [count=10000] [dimensions=512] [queries=200] [ef=128] [seed=42] [clustered|uniform] [l2|cosine|ip]\n\
@@ -62,6 +73,21 @@ fn run(args: &[String]) -> Result<()> {
     }
     if command.starts_with("docs-") {
         return document_command(args);
+    }
+    if command == "demo" {
+        return demo::run(&args[1..]);
+    }
+    if command == "doctor" {
+        require_count(args, 2, 2, "doctor <db-or-collection-directory>")?;
+        let report = vecnook::doctor(&args[1])?;
+        println!("{}", diagnostic_json(&report));
+        return Ok(());
+    }
+    if command == "import" {
+        require_count(args, 3, 3, "import <export-file> <new-db-directory>")?;
+        let db = Database::import(&args[1], &args[2])?;
+        println!("OK imported records={}", db.len());
+        return Ok(());
     }
     if command == "init" {
         require_count(
@@ -144,6 +170,7 @@ fn run(args: &[String]) -> Result<()> {
             | "shell"
             | "batch"
             | "backup"
+            | "export"
             | "maintain"
     ) {
         return Err(Error::InvalidInput(format!("unknown command {command}")));
@@ -233,11 +260,9 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
             } else {
                 None
             };
-            let options = SearchOptions {
-                strategy,
-                ef_search: ef,
-                ..SearchOptions::default()
-            };
+            let options = SearchOptions::default()
+                .with_strategy(strategy)
+                .with_ef_search(ef);
             let found = match filter {
                 Some(value) => db.search_metadata(&query, k, options, value)?,
                 None => db.search(&query, k, options)?,
@@ -247,10 +272,7 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
             }
             let mut output = format!(
                 "mode={} requested={k} returned={} complete={} distance_computations={} filter_evaluations={} metric={} eligible={} reason={:?}",
-                match found.mode {
-                    SearchMode::Exact => "exact",
-                    SearchMode::Hnsw => "hnsw",
-                },
+                found.mode.name(),
                 found.neighbors.len(),
                 found.complete,
                 found.distance_computations,
@@ -305,6 +327,11 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
             require_count(args, 0, 0, "checkpoint")?;
             db.checkpoint()?;
             Ok(format!("OK checkpoint sequence={}", db.sequence()))
+        }
+        "export" => {
+            require_count(args, 1, 1, "export <new-export-file>")?;
+            db.export(&args[0])?;
+            Ok(format!("OK exported records={}", db.len()))
         }
         "backup" => {
             require_count(args, 1, 1, "backup <new-directory>")?;
@@ -376,8 +403,8 @@ fn json_string(value: &str) -> String {
 
 fn document_json(document: &Document) -> String {
     format!(
-        "{{\"id\":{},\"source\":{},\"text\":{},\"start_line\":{},\"end_line\":{},\"tags\":[{}]}}",
-        document.id,
+        "{{\"schema_version\":1,\"id\":{},\"source\":{},\"text\":{},\"start_line\":{},\"end_line\":{},\"tags\":[{}]}}",
+        json_string(&document.id.to_string()),
         json_string(&document.source),
         json_string(&document.text),
         document.start_line,
@@ -393,11 +420,17 @@ fn document_json(document: &Document) -> String {
 
 fn document_command(args: &[String]) -> Result<()> {
     let command = args[0].as_str();
+    if command == "docs-import" {
+        require_count(args, 4, 4, "docs-import <export-file> <root> <new-name>")?;
+        let collection = Collection::import(&args[1], &args[2], &args[3])?;
+        println!("OK imported documents={}", collection.len());
+        return Ok(());
+    }
     if command == "docs-info" {
         require_count(args, 3, 3, "docs-info <root> <name>")?;
         let space = Collection::describe(&args[1], &args[2])?;
         println!(
-            "{{\"name\":{},\"model\":{},\"dimensions\":{},\"metric\":{}}}",
+            "{{\"schema_version\":1,\"name\":{},\"model\":{},\"dimensions\":{},\"metric\":{}}}",
             json_string(&args[2]),
             json_string(&space.model),
             space.dimensions,
@@ -430,15 +463,39 @@ fn document_command(args: &[String]) -> Result<()> {
     }
     if !matches!(
         command,
-        "docs-batch" | "docs-search" | "docs-checkpoint" | "docs-get" | "docs-compact"
+        "docs-batch"
+            | "docs-list"
+            | "docs-export"
+            | "docs-backup"
+            | "docs-search"
+            | "docs-checkpoint"
+            | "docs-get"
+            | "docs-compact"
     ) {
         return Err(Error::InvalidInput("unknown document command".into()));
     }
     let mut collection = Collection::open(&args[1], &args[2], &space)?;
     let extra = &args[6..];
     match command {
+        "docs-export" => {
+            require_count(extra, 1, 1, "docs-export ... <new-export-file>")?;
+            collection.export(&extra[0])?;
+            println!("OK exported documents={}", collection.len());
+        }
+        "docs-backup" => {
+            require_count(extra, 2, 2, "docs-backup ... <root> <new-name>")?;
+            collection.backup(&extra[0], &extra[1])?;
+            println!("OK backup documents={}", collection.len());
+        }
         "docs-batch" => {
-            require_count(extra, 1, 1, "docs-batch ... <tsv-file>")?;
+            require_count(extra, 1, 3, "docs-batch ... <tsv-file> [--if-sequence N]")?;
+            let expected = match extra {
+                [_] => None,
+                [_, flag, value] if flag == "--if-sequence" => {
+                    Some(parse::<u64>(value, "sequence")?)
+                }
+                _ => return Err(Error::InvalidInput("expected --if-sequence N".into())),
+            };
             let rows = read_batch(&extra[0])?;
             let documents = rows
                 .iter()
@@ -467,10 +524,47 @@ fn document_command(args: &[String]) -> Result<()> {
                     None => DocumentMutation::Delete { id: row.id },
                 })
                 .collect();
-            let report = collection.write_batch(&operations)?;
+            let report = match expected {
+                Some(sequence) => collection.write_batch_if_sequence(sequence, &operations)?,
+                None => collection.write_batch(&operations)?,
+            };
             println!(
                 "OK documents inserted={} updated={} deleted={} sequence={}",
                 report.inserted, report.updated, report.deleted, report.sequence
+            );
+        }
+        "docs-list" => {
+            require_count(extra, 0, 2, "docs-list ... [after-id|-] [limit=128]")?;
+            let after = extra
+                .first()
+                .filter(|s| s.as_str() != "-")
+                .map(|s| parse::<u64>(s, "after ID"))
+                .transpose()?;
+            let limit = optional(extra, 1, 128usize, "limit")?;
+            if !(1..=256).contains(&limit) {
+                return Err(Error::InvalidInput("list limit must be 1..256".into()));
+            }
+            let page = collection
+                .documents()
+                .filter(|d| d.as_ref().map_or(true, |d| after.is_none_or(|a| d.id > a)))
+                .take(limit + 1)
+                .collect::<Result<Vec<_>>>()?;
+            let next = if page.len() > limit {
+                json_string(&page[limit - 1].id.to_string())
+            } else {
+                "null".into()
+            };
+            let documents = page
+                .iter()
+                .take(limit)
+                .map(document_json)
+                .collect::<Vec<_>>()
+                .join(",");
+            println!(
+                "{{\"schema_version\":1,\"sequence\":\"{}\",\"next_after\":{},\"documents\":[{}]}}",
+                collection.sequence(),
+                next,
+                documents
             );
         }
         "docs-search" => {
@@ -526,15 +620,12 @@ fn document_command(args: &[String]) -> Result<()> {
             let report = collection.search(
                 &query,
                 k,
-                SearchOptions {
-                    strategy,
-                    ef_search,
-                    ..SearchOptions::default()
-                },
-                DocumentFilter {
-                    source,
-                    tags: &tags,
-                },
+                SearchOptions::default()
+                    .with_strategy(strategy)
+                    .with_ef_search(ef_search),
+                DocumentFilter::default()
+                    .with_optional_source(source)
+                    .with_tags(&tags),
             )?;
             let documents = report
                 .neighbors
@@ -549,7 +640,7 @@ fn document_command(args: &[String]) -> Result<()> {
                 .collect::<Vec<_>>()
                 .join(",");
             println!(
-                "{{\"search\":{},\"matches\":[{}]}}",
+                "{{\"schema_version\":1,\"search\":{},\"matches\":[{}]}}",
                 search_json(&report.search),
                 documents
             );
@@ -576,25 +667,53 @@ fn document_command(args: &[String]) -> Result<()> {
     Ok(())
 }
 
+fn diagnostic_json(r: &vecnook::DiagnosticReport) -> String {
+    let c = &r.capacity;
+    format!(
+        "{{\"schema_version\":1,\"sequence\":\"{}\",\"model\":{},\"dimensions\":{},\"metric\":{},\"active_records\":{},\"physical_nodes\":{},\"tombstones\":{},\"raw_vector_bytes\":{},\"estimated_snapshot_bytes\":{},\"remaining_snapshot_bytes\":{},\"remaining_nodes\":{},\"snapshot_file_bytes\":{},\"wal_bytes\":{},\"cache_bytes\":{},\"pending_tail_bytes\":{},\"replayed_frames\":{},\"graph_cache_valid\":{},\"graph_cache_note\":{},\"checkpoint_recommended\":{},\"compact_recommended\":{}}}",
+        r.sequence,
+        r.space
+            .as_ref()
+            .map_or("null".into(), |s| json_string(&s.model)),
+        r.config.dimensions,
+        json_string(r.config.metric.name()),
+        c.active_records,
+        c.physical_nodes,
+        c.tombstones,
+        c.vector_bytes,
+        c.snapshot_bytes,
+        c.remaining_snapshot_bytes,
+        c.remaining_nodes,
+        r.snapshot_file_bytes,
+        r.wal_bytes,
+        r.cache_bytes,
+        r.pending_tail_bytes,
+        r.replayed_frames,
+        r.graph_cache_valid,
+        r.graph_cache_note
+            .as_ref()
+            .map_or("null".into(), |s| json_string(s)),
+        r.checkpoint_recommended,
+        r.compact_recommended
+    )
+}
+
 fn search_json(report: &vecnook::SearchReport) -> String {
     let neighbors: Vec<_> = report
         .neighbors
         .iter()
         .map(|n| {
             format!(
-                "{{\"id\":{},\"distance\":{},\"metadata\":{}}}",
-                n.id,
+                "{{\"schema_version\":1,\"id\":{},\"distance\":{},\"metadata\":{}}}",
+                json_string(&n.id.to_string()),
                 n.distance,
                 json_string(&n.metadata)
             )
         })
         .collect();
     format!(
-        "{{\"mode\":\"{}\",\"metric\":\"{}\",\"complete\":{},\"eligible_count\":{},\"distance_computations\":{},\"filter_evaluations\":{},\"reason\":\"{:?}\",\"neighbors\":[{}]}}",
-        match report.mode {
-            SearchMode::Exact => "exact",
-            SearchMode::Hnsw => "hnsw",
-        },
+        "{{\"schema_version\":1,\"mode\":\"{}\",\"metric\":\"{}\",\"complete\":{},\"eligible_count\":{},\"distance_computations\":{},\"filter_evaluations\":{},\"reason\":\"{:?}\",\"neighbors\":[{}]}}",
+        report.mode.name(),
         report.metric.name(),
         report.complete,
         report.eligible_count,
@@ -789,17 +908,19 @@ fn print_benchmark(result: bench::BenchReport) {
         result.incomplete_queries
     );
     println!(
-        "exact sequential_qps={:.2} p50_ms={:.6} p95_ms={:.6} mean_distance_computations={:.2}",
+        "exact sequential_qps={:.2} p50_ms={:.6} p95_ms={:.6} p99_ms={:.6} mean_distance_computations={:.2}",
         result.exact.sequential_qps,
         result.exact.p50_ms,
         result.exact.p95_ms,
+        result.exact.p99_ms,
         result.mean_exact_computations
     );
     println!(
-        "hnsw sequential_qps={:.2} p50_ms={:.6} p95_ms={:.6} mean_distance_computations={:.2}",
+        "hnsw sequential_qps={:.2} p50_ms={:.6} p95_ms={:.6} p99_ms={:.6} mean_distance_computations={:.2}",
         result.hnsw.sequential_qps,
         result.hnsw.p50_ms,
         result.hnsw.p95_ms,
+        result.hnsw.p99_ms,
         result.mean_hnsw_computations
     );
     println!(

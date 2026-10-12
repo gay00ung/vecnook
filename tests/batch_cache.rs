@@ -418,11 +418,10 @@ fn backup_rejects_an_existing_empty_directory_without_mutating_source() {
 fn maintenance_compacts_churn_or_checkpoints_wal_and_leaves_invalid_policy_unchanged() {
     let temp = TempDir::new();
     let mut db = Database::create(temp.path(), Config::new(1)).unwrap();
-    let policy = MaintenancePolicy {
-        wal_bytes: 1,
-        min_tombstones: 2,
-        tombstone_ratio: 0.2,
-    };
+    let policy = MaintenancePolicy::default()
+        .with_wal_bytes(1)
+        .with_min_tombstones(2)
+        .with_tombstone_ratio(0.2);
     assert_eq!(db.maintain(policy).unwrap().action, MaintenanceAction::None);
     db.put(1, &[1.0], "a").unwrap();
     assert_eq!(
@@ -438,13 +437,7 @@ fn maintenance_compacts_churn_or_checkpoints_wal_and_leaves_invalid_policy_uncha
     assert_eq!(report.removed_nodes, 2);
     assert_eq!(db.stats().tombstones, 0);
     for ratio in [f64::NAN, -0.1, 1.1] {
-        assert!(
-            db.maintain(MaintenancePolicy {
-                tombstone_ratio: ratio,
-                ..policy
-            })
-            .is_err()
-        );
+        assert!(db.maintain(policy.with_tombstone_ratio(ratio)).is_err());
     }
     assert_eq!(db.sequence(), 3);
     drop(db);

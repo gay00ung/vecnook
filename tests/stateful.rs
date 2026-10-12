@@ -57,6 +57,7 @@ fn verify(db: &Database, model: &Model, metric: Metric, query: &[f32]) {
                     };
                     (1.0 - dot / (norm(query) * norm(vector))).clamp(0.0, 2.0)
                 }
+                _ => panic!("oracle only covers the three fixture metrics"),
             };
             (distance, id)
         })

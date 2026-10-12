@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Quickstart and application examples
+    url: https://github.com/gay00ung/vecnook/blob/main/docs/quickstart.md
+    about: Installation, prepared demo, Markdown app and Rust backend instructions.

@@ -101,6 +101,15 @@ class IntegrationTests(unittest.TestCase):
         self.assertEqual(sentinel.read_text(), "existing")
         self.assertEqual(self.server.inputs, [])
 
+    def test_complete_application_flow_restores_the_updated_source(self):
+        import workflow
+        with contextlib.redirect_stdout(io.StringIO()):
+            result = workflow.run(self.args.binary, self.root / "complete-app", self.client)
+        self.assertEqual(result["neighbors"][0]["source"], "recovery.md")
+        self.assertIn("This workflow update", result["neighbors"][0]["text"])
+        # Initial documents and changed source only; repeated queries embed one query each.
+        self.assertEqual([len(r["input"]) for r in self.server.inputs], [5, 1, 1, 1, 1, 1])
+
     def test_bad_embedding_response_creates_no_database(self):
         Handler.broken = True
         with self.assertRaisesRegex(ValueError, "count mismatch"):

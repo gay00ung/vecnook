@@ -38,7 +38,10 @@ assert_eq!(result.neighbors[0].id, 7);
 
 | Error | Application response |
 | --- | --- |
-| `InvalidInput` | Correct values or reclaim space with compaction; invalid writes do not modify storage |
+| `InvalidInput` | Correct input values; invalid writes do not modify storage |
+| `Capacity` | Inspect resource/limit/required; compact or reduce the batch |
+| `EmbeddingMismatch` | Use the stored model identity or rebuild a new collection |
+| `Conflict` | Reread current state before retrying a conditional batch |
 | `Locked` | Reuse the application's existing handle or wait for the owner to close |
 | `AlreadyExists` | Open the existing database, or choose a new create/backup destination |
 | `Io` during mutation/maintenance | Close and reopen, then inspect affected IDs; the operation may have persisted |
@@ -49,3 +52,5 @@ assert_eq!(result.neighbors[0].id, 7);
 There are no implicit retries for storage failures. Dropping the handle releases the lock but does not checkpoint. Acknowledged writes are already synchronized to the WAL. `checkpoint` limits future replay work, `compact` reclaims deleted nodes, and `maintain` applies explicit thresholds synchronously. `backup` creates a fresh independently openable copy and refuses an existing directory.
 
 See [embedded.rs](../examples/embedded.rs) for batch, reopen and backup, and the [document search demo](../examples/documents/README.md) for a real embedding client. Keep source data, embeddings and backups outside public source control.
+
+See [compatibility](compatibility.md) for the 0.3-to-1.0 constructor/JSON migration, and [operations](operations.md) for read-only diagnostics, capacity and logical transfer.
