@@ -99,7 +99,7 @@ documentation links pass. The source package contains no external Rust crates.
 
 ## 24-hour workload
 
-**Registry candidate QA is being prepared; completion checks remain pending.**
+**Registered candidate QA is running; duration completion remains pending.**
 The first local archive run started on 2026-10-14 at 10:05:20 KST. Its files are
 retained. Stable publication requires the exact registered candidate archive, so
 the registry candidate gets a fresh full-duration run after publication. An
@@ -108,6 +108,16 @@ release when all technical checks pass. No person or external-user signoff is
 required. Native Markdown commands explicitly emit UTF-8, including on systems
 with a different Python output encoding; that correction is included in the
 registered candidate and its new QA run.
+
+The registered `1.1.0-rc.1` workload started on 2026-10-14 at 10:34:50 KST;
+earliest duration completion is 2026-10-15 at 10:34:50 KST. All ten tag-CI jobs
+passed, including eight exact-registry installation/consumer receipts and both
+Windows 11 NTFS toolchains. Those receipts are attached to the candidate GitHub
+release. Actual registry CLI/library installation, the remote Git tag and docs.rs
+were also verified locally. Only the full-duration workload remains pending.
+
+- Registered crate SHA-256: `ec89f8b700fcf0ff89b83fa39b2c6233b612b20e5d2b2a1488f5e133412526e0`
+- Registered runtime/test source SHA-256: `235385df2b0c705c165d950d93b33385f7c855b251b081a59adeceb00cf23702`
 
 The extended workload mirrors acknowledged vector mutations into a typed
 collection, validates lexical matches and independently fused ranks, checks
@@ -128,3 +138,6 @@ Local evidence lives under `work/v1.1-candidate`, `work/v1.1-measurements`,
 source fingerprint; changing runtime/tests requires a new duration run. The
 registry candidate's archive and runtime hashes will be recorded with its actual
 receipt; the initial local hashes above do not approve a different package.
+Registered evidence is under `work/v1.1-registry`, `work/v1.1-release-evidence`
+and `work/v1.1-registry-soak-24h`. Release progress and the authorized automatic
+stable-publication steps are recorded in `work/v1.1-release-state.json`.
