@@ -38,11 +38,11 @@ class NativeCliTests(unittest.TestCase):
             if mode == "hybrid":
                 self.assertEqual((neighbor["vector_rank"], neighbor["keyword_rank"]), (1, 1))
         source = self.documents / '한글 notes 🚀.md'
-        source.write_text("ERR-42 updated text\n", encoding="utf-8")
+        source.write_bytes(b"ERR-42 updated text\r\nsecond line\n")
         self.assertIn("changed=1", self.native("docs-sync", *args))
         result = json.loads(self.native("docs-find", "ERR-42", "--db", self.args.db,
                                        "--mode", "keyword", "--json", "--ollama-url", origin))
-        self.assertEqual(result["neighbors"][0]["text"], source.read_text(encoding="utf-8"))
+        self.assertEqual(result["neighbors"][0]["text"], source.read_bytes().decode("utf-8"))
         source.unlink()
         self.assertIn("deleted=1", self.native("docs-sync", *args, "--prune"))
         result = json.loads(self.native("docs-find", "ERR-42", "--db", self.args.db,
