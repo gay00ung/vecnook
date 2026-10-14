@@ -9,7 +9,7 @@ pub enum SearchStrategy {
     /// Force graph traversal; underfill remains visible.
     Hnsw,
     #[default]
-    /// Use exact search for small sets or large K, and repair graph underfill.
+    /// Use exact search for small/selective sets or large K, and repair graph underfill.
     Auto,
 }
 
@@ -23,6 +23,8 @@ pub enum SearchReason {
     HnswRequested,
     /// Eligible count is no larger than the exact threshold.
     SmallEligibleSet,
+    /// A selective filter qualifies for a bounded exact scan.
+    SelectiveFilter,
     /// Requested eligible Top-K exceeds the candidate pool.
     LargeK,
     /// Auto selected graph traversal.
@@ -41,6 +43,9 @@ pub struct SearchOptions {
     pub ef_search: usize,
     /// Auto scans the eligible set exactly when it is no larger than this.
     pub exact_threshold: usize,
+    /// Auto scans a filtered set up to this size when it selects at most 1/8
+    /// of active records. Set to zero to disable this additional heuristic.
+    pub filtered_exact_threshold: usize,
 }
 
 impl Default for SearchOptions {
@@ -49,6 +54,7 @@ impl Default for SearchOptions {
             strategy: SearchStrategy::Auto,
             ef_search: 128,
             exact_threshold: 256,
+            filtered_exact_threshold: 4096,
         }
     }
 }
@@ -67,6 +73,11 @@ impl SearchOptions {
     /// Set the eligible-set size at which Auto chooses exact search.
     pub fn with_exact_threshold(mut self, threshold: usize) -> Self {
         self.exact_threshold = threshold;
+        self
+    }
+    /// Bound the selective-filter exact path; zero disables it.
+    pub fn with_filtered_exact_threshold(mut self, threshold: usize) -> Self {
+        self.filtered_exact_threshold = threshold;
         self
     }
     /// Validate options before submitting work; Exact ignores the candidate pool.

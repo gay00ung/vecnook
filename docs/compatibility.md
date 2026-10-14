@@ -36,6 +36,14 @@ its decision. Forced HNSW can underfill; exact search supplies a reference resul
 
 ## CLI JSON v1
 
+The 1.1 candidate adds keyword/hybrid methods and result types without changing
+existing vector methods or file formats. `SearchOptions` adds
+`filtered_exact_threshold` (default 4096) and its builder; set it to zero to
+disable selective-filter Auto. `SearchReason::SelectiveFilter` is an additional
+non-exhaustive variant. Keyword indexes rebuild from original payloads and require
+no storage migration. New CLI commands have separate JSON v1 shapes; existing
+`docs-search` and `search --json` retain their required fields and ordering.
+
 `search ... --json`, `docs-info`, `docs-get`, `docs-list` and `docs-search` include
 `"schema_version": 1`. IDs are canonical unsigned decimal **strings**, including
 `"18446744073709551615"`. JavaScript can convert them with `BigInt(id)`; never

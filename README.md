@@ -2,10 +2,12 @@
 
 A small embedded vector database for Rust applications, built with the standard library. Vecnook implements its own HNSW graph, exact search, and persistent storage. It has no external crates or vector search library dependencies.
 
-[![CI](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml/badge.svg)](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml)
-[crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/1.0.0/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
+The **1.1.0-rc.1 candidate** adds [BM25/RRF document search](docs/hybrid-search.md), selective-filter Auto search, and installed `docs-sync`/`docs-find` commands. See [candidate validation](docs/validation-1.1.md) for measurements and QA status. The instructions below select this exact prerelease; stable 1.1.0 publication requires completed candidate validation.
 
-**1.0.0 targets local Rust applications.** Use one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS, Linux and Windows. The index stays in RAM. The release procedure requires [candidate validation](docs/release-readiness.md), including a full 24-hour workload and Windows 11 NTFS verification. See [compatibility](docs/compatibility.md) before upgrading from 0.3.
+[![CI](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml/badge.svg)](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml)
+[crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/1.1.0-rc.1/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
+
+**This candidate targets local Rust applications.** Use one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS, Linux and Windows. The index stays in RAM. The release procedure requires [candidate validation](docs/release-readiness.md), including a full 24-hour workload and Windows 11 NTFS verification. See [compatibility](docs/compatibility.md) before upgrading from 0.3.
 
 ## Get started
 
@@ -14,7 +16,7 @@ Install the database and run an [offline prepared-query demo](docs/quickstart.md
 Requires Rust 1.89 or later. The package, library, and executable are all named `vecnook`.
 
 ```bash
-cargo install vecnook --version '=1.0.0' --locked
+cargo install vecnook --version '=1.1.0-rc.1' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -22,20 +24,20 @@ vecnook demo data/first-demo 1
 For a Rust application, add the registry dependency:
 
 ```bash
-cargo add vecnook@=1.0.0
+cargo add vecnook@=1.1.0-rc.1
 ```
 
 Or edit `Cargo.toml`:
 
 ```toml
 [dependencies]
-vecnook = "=1.0.0"
+vecnook = "=1.1.0-rc.1"
 ```
 
-The exact version pins this release; commit your application lockfile as well. The [API reference](https://docs.rs/vecnook/1.0.0/vecnook/) documents exported types and methods. See the [API guide](docs/api.md), [compatibility contracts](docs/compatibility.md) and [release procedure](docs/releasing.md). Versioned source is also available through the Git tag:
+The exact version pins this release; commit your application lockfile as well. The [API reference](https://docs.rs/vecnook/1.1.0-rc.1/vecnook/) documents exported types and methods. See the [API guide](docs/api.md), [compatibility contracts](docs/compatibility.md) and [release procedure](docs/releasing.md). Versioned source is also available through the Git tag:
 
 ```bash
-cargo install --git https://github.com/gay00ung/vecnook --tag v1.0.0 --locked
+cargo install --git https://github.com/gay00ung/vecnook --tag v1.1.0-rc.1 --locked
 ```
 
 To build a checkout:
@@ -99,7 +101,7 @@ Neighbors sort by distance, then ID. Use `search_exact` as an exact reference an
 | --- | --- |
 | `Exact` | Scan eligible vectors exactly |
 | `Hnsw` | Search the graph; report an insufficient candidate count without switching modes |
-| `Auto` (default) | Exact scan when eligible count ≤256 or K exceeds efSearch; otherwise HNSW, with exact repair if too few candidates are found |
+| `Auto` (default) | Exact scan when eligible count ≤256, K exceeds efSearch, or a filter selects ≤1/8 of active records and ≤4096 candidates; otherwise HNSW, with exact repair if too few candidates are found |
 
 `search_metadata` uses a maintained inverted index for exact equality of the complete metadata string. Only matching hash-bucket candidates are compared, with full string checks to reject collisions. `search_ids` accepts an application-selected subset and skips other records when preparing eligibility. Unfiltered `search` does not evaluate a predicate across all records. These indexes are rebuilt from authoritative records on open and updated through mutations and compaction.
 
@@ -140,6 +142,17 @@ Use `Collection` to keep original text, source paths, line ranges and tags with 
 ## Search real documents
 
 The [Markdown search demo](examples/documents/README.md) uses a local Ollama embedding model, stores source paths and line ranges, and prints original chunks for natural-language queries. Python uses only its standard library; the Rust database keeps zero external dependencies.
+
+With the 1.1 candidate CLI, Python 3.10+ and a local Ollama model:
+
+```bash
+ollama pull embeddinggemma
+vecnook docs-sync ./my-markdown --db data/notes
+vecnook docs-find "How do I recover my documents?" --db data/notes
+vecnook docs-find "write_batch_if_sequence" --db data/notes --json
+```
+
+`docs-sync` creates a collection on first use and skips unchanged files later. Add `--prune` to remove missing sources in the managed namespace. `docs-find` infers model settings and selects vector/hybrid ranking; `--mode` overrides it. `Collection` exposes `search_keywords` and `search_hybrid` with the same source/tag filters. See [ranking choices and limits](docs/hybrid-search.md) and the [first-use guide](docs/quickstart.md#search-your-own-folder-in-the-11-candidate).
 
 ## CLI
 

@@ -1,7 +1,9 @@
 use crate::{
-    BatchReport, Config, Database, Document, Error, IndexStats, Metric, Mutation, RecoveryInfo,
-    Result, SearchOptions, SearchReport,
+    BatchReport, Config, Database, Document, Error, HybridSearchOptions, HybridSearchReport,
+    IndexStats, KeywordNeighbor, KeywordSearchReport, Metric, Mutation, RecoveryInfo, Result,
+    SearchOptions, SearchReport,
     document::{PayloadReader, corrupt, put_string},
+    keyword::{self, KeywordIndex},
     storage,
 };
 use std::{
@@ -140,16 +142,18 @@ impl Postings {
             remove_key(&mut self.tags, tag, id);
         }
     }
-    fn from_db(db: &Database) -> Result<Self> {
+    fn from_db(db: &Database) -> Result<(Self, KeywordIndex)> {
         let mut result = Self::default();
+        let mut keywords = KeywordIndex::default();
         for record in db.iter() {
             let doc = Document::from_payload(&record.metadata)?;
             if doc.id != record.id {
                 return Err(corrupt("document ID differs from record ID"));
             }
             result.add(doc.id, &doc.source, &doc.tags);
+            keywords.add(doc.id, &doc.text);
         }
-        Ok(result)
+        Ok((result, keywords))
     }
     fn covers_all(&self, filter: DocumentFilter<'_>, active: usize) -> bool {
         filter.source.is_none_or(|source| {
@@ -187,13 +191,14 @@ impl Postings {
 }
 
 /// Named document database under an application-owned root. Each collection is
-/// independently locked and persisted; tag/source indexes are rebuilt on open.
+/// independently locked and persisted; tag/source/keyword indexes rebuild on open.
 /// The immutable checksummed `collection.bin` binds name and embedding space.
 pub struct Collection {
     db: Database,
     name: String,
     space: EmbeddingSpace,
     postings: Postings,
+    keywords: KeywordIndex,
 }
 impl Collection {
     /// Create a fresh named collection. Model identity is immutable; dimensions
@@ -212,6 +217,7 @@ impl Collection {
             name: name.to_owned(),
             space,
             postings: Postings::default(),
+            keywords: KeywordIndex::default(),
         })
     }
     /// Open and validate the expected model identity, dimensions and metric.
@@ -228,12 +234,13 @@ impl Collection {
         if db.config().dimensions != space.dimensions || db.config().metric != space.metric {
             return Err(corrupt("collection header/config mismatch"));
         }
-        let postings = Postings::from_db(&db)?;
+        let (postings, keywords) = Postings::from_db(&db)?;
         Ok(Self {
             db,
             name: name.to_owned(),
             space,
             postings,
+            keywords,
         })
     }
     /// Inspect immutable identity without opening/locking the vector database.
@@ -282,12 +289,13 @@ impl Collection {
         crate::transfer::claim_directory(&path)?;
         let db = Database::create_from_index(&path, index)?;
         write_header(&path, name, &space)?;
-        let postings = Postings::from_db(&db)?;
+        let (postings, keywords) = Postings::from_db(&db)?;
         Ok(Self {
             db,
             name: name.to_owned(),
             space,
             postings,
+            keywords,
         })
     }
     /// Recovery observations from the underlying database open.
@@ -330,7 +338,7 @@ impl Collection {
             .map(|r| Document::from_payload(&r.metadata))
             .transpose()
     }
-    /// Durably insert/replace a document and update derived source/tag postings.
+    /// Durably insert/replace a document and update derived filter/keyword postings.
     /// Returns true for a newly active ID. Input errors change nothing; I/O failures
     /// have the same ambiguous persistence/poisoning contract as Database.
     pub fn put(&mut self, document: &Document, vector: &[f32]) -> Result<bool> {
@@ -355,7 +363,7 @@ impl Collection {
                 required: operations.len(),
             });
         }
-        let mut states: BTreeMap<u64, Option<(String, Vec<String>)>> = BTreeMap::new();
+        let mut states: BTreeMap<u64, Option<Document>> = BTreeMap::new();
         let mut payloads = Vec::with_capacity(operations.len());
         for operation in operations {
             let id = match operation {
@@ -363,7 +371,7 @@ impl Collection {
                 DocumentMutation::Delete { id } => *id,
             };
             if let std::collections::btree_map::Entry::Vacant(entry) = states.entry(id) {
-                entry.insert(self.get(id)?.map(|doc| (doc.source, doc.tags)));
+                entry.insert(self.get(id)?);
             }
             payloads.push(match operation {
                 DocumentMutation::Put { document, .. } => document.to_payload()?,
@@ -388,12 +396,14 @@ impl Collection {
                 DocumentMutation::Put { document, .. } => document.id,
                 DocumentMutation::Delete { id } => *id,
             };
-            if let Some((source, tags)) = states.get_mut(&id).unwrap().take() {
-                self.postings.remove(id, &source, &tags);
+            if let Some(document) = states.get_mut(&id).unwrap().take() {
+                self.postings.remove(id, &document.source, &document.tags);
+                self.keywords.remove(id, &document.text);
             }
             if let DocumentMutation::Put { document, .. } = operation {
                 self.postings.add(id, &document.source, &document.tags);
-                states.insert(id, Some((document.source.clone(), document.tags.clone())));
+                self.keywords.add(id, &document.text);
+                states.insert(id, Some((*document).clone()));
             }
         }
         Ok(report)
@@ -428,11 +438,80 @@ impl Collection {
             .collect::<Result<_>>()?;
         Ok(DocumentSearchReport { neighbors, search })
     }
+    /// Search chunk text with exact BM25 ranking. Tokens are Unicode alphanumeric
+    /// runs retaining underscores/hyphens and lowercased; no stemming or Korean
+    /// morphology is performed. Repeated query tokens count once. Empty or unknown
+    /// tokens return no matches. Filters apply before ranking and use corpus-wide IDF.
+    pub fn search_keywords(
+        &self,
+        text: &str,
+        k: usize,
+        filter: DocumentFilter<'_>,
+    ) -> Result<KeywordSearchReport> {
+        keyword::validate_query(text)?;
+        if filter.tags.len() > 32 {
+            return Err(Error::InvalidInput("filter exceeds 32 tags".into()));
+        }
+        let allowed = (!self.postings.covers_all(filter, self.db.len())).then(|| {
+            self.postings
+                .select(filter)
+                .into_iter()
+                .collect::<BTreeSet<_>>()
+        });
+        let eligible_count = allowed.as_ref().map_or(self.len(), BTreeSet::len);
+        let (ranked, matching_count, postings_visited) =
+            self.keywords.rank(text, k, allowed.as_ref());
+        let neighbors = ranked
+            .into_iter()
+            .map(|(id, score)| {
+                Ok(KeywordNeighbor {
+                    document: self
+                        .get(id)?
+                        .ok_or_else(|| corrupt("keyword posting refers to missing document"))?,
+                    score,
+                })
+            })
+            .collect::<Result<_>>()?;
+        Ok(KeywordSearchReport {
+            neighbors,
+            eligible_count,
+            matching_count,
+            postings_visited,
+        })
+    }
+    /// Fuse vector and BM25 candidate ranks with equal-weight RRF. Both branches
+    /// use the same source/tag eligibility; scores sort descending then ID. Missing
+    /// lexical tokens reduce this to vector ranking. Completeness is candidate count,
+    /// not semantic relevance or ANN recall. Existing vectors/storage are unchanged.
+    pub fn search_hybrid(
+        &self,
+        query: &[f32],
+        text: &str,
+        k: usize,
+        options: HybridSearchOptions,
+        filter: DocumentFilter<'_>,
+    ) -> Result<HybridSearchReport> {
+        options.validate(k)?;
+        keyword::validate_query(text)?;
+        let depth = if k == 0 { 0 } else { options.candidates };
+        let vector = self.search(query, depth, options.vector, filter)?;
+        let keyword = self.search_keywords(text, depth, filter)?;
+        let (neighbors, candidate_count) = keyword::fuse(&vector, &keyword, options.rrf_k, k);
+        let complete = neighbors.len() == k.min(vector.search.eligible_count);
+        Ok(HybridSearchReport {
+            neighbors,
+            vector: vector.search,
+            keyword,
+            candidate_count,
+            complete,
+            rrf_k: options.rrf_k,
+        })
+    }
     /// Persist a checkpoint and bound WAL replay work.
     pub fn checkpoint(&mut self) -> Result<()> {
         self.db.checkpoint()
     }
-    /// Reclaim tombstones; active IDs and derived source/tag indexes are preserved.
+    /// Reclaim tombstones; active IDs and derived filter/keyword indexes are preserved.
     pub fn compact(&mut self) -> Result<usize> {
         self.db.compact()
     }
@@ -443,12 +522,15 @@ impl Collection {
         self.db.backup(&path)?;
         write_header(&path, name, &self.space)
     }
-    /// Validate the graph and independently rebuild/compare source/tag postings.
+    /// Validate the graph and rebuild/compare filter and keyword postings.
     pub fn check_invariants(&self) -> Result<()> {
         self.db.check_invariants()?;
-        let expected = Postings::from_db(&self.db)?;
+        let (expected, keywords) = Postings::from_db(&self.db)?;
         if expected.sources != self.postings.sources || expected.tags != self.postings.tags {
             return Err(corrupt("document posting mismatch"));
+        }
+        if keywords != self.keywords {
+            return Err(corrupt("keyword posting mismatch"));
         }
         Ok(())
     }

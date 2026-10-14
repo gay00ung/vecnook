@@ -60,6 +60,7 @@ mod document;
 mod error;
 mod graph;
 mod index;
+mod keyword;
 mod math;
 mod rng;
 mod search;
@@ -83,4 +84,7 @@ pub use diagnostics::{CapacityStatus, DiagnosticReport, doctor};
 pub use document::Document;
 pub use error::{Error, ErrorKind, Result};
 pub use index::{IndexStats, Neighbor, Record, SearchMode, SearchReport, VectorIndex};
+pub use keyword::{
+    HybridNeighbor, HybridSearchOptions, HybridSearchReport, KeywordNeighbor, KeywordSearchReport,
+};
 pub use search::{SearchOptions, SearchReason, SearchStrategy};

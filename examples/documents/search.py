@@ -14,6 +14,8 @@ import sys
 import tempfile
 from urllib.parse import urlsplit
 from urllib.request import Request, build_opener, ProxyHandler
+from urllib.error import URLError
+import re
 
 MAX_FILE = 1024 * 1024
 MAX_TOTAL = 32 * MAX_FILE
@@ -115,8 +117,13 @@ class Ollama:
     def request(self, path, body=None):
         data = None if body is None else json.dumps(body).encode("utf-8")
         request = Request(self.url + path, data=data, headers={"Content-Type": "application/json"})
-        with self.opener.open(request, timeout=120) as response:
-            raw = response.read(16 * MAX_FILE + 1)
+        try:
+            with self.opener.open(request, timeout=120) as response:
+                raw = response.read(16 * MAX_FILE + 1)
+        except URLError as error:
+            raise ValueError(f"Ollama request failed at {self.url}: {error}. "
+                             "Start Ollama with 'ollama serve' and install the model with "
+                             "'ollama pull embeddinggemma'.") from error
         if len(raw) > 16 * MAX_FILE:
             raise ValueError("embedding response exceeds 16 MiB")
         return json.loads(raw)
@@ -367,6 +374,18 @@ def sync_documents(args, client):
     print(f"Sync complete: changed={changed} unchanged={unchanged} deleted={deleted} failed=0")
 
 
+def retrieval_mode(query, requested):
+    """Use RRF for explicit identifiers; preserve vector ranking for prose questions."""
+    if requested != "auto":
+        return requested
+    tokens = re.findall(r"[A-Za-z0-9_:-]+", query)
+    identifier = any("_" in t or "::" in t
+                     or (any(c.isdigit() for c in t) and any(c.isalpha() for c in t))
+                     or re.search(r"[A-Z][a-z]+[A-Z]", t) for t in tokens)
+    single = bool(re.fullmatch(r"[A-Za-z][A-Za-z0-9_:-]*", query.strip()))
+    return "hybrid" if identifier or single else "vector"
+
+
 def search_documents(args, client):
     db = Path(args.db)
     manifest = json.loads(cli(args.binary, "docs-info", db.parent, db.name))
@@ -374,31 +393,48 @@ def search_documents(args, client):
     if identity.get("provider") != "ollama" or identity.get("prompt_version") != 1:
         raise ValueError("unsupported document embedding identity")
     model = identity["model"]
-    if client.digest(model) != identity["digest"]:
-        raise ValueError("embedding model changed; rebuild this document database")
     if not args.query.strip() or len(args.query.encode("utf-8")) > CHUNK_BYTES:
         raise ValueError("query must contain 1..3000 UTF-8 bytes")
-    query = client.embed(model, [query_input(model, args.query)])[0]
-    if len(query) != manifest["dimensions"]:
-        raise ValueError("query embedding dimensions differ from the indexed model")
+    requested_mode = getattr(args, "mode", "vector")
+    mode = retrieval_mode(args.query, requested_mode)
+    if mode != "keyword":
+        if client.digest(model) != identity["digest"]:
+            raise ValueError("embedding model changed; rebuild this document database")
+        query = client.embed(model, [query_input(model, args.query)])[0]
+        if len(query) != manifest["dimensions"]:
+            raise ValueError("query embedding dimensions differ from the indexed model")
     filters = []
     for tag in getattr(args, "tags", []):
         filters.extend(["--tag", tag])
     if getattr(args, "source", None) is not None:
         filters.extend(["--source", args.source])
-    response = json.loads(cli(args.binary, "docs-search", db.parent, db.name,
-                              manifest["dimensions"], manifest["model"], "cosine",
-                              coordinates(query), args.k, 128, "auto", *filters))
-    result = response["search"]
-    result["neighbors"] = [dict(match["document"], distance=match["distance"],
+    space = [db.parent, db.name, manifest["dimensions"], manifest["model"], "cosine"]
+    if mode == "keyword":
+        response = json.loads(cli(args.binary, "docs-keywords", *space, args.query, args.k, *filters))
+        result = dict(schema_version=1, mode=mode, **response["keyword"])
+    elif mode == "hybrid":
+        response = json.loads(cli(args.binary, "docs-hybrid", *space, coordinates(query),
+                              args.query, args.k, "--candidates", max(64, args.k), *filters))
+        result = dict(schema_version=1, mode=mode, complete=response["complete"],
+                      candidate_count=response["candidate_count"], rrf_k=response["rrf_k"],
+                      vector=response["search"], keyword=response["keyword"])
+    else:
+        response = json.loads(cli(args.binary, "docs-search", *space, coordinates(query),
+                                  args.k, 128, "auto", *filters))
+        result = response["search"]
+    result["neighbors"] = [dict(match["document"],
+                                **{key: value for key, value in match.items() if key != "document"},
                                 tags=[t for t in match["document"]["tags"] if not t.startswith(SYNC_PREFIX)])
                            for match in response["matches"]]
+    if requested_mode == "auto":
+        result["retrieval_mode"] = mode
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
         for neighbor in result["neighbors"]:
-            print(f"{neighbor['source']}:{neighbor['start_line']}-{neighbor['end_line']} "
-                  f"distance={neighbor['distance']:.6f}")
+            score = (f"score={neighbor['score']:.6f}" if "score" in neighbor
+                     else f"distance={neighbor['distance']:.6f}")
+            print(f"{neighbor['source']}:{neighbor['start_line']}-{neighbor['end_line']} {score}")
             print(neighbor["text"].strip() + "\n")
 
 
@@ -427,6 +463,12 @@ def main():
     search.add_argument("--json", action="store_true")
     search.add_argument("--tag", dest="tags", action="append", default=[])
     search.add_argument("--source", help="exact source-relative path")
+    search.add_argument("--mode", choices=["auto", "vector", "keyword", "hybrid"], default="vector",
+                        help="auto uses hybrid for identifiers and vector for prose questions")
+    # Native docs-sync/docs-find keep the origin next to the command's own flags.
+    for command in [index, sync, search]:
+        command.add_argument("--ollama-url", default=argparse.SUPPRESS,
+                             help="local Ollama HTTP origin")
     args = parser.parse_args()
     try:
         client = Ollama(args.ollama_url)

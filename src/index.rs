@@ -458,7 +458,7 @@ impl VectorIndex {
         self.config.validate_vector(query)?;
         options.validate()?;
         let target = k.min(self.len());
-        let reason = exact_reason(options, self.len(), target);
+        let reason = exact_reason(options, self.len(), target, self.len());
         let mut report = if let Some(reason) = reason {
             let mut report = self.search_exact(query, k)?;
             report.reason = reason;
@@ -565,7 +565,7 @@ impl VectorIndex {
                 "efSearch is smaller than the eligible Top-K".into(),
             ));
         }
-        let reason = exact_reason(options, eligible.len(), target);
+        let reason = exact_reason(options, eligible.len(), target, self.len());
         let mut computations = 0;
         let mut report = if let Some(reason) = reason {
             let mut report = self.exact_subset(&query, target, &eligible, &mut computations);
@@ -1046,7 +1046,12 @@ fn metadata_key(metadata: &str) -> u64 {
     hash.finish()
 }
 
-fn exact_reason(options: SearchOptions, eligible: usize, target: usize) -> Option<SearchReason> {
+fn exact_reason(
+    options: SearchOptions,
+    eligible: usize,
+    target: usize,
+    active: usize,
+) -> Option<SearchReason> {
     match options.strategy {
         SearchStrategy::Exact => Some(SearchReason::ExactRequested),
         SearchStrategy::Hnsw => None,
@@ -1054,6 +1059,13 @@ fn exact_reason(options: SearchOptions, eligible: usize, target: usize) -> Optio
             Some(SearchReason::SmallEligibleSet)
         }
         SearchStrategy::Auto if target > options.ef_search => Some(SearchReason::LargeK),
+        SearchStrategy::Auto
+            if eligible < active
+                && eligible <= options.filtered_exact_threshold
+                && eligible <= active / 8 =>
+        {
+            Some(SearchReason::SelectiveFilter)
+        }
         SearchStrategy::Auto => None,
     }
 }

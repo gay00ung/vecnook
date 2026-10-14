@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.0-rc.1 — 2026-10-14
+
+- Add standard-library BM25 document postings and RRF hybrid search with indexed source/tag filters, branch ranks/scores and deterministic ties. Rebuild postings from existing original payloads after restart, backup and import; preserve API/JSON v1 and storage compatibility.
+- Select exact vector search automatically for filtered sets of at most 4096 candidates and at most 1/8 of active records. Report `SelectiveFilter`; allow callers to disable the new threshold and preserve forced HNSW.
+- Include the Python standard-library Markdown client in the CLI. `docs-sync` imports/updates a folder and `docs-find` infers model settings. Automatic text selection uses hybrid for explicit identifiers and vector ranking for prose; all modes remain selectable.
+- Compare vector/BM25/RRF/automatic selection with fixed English/Korean questions and an error-code catalog. Extend the mixed workload to check lexical/fused ranks, selective Auto, document deletion, restart, independent backups and logical restore.
+
 ## 1.0.0 — 2026-10-09
 
 - Preserve the public API, JSON v1 and storage/model contracts from `1.0.0-rc.1`; runtime source, tests and build settings remain identical after normalizing the package version.

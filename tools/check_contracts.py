@@ -34,9 +34,18 @@ def main():
         cli(binary, "docs-batch", *space, batch)
         document = json.loads(cli(binary, "docs-get", *space, identifier))
         matches = json.loads(cli(binary, "docs-search", *space, "1,0", 1))
+        keyword = json.loads(cli(binary, "docs-keywords", *space, "한글", 1, "--tag", "rust"))
+        hybrid = json.loads(cli(binary, "docs-hybrid", *space, "1,0", "한글", 1,
+                                "--candidates", 1, "--rrf-k", 60, "--tag", "rust"))
         assert document["schema_version"] == 1 and document["id"] == identifier
         assert document["text"] == original and document["source"] == "한글.md"
         assert matches["matches"][0]["document"] == document
+        assert keyword["schema_version"] == hybrid["schema_version"] == 1
+        assert keyword["matches"][0]["document"] == hybrid["matches"][0]["document"] == document
+        assert keyword["keyword"]["matching_count"] == 1
+        assert hybrid["complete"] and hybrid["candidate_count"] == 1
+        assert hybrid["matches"][0]["vector_rank"] == hybrid["matches"][0]["keyword_rank"] == 1
+        assert abs(hybrid["matches"][0]["score"] - 2/61) < 1e-12
         cli(binary, "export", root / "vectors", root / "vectors.export")
         cli(binary, "import", root / "vectors.export", root / "restored")
         restored = json.loads(cli(binary, "search", root / "restored", "1,0", 1, "--json"))
@@ -45,6 +54,8 @@ def main():
         cli(binary, "docs-import", root / "documents.export", root, "imported")
         imported_space = [root, "imported", 2, "fixture-v1", "cosine"]
         assert json.loads(cli(binary, "docs-get", *imported_space, identifier)) == document
+        assert json.loads(cli(binary, "docs-hybrid", *imported_space, "1,0", "한글", 1,
+                              "--candidates", 1))["matches"] == hybrid["matches"]
         cli(binary, "docs-backup", *space, root, "backup")
         assert json.loads(cli(binary, "docs-get", root, "backup", 2, "fixture-v1", "cosine", identifier)) == document
         before = {p.name: p.read_bytes() for p in (root / "documents").iterdir()}
@@ -56,18 +67,24 @@ const assert = require('node:assert/strict');
 let input = ''; process.stdin.setEncoding('utf8');
 process.stdin.on('data', part => input += part);
 process.stdin.on('end', () => {
-  const {report, document, matches, original} = JSON.parse(input);
+  const {report, document, matches, keyword, hybrid, original} = JSON.parse(input);
   assert.equal(report.schema_version, 1);
   assert.equal(typeof document.id, 'string');
   assert.equal(BigInt(document.id), (1n << 64n) - 1n);
   assert.equal(report.neighbors[0].id, document.id);
   assert.equal(document.text, original);
   assert.deepEqual(matches.matches[0].document, document);
+  assert.deepEqual(keyword.matches[0].document, document);
+  assert.deepEqual(hybrid.matches[0].document, document);
+  assert.equal(BigInt(hybrid.matches[0].document.id), (1n << 64n) - 1n);
+  assert.equal(hybrid.matches[0].vector_rank, 1);
+  assert.equal(hybrid.matches[0].keyword_rank, 1);
+  assert.ok(Math.abs(hybrid.matches[0].score - 2/61) < 1e-12);
   console.log('Python/JavaScript JSON v1, full u64 and original UTF-8 passed');
 });
 """
         subprocess.run([node, "-e", script], input=json.dumps(dict(report=report, document=document,
-                       matches=matches, original=original)), text=True, encoding="utf-8", check=True)
+                       matches=matches, keyword=keyword, hybrid=hybrid, original=original)), text=True, encoding="utf-8", check=True)
 
 
 if __name__ == "__main__":

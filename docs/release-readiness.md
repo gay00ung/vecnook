@@ -1,6 +1,6 @@
 # Release candidate validation
 
-The 1.0 candidate freezes the public application API, CLI JSON v1 and storage/model
+The 1.1 candidate preserves the public application API, CLI JSON v1 and storage/model
 contracts in [compatibility.md](compatibility.md). Runtime changes after a candidate
 require another RC and repeated affected validation. Stable publication is a
 separate step with additional duration and desktop-system requirements.
@@ -26,7 +26,7 @@ To repeat the same distribution flow on another Windows 11 NTFS machine with
 Python 3.12+, Rust and Node.js available:
 
 ```bash
-python tools/check_distribution.py --registry 1.0.0-rc.1 --toolchain stable --output work/windows11-registry
+python tools/check_distribution.py --registry 1.1.0-rc.1 --toolchain stable --output work/windows11-registry
 ```
 
 The receipt records the actual OS caption, product type and filesystem. Server CI
@@ -35,7 +35,7 @@ does not supply the required Windows 11 evidence.
 Run the exact candidate archive's mixed workload separately from benchmarks:
 
 ```bash
-python3 tools/run_soak.py --crate work/registry/vecnook-1.0.0-rc.1.crate --output work/soak-rc1 --seconds 86400 --mutations 100000
+python3 tools/run_soak.py --crate work/registry/vecnook-1.1.0-rc.1.crate --output work/soak-rc1 --seconds 86400 --mutations 100000
 ```
 
 `case/progress.json` records actual elapsed time and acknowledgements. The final
