@@ -22,7 +22,7 @@ An empty `DocumentFilter` uses unfiltered Auto search. Source equality and all-t
 
 ## Payload bounds and persistence
 
-The 1.1 candidate also maintains a derived keyword index over chunk text.
+The 1.1 release also maintains a derived keyword index over chunk text.
 `search_keywords` ranks BM25 matches; `search_hybrid` merges vector and keyword
 ranks with RRF. Both use the same source/tag filters and return original chunks.
 Keyword postings follow ordered mutations and rebuild on open/import, including
@@ -33,6 +33,14 @@ The immutable, checksummed `collection.bin` binds name and embedding space. `des
 
 Document text is bounded to 6000 UTF-8 bytes, a nonempty source to 1024 bytes, and tags to 32 unique nonempty strings of at most 128 bytes each. Lines start at one and end at or after the start. All fields combined must fit 16 KiB of encoded metadata, so simultaneous field maxima can exceed the combined bound.
 
-`Document::to_payload` produces a versioned `VDOC1:` hex representation suitable for TSV even when text contains tabs/newlines. `from_payload` checks lengths, UTF-8, bounds, version and trailing bytes before allocating bounded fields. The encoded document ID must agree with the underlying record ID.
+`Document::to_payload` produces a versioned `VDOC1:` hex representation for documents without attributes, or `VDOC2:` for numeric/date attributes, suitable for TSV even when text contains tabs/newlines. `from_payload` checks lengths, UTF-8, bounds, version and trailing bytes before allocating bounded fields. The encoded document ID must agree with the underlying record ID.
 
 Low-level snapshot/WAL formats are unchanged. A raw `Database` can read collection vectors, but arbitrary metadata writes through it can invalidate the document schema. Use `Collection` for mutations. The older demo's JSON-only payloads are not typed collections; rebuild them into a fresh directory with the updated importer.
+
+## Boolean and typed range filters
+
+`Document::with_number` and `with_date` add bounded finite numeric and Gregorian
+calendar-day attributes. Use `DocumentFilter::with_expression` with `FilterExpr`
+for AND, OR, NOT and inclusive/exclusive intervals. All three ranking modes use
+the same eligibility rules. Existing source/tag conditions intersect the new
+expression. See [syntax, examples and VDOC2 migration](compound-filters.md).

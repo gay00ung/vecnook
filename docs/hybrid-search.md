@@ -3,7 +3,7 @@
 See [candidate validation results](validation-1.1.md) for paired latency,
 English/Korean relevance and installed first-search measurements.
 
-The 1.1 candidate adds `Collection::search_keywords` (BM25) and `search_hybrid`
+The 1.1 release adds `Collection::search_keywords` (BM25) and `search_hybrid`
 (reciprocal rank fusion, RRF). Existing `search` retains its vector result
 contract. Source equality and all-tag filters apply before ranking in both
 branches. Existing database, WAL, graph-cache and document formats are unchanged.
@@ -109,3 +109,7 @@ documents; the fixture measures those cases.
 and [LanceDB's guide](https://docs.lancedb.com/search/hybrid-search) describe
 semantic/lexical retrieval. Vecnook implements its own BM25, tokenizer and RRF
 without either engine as a dependency.
+
+In 1.2 the same branch eligibility also accepts [Boolean and range expressions](compound-filters.md).
+RRF ranks borrowed candidate documents, then clones only the final K documents;
+its scores, ties and returned branch metadata are unchanged.

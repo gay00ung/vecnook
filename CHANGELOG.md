@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.0-rc.1 — 2026-10-15
+
+- Add indexed AND/OR/NOT expressions, finite numeric intervals and Gregorian date intervals to vector, keyword and hybrid document search. Preserve source/all-tag conditions and add the owned-filter app-worker method.
+- Add bounded Number/Date metadata and opt-in VDOC2 payloads. Default documents keep byte-identical VDOC1; 1.2 reads existing files, including actual 1.1 snapshots/WAL/cache. Attribute-bearing documents require a 1.2 document reader.
+- Add `--where` to document search commands and `--record-metadata` for Markdown file byte counts and UTC modification dates, with inferred repeat sync and explicit opt-out.
+- Stream snapshots/caches, move live payloads during durable compaction, release inactive payload strings, pack search scratch bits, update repeated-ID batch postings once and clone only returned RRF documents.
+- Compare fresh-process memory/update/search measurements with registry 1.1.0; add independent compound-filter oracles, streaming fault coverage and candidate-bound distribution/long-soak checks. [Measurements and validation status](docs/validation-1.2.md) distinguish local checks from the required full-duration registry QA.
+
 ## 1.1.0 — 2026-10-15
 
 - Promote the checked `1.1.0-rc.1` document-search implementation to stable. Runtime source, tests, tools and build settings match the registered candidate after normalizing the package version; the existing 1.x API, JSON v1 and storage/model contracts remain compatible.

@@ -62,6 +62,61 @@ class IntegrationTests(unittest.TestCase):
         self.thread.join()
         self.temporary.cleanup()
 
+    def test_opt_in_file_attributes_filter_in_all_modes_and_survive_inferred_sync(self):
+        from datetime import datetime, timezone
+        path = self.documents / '한글 notes 🚀.md'
+        stamp = datetime(2026, 10, 1, 23, 59, tzinfo=timezone.utc).timestamp()
+        os.utime(path, (stamp, stamp))
+        self.args.record_metadata = True
+        with contextlib.redirect_stdout(io.StringIO()):
+            search.index_documents(self.args, self.client)
+        self.args.where = 'number("file_bytes") > 0 AND date("modified") == "2026-10-01" AND NOT tag("absent")'
+        for mode in ["vector", "keyword", "hybrid", "auto"]:
+            self.args.mode, self.args.query = mode, "제목"
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                search.search_documents(self.args, self.client)
+            record = json.loads(output.getvalue())["neighbors"][0]
+            self.assertEqual(record["numbers"], {"file_bytes": path.stat().st_size})
+            self.assertEqual(record["dates"], {"modified": "2026-10-01"})
+        before = len(self.server.inputs)
+        self.args.record_metadata = None
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            search.sync_documents(self.args, self.client)
+        self.assertIn("unchanged=1", output.getvalue())
+        self.assertEqual(len(self.server.inputs), before)
+        os.utime(path, (stamp + 86400, stamp + 86400))
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            search.sync_documents(self.args, self.client)
+        self.assertIn("changed=1", output.getvalue())
+        self.args.mode = "keyword"
+        self.args.where = 'date("modified") >= "2026-10-02"'
+        class Offline:
+            def digest(self, *_):
+                raise AssertionError("keyword search must not contact a model")
+            embed = digest
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            search.search_documents(self.args, Offline())
+        self.assertEqual(json.loads(output.getvalue())["neighbors"][0]["dates"]["modified"], "2026-10-02")
+        self.args.record_metadata = False
+        with contextlib.redirect_stdout(io.StringIO()):
+            search.sync_documents(self.args, self.client)
+        self.args.where = 'NOT number("file_bytes") >= 0'
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            search.search_documents(self.args, Offline())
+        record = json.loads(output.getvalue())["neighbors"][0]
+        self.assertNotIn("numbers", record)
+        self.assertNotIn("dates", record)
+
+    def test_metadata_payload_validation_rejects_nonfinite_dates_and_excessive_fields(self):
+        chunk = search.Chunk("a.md", 1, 1, "common")
+        self.assertTrue(search.encode_document(1, chunk, []).startswith("VDOC1:"))
+        for numbers, dates in [({"x": float("inf")}, {}), ({"x": float("nan")}, {}),
+                               ({"": 1}, {}), ({str(i): i for i in range(33)}, {}),
+                               ({}, {"d": "2026-02-29"}), ({}, {"d": "20261015"})]:
+            with self.assertRaises(ValueError):
+                search.encode_document(1, chunk, [], numbers, dates)
+
     def test_original_unicode_source_and_text_survive_cli_restart_and_json(self):
         with contextlib.redirect_stdout(io.StringIO()):
             search.index_documents(self.args, self.client)

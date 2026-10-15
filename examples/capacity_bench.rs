@@ -52,10 +52,16 @@ fn tag(id: usize, name: &str) -> bool {
     }
 }
 enum Handle {
-    Raw(Database),
-    Docs(Collection),
+    Raw(Box<Database>),
+    Docs(Box<Collection>),
 }
 impl Handle {
+    fn raw(db: Database) -> Self {
+        Self::Raw(Box::new(db))
+    }
+    fn docs(collection: Collection) -> Self {
+        Self::Docs(Box::new(collection))
+    }
     fn search(&self, q: &[f32], ids: &[u64], filter: &str, options: SearchOptions) -> SearchReport {
         match self {
             Self::Raw(db) => {
@@ -264,14 +270,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     write_fvecs(&root.join("query.fvecs"), &queries);
     let start = Instant::now();
     let mut handle = if docs {
-        Handle::Docs(Collection::create(
+        Handle::docs(Collection::create(
             &root,
             "database",
             config,
             "synthetic-capacity-v1",
         )?)
     } else {
-        Handle::Raw(Database::create(root.join("database"), config)?)
+        Handle::raw(Database::create(root.join("database"), config)?)
     };
     for start in (0..n).step_by(256) {
         let end = (start + 256).min(n);
@@ -357,9 +363,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = Instant::now();
     let mut handle = if docs {
         let space = vecnook::EmbeddingSpace::new("synthetic-capacity-v1", d, Metric::Cosine);
-        Handle::Docs(Collection::open(&root, "database", &space)?)
+        Handle::docs(Collection::open(&root, "database", &space)?)
     } else {
-        Handle::Raw(Database::open(root.join("database"))?)
+        Handle::raw(Database::open(root.join("database"))?)
     };
     phase("cached_reopen", start.elapsed().as_secs_f64());
     let mut alive = alive;
@@ -430,9 +436,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let start = Instant::now();
     let mut handle = if docs {
         let space = vecnook::EmbeddingSpace::new("synthetic-capacity-v1", d, Metric::Cosine);
-        Handle::Docs(Collection::open(&root, "database", &space)?)
+        Handle::docs(Collection::open(&root, "database", &space)?)
     } else {
-        Handle::Raw(Database::open(root.join("database"))?)
+        Handle::raw(Database::open(root.join("database"))?)
     };
     phase("wal_recovery", start.elapsed().as_secs_f64());
     let start = Instant::now();
@@ -447,7 +453,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         c.active_records, c.physical_nodes, c.snapshot_bytes, c.remaining_snapshot_bytes
     );
     if let Handle::Docs(collection) = handle {
-        let (client, worker) = vecnook::app::start(collection)?;
+        let (client, worker) = vecnook::app::start(*collection)?;
         for clients in [1, 4, 8] {
             let start = Instant::now();
             let joins = (0..clients)

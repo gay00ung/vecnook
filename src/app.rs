@@ -1,7 +1,7 @@
 //! A bounded search/write worker for GUI/event-loop applications. No framework dependencies.
 use crate::{
     BatchReport, Collection, Document, DocumentFilter, DocumentMutation, DocumentSearchReport,
-    EmbeddingSpace, SearchOptions,
+    EmbeddingSpace, FilterExpr, SearchOptions,
 };
 use std::{
     fmt,
@@ -55,6 +55,7 @@ enum Request {
         k: usize,
         source: Option<String>,
         tags: Vec<String>,
+        expression: Option<FilterExpr>,
         reply: SyncSender<crate::Result<DocumentSearchReport>>,
     },
     Write {
@@ -108,6 +109,36 @@ impl SearchClient {
             k,
             source,
             tags,
+            expression: None,
+            reply,
+        })?;
+        Ok(receiver)
+    }
+
+    /// Submit an owned compound filter through the same bounded worker queue.
+    /// Invalid expressions are rejected before enqueueing; core vector errors
+    /// arrive through the receiver. K is at most 100, as for submit.
+    pub fn submit_filtered(
+        &self,
+        model: &str,
+        vector: Vec<f32>,
+        k: usize,
+        expression: FilterExpr,
+    ) -> Result<Receiver<crate::Result<DocumentSearchReport>>, SubmitError> {
+        if model != self.space.model
+            || vector.len() != self.space.dimensions
+            || k > 100
+            || expression.validate().is_err()
+        {
+            return Err(SubmitError::InvalidRequest);
+        }
+        let (reply, receiver) = mpsc::sync_channel(1);
+        self.enqueue(Request::Search {
+            vector,
+            k,
+            source: None,
+            tags: vec![],
+            expression: Some(expression),
             reply,
         })?;
         Ok(receiver)
@@ -187,6 +218,7 @@ pub fn start(
                         k,
                         source,
                         tags,
+                        expression,
                         reply,
                     } => {
                         let tags: Vec<_> = tags.iter().map(String::as_str).collect();
@@ -197,6 +229,7 @@ pub fn start(
                             DocumentFilter {
                                 source: source.as_deref(),
                                 tags: &tags,
+                                expression: expression.as_ref(),
                             },
                         );
                         // A closed frontend receiver does not stop or poison the worker.

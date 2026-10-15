@@ -7,6 +7,39 @@ use support::TempDir;
 use vecnook::{Config, Database, Error};
 
 #[test]
+fn replay_and_checkpoint_use_the_same_reclaimed_payload_budget() {
+    let temp = TempDir::new();
+    let mut db = Database::create(temp.path(), Config::new(1)).unwrap();
+    let payload = "원문".repeat(2000);
+    for _ in 0..20 {
+        db.put(1, &[1.0], &payload).unwrap();
+    }
+    db.delete(1).unwrap();
+    db.put(2, &[2.0], "live").unwrap();
+    let expected = db.capacity().snapshot_bytes;
+    assert_eq!(expected, 56 + 21 * 17 + 4);
+    drop(db);
+    let mut db = Database::open(temp.path()).unwrap();
+    assert_eq!(db.capacity().snapshot_bytes, expected);
+    assert_eq!(db.get(2).unwrap().metadata, "live");
+    db.checkpoint().unwrap();
+    assert_eq!(
+        fs::metadata(temp.path().join("snapshot.bin"))
+            .unwrap()
+            .len(),
+        expected as u64
+    );
+    drop(db);
+    assert_eq!(
+        Database::open(temp.path())
+            .unwrap()
+            .capacity()
+            .snapshot_bytes,
+        expected
+    );
+}
+
+#[test]
 fn wal_replays_insert_update_delete_and_utf8_metadata() {
     let temp = TempDir::new();
     let mut db = Database::create(temp.path(), Config::new(2)).unwrap();

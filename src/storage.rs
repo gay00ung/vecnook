@@ -41,11 +41,23 @@ const fn crc_table() -> [u32; 256] {
 const CRC_TABLE: [u32; 256] = crc_table();
 
 pub(crate) fn crc32(bytes: &[u8]) -> u32 {
-    let mut crc = !0u32;
-    for &byte in bytes {
-        crc = CRC_TABLE[((crc ^ u32::from(byte)) & 255) as usize] ^ (crc >> 8);
+    let mut crc = Crc32::new();
+    crc.update(bytes);
+    crc.finish()
+}
+pub(crate) struct Crc32(u32);
+impl Crc32 {
+    pub(crate) fn new() -> Self {
+        Self(!0)
     }
-    !crc
+    pub(crate) fn update(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.0 = CRC_TABLE[((self.0 ^ u32::from(byte)) & 255) as usize] ^ (self.0 >> 8);
+        }
+    }
+    pub(crate) fn finish(self) -> u32 {
+        !self.0
+    }
 }
 
 pub(crate) fn u32_bytes(out: &mut Vec<u8>, value: u32) {
@@ -161,52 +173,66 @@ pub(crate) fn acquire_lock(path: &Path) -> Result<File> {
 }
 
 pub(crate) fn write_snapshot(path: &Path, index: &VectorIndex, sequence: u64) -> Result<()> {
+    let checksum = write_snapshot_records(path, index, sequence, false)?;
+    graph::write(path, index, sequence, checksum)
+}
+
+pub(crate) fn write_compacted_snapshot(
+    path: &Path,
+    index: &VectorIndex,
+    sequence: u64,
+) -> Result<u32> {
+    write_snapshot_records(path, index, sequence, true)
+}
+
+fn write_snapshot_records(
+    path: &Path,
+    index: &VectorIndex,
+    sequence: u64,
+    active_only: bool,
+) -> Result<u32> {
     let config = index.config();
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(MAGIC);
-    u32_bytes(&mut bytes, VERSION);
-    u32_bytes(&mut bytes, config.dimensions as u32);
-    u32_bytes(&mut bytes, config.m as u32);
-    u32_bytes(&mut bytes, config.ef_construction as u32);
-    u32_bytes(
-        &mut bytes,
-        match config.metric {
-            Metric::SquaredL2 => 0,
-            Metric::Cosine => 1,
-            Metric::InnerProduct => 2,
-        },
-    );
-    u64_bytes(&mut bytes, config.seed);
-    u64_bytes(&mut bytes, sequence);
-    u64_bytes(&mut bytes, index.stats().physical_nodes as u64);
-    for record in index.records() {
-        u64_bytes(&mut bytes, record.id);
-        bytes.push(u8::from(record.deleted));
-        for value in &record.vector {
-            bytes.extend_from_slice(&value.to_le_bytes());
-        }
-        u32_bytes(&mut bytes, record.metadata.len() as u32);
-        bytes.extend_from_slice(record.metadata.as_bytes());
-    }
-    if bytes.len() + 4 > MAX_SNAPSHOT_BYTES {
-        return Err(Error::InvalidInput("snapshot size limit exceeded".into()));
-    }
-    let checksum = crc32(&bytes);
-    u32_bytes(&mut bytes, checksum);
     let temporary = path.join("snapshot.tmp");
-    let mut file = OpenOptions::new()
+    let file = OpenOptions::new()
         .write(true)
         .create(true)
         .truncate(true)
         .open(&temporary)?;
-    crate::storage_io::write(&mut file, &bytes, "snapshot.write")?;
+    let mut writer = crate::stream::Writer::new(file, MAX_SNAPSHOT_BYTES, "snapshot.write");
+    writer.bytes(MAGIC)?;
+    writer.u32(VERSION)?;
+    writer.u32(config.dimensions as u32)?;
+    writer.u32(config.m as u32)?;
+    writer.u32(config.ef_construction as u32)?;
+    writer.u32(match config.metric {
+        Metric::SquaredL2 => 0,
+        Metric::Cosine => 1,
+        Metric::InnerProduct => 2,
+    })?;
+    writer.u64(config.seed)?;
+    writer.u64(sequence)?;
+    writer.u64(if active_only {
+        index.len()
+    } else {
+        index.capacity().physical_nodes
+    } as u64)?;
+    for record in index.records().filter(|r| !active_only || !r.deleted) {
+        writer.u64(record.id)?;
+        writer.u8(u8::from(record.deleted))?;
+        for value in &record.vector {
+            writer.bytes(&value.to_le_bytes())?;
+        }
+        writer.u32(record.metadata.len() as u32)?;
+        writer.bytes(record.metadata.as_bytes())?;
+    }
+    let (file, checksum) = writer.finish()?;
     crate::storage_io::check("snapshot.sync")?;
     file.sync_all()?;
     drop(file);
     crate::storage_io::check("snapshot.rename")?;
     fs::rename(&temporary, path.join("snapshot.bin"))?;
     sync_directory(path)?;
-    graph::write(path, index, sequence, checksum)
+    Ok(checksum)
 }
 
 struct Snapshot {
@@ -218,22 +244,8 @@ struct Snapshot {
 
 fn read_snapshot(path: &Path) -> Result<Snapshot> {
     let file = File::open(path.join("snapshot.bin"))?;
-    if file.metadata()?.len() > MAX_SNAPSHOT_BYTES as u64 {
-        return Err(Error::Corrupt("snapshot exceeds size limit".into()));
-    }
-    let mut bytes = Vec::new();
-    file.take(MAX_SNAPSHOT_BYTES as u64 + 1)
-        .read_to_end(&mut bytes)?;
-    if bytes.len() < 48 + 4 || bytes.len() > MAX_SNAPSHOT_BYTES {
-        return Err(Error::Corrupt("invalid snapshot length".into()));
-    }
-    let checksum_offset = bytes.len() - 4;
-    let expected = u32::from_le_bytes(bytes[checksum_offset..].try_into().unwrap());
-    if crc32(&bytes[..checksum_offset]) != expected {
-        return Err(Error::Corrupt("snapshot checksum mismatch".into()));
-    }
-    let mut reader = Reader::new(&bytes[..checksum_offset]);
-    if reader.take(8)? != MAGIC {
+    let mut reader = crate::stream::Reader::new(file, 52, MAX_SNAPSHOT_BYTES)?;
+    if &reader.array::<8>()? != MAGIC {
         return Err(Error::Corrupt("unknown snapshot magic/version".into()));
     }
     let version = reader.u32()?;
@@ -280,20 +292,25 @@ fn read_snapshot(path: &Path) -> Result<Snapshot> {
         config
             .validate_vector(&vector)
             .map_err(|e| Error::Corrupt(e.to_string()))?;
-        let metadata = reader.metadata()?;
+        let length = reader.u32()? as usize;
+        if length > MAX_METADATA {
+            return Err(Error::Corrupt("metadata length exceeds limit".into()));
+        }
+        let metadata = String::from_utf8(reader.bytes(length)?)
+            .map_err(|_| Error::Corrupt("invalid metadata UTF-8".into()))?;
         records.push(Record {
             id,
             vector,
-            metadata,
+            metadata: if deleted { String::new() } else { metadata },
             deleted,
         });
     }
-    reader.finish()?;
+    let checksum = reader.finish()?;
     Ok(Snapshot {
         config,
         sequence,
         records,
-        checksum: expected,
+        checksum,
     })
 }
 
@@ -525,6 +542,11 @@ fn recover_inner(path: &Path, wal: &mut File, repair: bool) -> Result<Recovered>
             }
             for operation in operations {
                 if let Decoded::Put(record) = operation {
+                    if let Some(old) = active.get(&record.id).copied() {
+                        encoded_bytes -= records[old].metadata.len();
+                        records[old].deleted = true;
+                        records[old].metadata = String::new();
+                    }
                     encoded_bytes += record.encoded_len();
                     if records.len() == MAX_RECORDS
                         || encoded_bytes + SNAPSHOT_HEADER_BYTES + 4 > MAX_SNAPSHOT_BYTES
@@ -533,13 +555,13 @@ fn recover_inner(path: &Path, wal: &mut File, repair: bool) -> Result<Recovered>
                             "recovered records exceed storage limits".into(),
                         ));
                     }
-                    if let Some(old) = active.insert(record.id, records.len()) {
-                        records[old].deleted = true;
-                    }
+                    active.insert(record.id, records.len());
                     records.push(record);
                 } else if let Decoded::Delete(id) = operation {
                     if let Some(old) = active.remove(&id) {
+                        encoded_bytes -= records[old].metadata.len();
                         records[old].deleted = true;
+                        records[old].metadata = String::new();
                     } else if opcode != 3 {
                         return Err(Error::Corrupt("WAL deletes an inactive ID".into()));
                     }

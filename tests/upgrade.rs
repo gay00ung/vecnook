@@ -1,5 +1,7 @@
 #[path = "support/legacy_v03.rs"]
 mod legacy;
+#[path = "support/legacy_v11.rs"]
+mod legacy_v11;
 mod support;
 #[path = "support/legacy_vectors.rs"]
 mod vectors;
@@ -44,20 +46,47 @@ fn actual_v01_and_v02_vector_binary_files_open_and_migrate_on_checkpoint() {
 
 #[test]
 fn actual_v03_binary_fixture_upgrades_searches_mutates_checkpoints_backs_up_and_exports() {
+    upgrade_document_fixture(
+        legacy::SNAPSHOT,
+        legacy::WAL,
+        legacy::INDEX,
+        legacy::COLLECTION,
+        2,
+    );
+}
+
+#[test]
+fn actual_v11_snapshot_tombstones_and_later_wal_upgrade_with_typed_attributes() {
+    upgrade_document_fixture(
+        legacy_v11::SNAPSHOT,
+        legacy_v11::WAL,
+        legacy_v11::INDEX,
+        legacy_v11::COLLECTION,
+        3,
+    );
+}
+
+fn upgrade_document_fixture(
+    snapshot: &[u8],
+    wal: &[u8],
+    index: &[u8],
+    collection: &[u8],
+    sequence: u64,
+) {
     let tmp = TempDir::new();
     let path = tmp.path().join("legacy");
     fs::create_dir(&path).unwrap();
     for (name, data) in [
-        ("snapshot.bin", legacy::SNAPSHOT),
-        ("wal.bin", legacy::WAL),
-        ("index.bin", legacy::INDEX),
-        ("collection.bin", legacy::COLLECTION),
+        ("snapshot.bin", snapshot),
+        ("wal.bin", wal),
+        ("index.bin", index),
+        ("collection.bin", collection),
     ] {
         fs::write(path.join(name), data).unwrap();
     }
     let space = EmbeddingSpace::new("fixture-v03:stable-model", 2, Metric::Cosine);
     let mut c = Collection::open(tmp.path(), "legacy", &space).unwrap();
-    assert_eq!(c.sequence(), 2);
+    assert_eq!(c.sequence(), sequence);
     assert!(c.recovery_info().graph_cache_loaded);
     assert!(c.get(7).unwrap().is_none());
     let doc = c.get(u64::MAX).unwrap().unwrap();
@@ -75,7 +104,11 @@ fn actual_v03_binary_fixture_upgrades_searches_mutates_checkpoints_backs_up_and_
         .unwrap();
     assert_eq!(found.neighbors[0].document, doc);
     c.put(
-        &Document::new(9, "new version write", "new.md"),
+        &Document::new(9, "new version write", "new.md")
+            .with_number("score", 0.8)
+            .unwrap()
+            .with_date("modified", vecnook::Date::parse("2026-10-15").unwrap())
+            .unwrap(),
         &[1.0, 0.0],
     )
     .unwrap();
@@ -92,6 +125,22 @@ fn actual_v03_binary_fixture_upgrades_searches_mutates_checkpoints_backs_up_and_
         assert_eq!(c.len(), 2);
         assert_eq!(c.get(u64::MAX).unwrap(), Some(doc.clone()));
         assert_eq!(c.get(9).unwrap().unwrap().text, "new version write");
+        let expression = vecnook::FilterExpr::parse(
+            r#"number("score") >= 0.8 AND date("modified") == "2026-10-15""#,
+        )
+        .unwrap();
+        assert_eq!(
+            c.search_keywords(
+                "write",
+                10,
+                DocumentFilter::default().with_expression(&expression)
+            )
+            .unwrap()
+            .neighbors[0]
+                .document
+                .id,
+            9
+        );
         c.check_invariants().unwrap();
     }
 }

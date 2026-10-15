@@ -32,6 +32,67 @@ mod tests {
     use super::*;
 
     #[test]
+    fn retired_payloads_release_bytes_and_moved_compaction_keeps_active_records() {
+        let mut index = VectorIndex::new(Config::new(1)).unwrap();
+        let payload = "x".repeat(16000);
+        index.put(1, &[1.0], &payload).unwrap();
+        let before = index.encoded_bytes;
+        index.put(1, &[2.0], &payload).unwrap();
+        assert!(index.nodes[0].record.metadata.is_empty());
+        assert_eq!(index.encoded_bytes, before + 17);
+        assert!(index.delete(1));
+        assert_eq!(index.encoded_bytes, 34);
+        assert!(
+            index
+                .nodes
+                .iter()
+                .all(|n| n.record.metadata.capacity() == 0)
+        );
+        index.put(2, &[3.0], "live").unwrap();
+        let pointer = index.get(2).unwrap().metadata.as_ptr();
+        assert_eq!(index.compact().unwrap(), 2);
+        assert_eq!(index.get(2).unwrap().metadata.as_ptr(), pointer);
+        assert_eq!(index.encoded_bytes, 21);
+        index.check_invariants().unwrap();
+    }
+
+    #[test]
+    fn batch_budget_accounts_for_reclaimed_payloads_and_ordered_ids() {
+        let mut index = VectorIndex::new(Config::new(1)).unwrap();
+        index.put(1, &[1.0], "old").unwrap();
+        let operations = [
+            Mutation::Put {
+                id: 1,
+                vector: &[2.0],
+                metadata: "new payload",
+            },
+            Mutation::Delete { id: 1 },
+            Mutation::Put {
+                id: 1,
+                vector: &[3.0],
+                metadata: "last",
+            },
+        ];
+        let report = index.validate_batch(&operations).unwrap();
+        assert_eq!((report.updated, report.inserted, report.deleted), (1, 1, 1));
+        for op in operations {
+            match op {
+                Mutation::Put {
+                    id,
+                    vector,
+                    metadata,
+                } => {
+                    index.put(id, vector, metadata).unwrap();
+                }
+                Mutation::Delete { id } => {
+                    index.delete(id);
+                }
+            }
+        }
+        assert_eq!(index.encoded_bytes, 3 * 17 + 4);
+    }
+
+    #[test]
     fn metadata_bucket_candidates_are_checked_against_the_complete_string() {
         let mut index = VectorIndex::new(Config::new(1)).unwrap();
         index.put(1, &[1.0], "project-a").unwrap();
@@ -194,7 +255,21 @@ pub(crate) struct GraphState {
 enum Eligibility<'a> {
     All,
     Active,
-    Allowed(&'a [bool]),
+    Allowed(&'a BitSet),
+}
+
+// One bit per physical node, local to the query; concurrent searches share no scratch state.
+struct BitSet(Vec<u64>);
+impl BitSet {
+    fn new(length: usize) -> Self {
+        Self(vec![0; length.div_ceil(64)])
+    }
+    fn contains(&self, node: usize) -> bool {
+        self.0[node / 64] & (1 << (node % 64)) != 0
+    }
+    fn insert(&mut self, node: usize) {
+        self.0[node / 64] |= 1 << (node % 64);
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -282,6 +357,21 @@ impl VectorIndex {
     }
 
     pub(crate) fn validate_put(&self, vector: &[f32], metadata: &str) -> Result<()> {
+        self.validate_append(vector, metadata, 0)
+    }
+    pub(crate) fn validate_replacement(
+        &self,
+        id: u64,
+        vector: &[f32],
+        metadata: &str,
+    ) -> Result<()> {
+        self.validate_append(
+            vector,
+            metadata,
+            self.get(id).map_or(0, |r| r.metadata.len()),
+        )
+    }
+    fn validate_append(&self, vector: &[f32], metadata: &str, reclaimed: usize) -> Result<()> {
         self.config.validate_vector(vector)?;
         if metadata.len() > MAX_METADATA {
             return Err(Error::InvalidInput(format!(
@@ -296,11 +386,13 @@ impl VectorIndex {
             });
         }
         let additional = 13 + 4 * vector.len() + metadata.len();
-        if self.encoded_bytes + additional + SNAPSHOT_HEADER_BYTES + 4 > MAX_SNAPSHOT_BYTES {
+        if self.encoded_bytes - reclaimed + additional + SNAPSHOT_HEADER_BYTES + 4
+            > MAX_SNAPSHOT_BYTES
+        {
             return Err(Error::Capacity {
                 resource: "snapshot_bytes",
                 limit: MAX_SNAPSHOT_BYTES,
-                required: self.encoded_bytes + additional + SNAPSHOT_HEADER_BYTES + 4,
+                required: self.encoded_bytes - reclaimed + additional + SNAPSHOT_HEADER_BYTES + 4,
             });
         }
         Ok(())
@@ -308,7 +400,7 @@ impl VectorIndex {
 
     /// Insert or replace an ID. Returns true for a new active ID.
     pub fn put(&mut self, id: u64, vector: &[f32], metadata: &str) -> Result<bool> {
-        self.validate_put(vector, metadata)?;
+        self.validate_replacement(id, vector, metadata)?;
         let previous = self.active.get(&id).copied();
         let node = self.append_node(Record {
             id,
@@ -316,9 +408,6 @@ impl VectorIndex {
             metadata: metadata.to_owned(),
             deleted: false,
         });
-        if let Some(old) = previous {
-            self.nodes[old].record.deleted = true;
-        }
         self.register_active(id, node);
         Ok(previous.is_none())
     }
@@ -334,13 +423,17 @@ impl VectorIndex {
         let mut report = BatchReport::default();
         let mut states = BTreeMap::new();
         let mut bytes = self.encoded_bytes;
+        let mut peak_bytes = bytes;
         let mut count = self.nodes.len();
         let mut payload = 13;
         for operation in operations {
             let id = match operation {
                 Mutation::Put { id, .. } | Mutation::Delete { id } => *id,
             };
-            let present = *states.entry(id).or_insert_with(|| self.get(id).is_some());
+            let previous = *states
+                .entry(id)
+                .or_insert_with(|| self.get(id).map(|r| r.metadata.len()));
+            let present = previous.is_some();
             match operation {
                 Mutation::Put {
                     vector, metadata, ..
@@ -350,7 +443,8 @@ impl VectorIndex {
                         return Err(Error::InvalidInput("metadata exceeds 16 KiB".into()));
                     }
                     let length = 13 + vector.len() * 4 + metadata.len();
-                    bytes += length;
+                    bytes = bytes - previous.unwrap_or(0) + length;
+                    peak_bytes = peak_bytes.max(bytes);
                     payload += length;
                     count += 1;
                     if present {
@@ -358,7 +452,7 @@ impl VectorIndex {
                     } else {
                         report.inserted += 1;
                     }
-                    states.insert(id, true);
+                    states.insert(id, Some(metadata.len()));
                 }
                 Mutation::Delete { .. } => {
                     payload += 9;
@@ -367,7 +461,8 @@ impl VectorIndex {
                     } else {
                         report.absent += 1;
                     }
-                    states.insert(id, false);
+                    bytes -= previous.unwrap_or(0);
+                    states.insert(id, None);
                 }
             }
         }
@@ -378,11 +473,11 @@ impl VectorIndex {
                 required: count,
             });
         }
-        if bytes + SNAPSHOT_HEADER_BYTES + 4 > MAX_SNAPSHOT_BYTES {
+        if peak_bytes + SNAPSHOT_HEADER_BYTES + 4 > MAX_SNAPSHOT_BYTES {
             return Err(Error::Capacity {
                 resource: "snapshot_bytes",
                 limit: MAX_SNAPSHOT_BYTES,
-                required: bytes + SNAPSHOT_HEADER_BYTES + 4,
+                required: peak_bytes + SNAPSHOT_HEADER_BYTES + 4,
             });
         }
         if payload > MAX_BATCH_BYTES {
@@ -399,7 +494,7 @@ impl VectorIndex {
     pub fn delete(&mut self, id: u64) -> bool {
         if let Some(node) = self.active.remove(&id) {
             self.remove_metadata_posting(node);
-            self.nodes[node].record.deleted = true;
+            self.retire(node);
             true
         } else {
             false
@@ -519,11 +614,13 @@ impl VectorIndex {
         if ids.len() > MAX_RECORDS {
             return Err(Error::InvalidInput("subset exceeds 100000 IDs".into()));
         }
-        let eligible: BTreeSet<_> = ids
+        let mut eligible: Vec<_> = ids
             .iter()
             .filter_map(|id| self.active.get(id).copied())
             .collect();
-        self.search_candidates(query, k, options, eligible.into_iter().collect(), 0)
+        eligible.sort_unstable();
+        eligible.dedup();
+        self.search_candidates(query, k, options, eligible, 0)
     }
 
     /// Evaluate a predicate once per active record before vector search.
@@ -580,9 +677,9 @@ impl VectorIndex {
             };
             report
         } else {
-            let mut allowed = vec![false; self.nodes.len()];
+            let mut allowed = BitSet::new(self.nodes.len());
             for &node in &eligible {
-                allowed[node] = true;
+                allowed.insert(node);
             }
             let mut entry = self.entry.expect("eligible records imply an entry");
             for layer in (1..self.nodes[entry].links.len()).rev() {
@@ -616,9 +713,18 @@ impl VectorIndex {
     fn register_active(&mut self, id: u64, node: usize) {
         if let Some(old) = self.active.insert(id, node) {
             self.remove_metadata_posting(old);
+            self.retire(old);
         }
         let key = metadata_key(&self.nodes[node].record.metadata);
         self.metadata_index.entry(key).or_default().insert(node);
+    }
+
+    fn retire(&mut self, node: usize) {
+        let record = &mut self.nodes[node].record;
+        record.deleted = true;
+        self.encoded_bytes -= record.metadata.len();
+        // Coordinates and links remain traversal paths; inactive payloads are never returned.
+        record.metadata = String::new();
     }
 
     fn remove_metadata_posting(&mut self, node: usize) {
@@ -666,23 +772,20 @@ impl VectorIndex {
     }
 
     /// Rebuild from active records and return the number of reclaimed nodes.
-    /// Temporarily allocates a replacement index; metadata and IDs are preserved.
+    /// Moves live payloads into a replacement graph; metadata and IDs are preserved.
     pub fn compact(&mut self) -> Result<usize> {
-        let replacement = self.compacted()?;
-        let removed = self.nodes.len() - replacement.nodes.len();
+        let mut replacement = Self::new(self.config.clone())?;
+        let physical = self.nodes.len();
+        for node in std::mem::take(&mut self.nodes) {
+            if !node.record.deleted {
+                let id = node.record.id;
+                let added = replacement.append_node(node.record);
+                replacement.register_active(id, added);
+            }
+        }
+        let removed = physical - replacement.nodes.len();
         *self = replacement;
         Ok(removed)
-    }
-
-    pub(crate) fn compacted(&self) -> Result<Self> {
-        Self::from_records(
-            self.config.clone(),
-            self.nodes
-                .iter()
-                .filter(|n| !n.record.deleted)
-                .map(|n| n.record.clone())
-                .collect(),
-        )
     }
 
     pub(crate) fn records(&self) -> impl Iterator<Item = &Record> {
@@ -706,12 +809,11 @@ impl VectorIndex {
         Ok(result)
     }
 
-    pub(crate) fn graph(&self) -> GraphState {
-        GraphState {
-            links: self.nodes.iter().map(|n| n.links.clone()).collect(),
-            entry: self.entry,
-            rng_state: self.rng.state(),
-        }
+    pub(crate) fn graph_links(&self) -> impl Iterator<Item = &[Vec<usize>]> {
+        self.nodes.iter().map(|n| n.links.as_slice())
+    }
+    pub(crate) fn graph_header(&self) -> (Option<usize>, u64) {
+        (self.entry, self.rng.state())
     }
 
     pub(crate) fn from_cached_graph(
@@ -898,15 +1000,15 @@ impl VectorIndex {
         eligibility: Eligibility<'_>,
         computations: &mut usize,
     ) -> Vec<Scored> {
-        let mut visited = vec![false; self.nodes.len()];
+        let mut visited = BitSet::new(self.nodes.len());
         let first = self.score(query, entry, computations);
         let mut frontier = BinaryHeap::from([Reverse(first)]);
         let mut best: BinaryHeap<Scored> = BinaryHeap::new();
-        visited[entry] = true;
+        visited.insert(entry);
         let eligible = |n: usize| match &eligibility {
             Eligibility::All => true,
             Eligibility::Active => !self.nodes[n].record.deleted,
-            Eligibility::Allowed(allowed) => allowed[n],
+            Eligibility::Allowed(allowed) => allowed.contains(n),
         };
         if eligible(entry) {
             best.push(first);
@@ -916,10 +1018,10 @@ impl VectorIndex {
                 break;
             }
             for &neighbor in &self.nodes[current.node].links[layer] {
-                if visited[neighbor] {
+                if visited.contains(neighbor) {
                     continue;
                 }
-                visited[neighbor] = true;
+                visited.insert(neighbor);
                 let candidate = self.score(query, neighbor, computations);
                 if best.len() < ef || candidate < *best.peek().unwrap() {
                     frontier.push(Reverse(candidate));
@@ -984,15 +1086,16 @@ impl VectorIndex {
     fn append_node(&mut self, record: Record) -> usize {
         let level = self.rng.level(self.config.m);
         let node = self.nodes.len();
-        let coordinates = record.vector.clone();
-        let query = Query::new(&coordinates, self.config.metric);
-        self.encoded_bytes += record.encoded_len();
-        self.nodes.push(Node {
-            record,
-            links: vec![Vec::new(); level + 1],
-            inverse_norm: query.inverse_norm,
-        });
+        let query = Query::new(&record.vector, self.config.metric);
+        let inverse_norm = query.inverse_norm;
+        let mut outgoing = vec![Vec::new(); level + 1];
         let Some(mut entry) = self.entry else {
+            self.encoded_bytes += record.encoded_len();
+            self.nodes.push(Node {
+                record,
+                links: outgoing,
+                inverse_norm,
+            });
             self.entry = Some(node);
             return node;
         };
@@ -1014,8 +1117,18 @@ impl VectorIndex {
             );
             let next_entry = candidates.first().map_or(entry, |c| c.node);
             let neighbors = self.select_neighbors(candidates, self.config.m);
-            self.nodes[node].links[layer] = neighbors.clone();
-            for neighbor in neighbors {
+            outgoing[layer] = neighbors;
+            entry = next_entry;
+        }
+        self.encoded_bytes += record.encoded_len();
+        self.nodes.push(Node {
+            record,
+            links: outgoing,
+            inverse_norm,
+        });
+        for layer in (0..=level.min(highest)).rev() {
+            for position in 0..self.nodes[node].links[layer].len() {
+                let neighbor = self.nodes[node].links[layer][position];
                 let mut links = self.nodes[neighbor].links[layer].clone();
                 links.push(node);
                 if links.len() > self.degree_limit(layer) {
@@ -1031,7 +1144,6 @@ impl VectorIndex {
                 }
                 self.nodes[neighbor].links[layer] = links;
             }
-            entry = next_entry;
         }
         if level > highest {
             self.entry = Some(node);

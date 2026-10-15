@@ -1,13 +1,10 @@
 //! Disposable, bounded graph cache bound to an authoritative snapshot.
 use crate::{
-    Config, Error, Result, VectorIndex,
-    config::MAX_RECORDS,
-    index::GraphState,
-    storage::{Reader, crc32, sync_directory, u32_bytes, u64_bytes},
+    Config, Error, Result, VectorIndex, config::MAX_RECORDS, index::GraphState,
+    storage::sync_directory,
 };
 use std::{
     fs::{self, File, OpenOptions},
-    io::Read,
     path::Path,
 };
 
@@ -20,36 +17,31 @@ pub(crate) fn write(
     sequence: u64,
     snapshot_crc: u32,
 ) -> Result<()> {
-    let graph = index.graph();
-    let mut bytes = Vec::new();
-    bytes.extend_from_slice(MAGIC);
-    u32_bytes(&mut bytes, 1);
-    u32_bytes(&mut bytes, snapshot_crc);
-    u64_bytes(&mut bytes, sequence);
-    u64_bytes(&mut bytes, graph.links.len() as u64);
-    u64_bytes(&mut bytes, graph.entry.map_or(u64::MAX, |n| n as u64));
-    u64_bytes(&mut bytes, graph.rng_state);
-    for layers in graph.links {
-        bytes.push(layers.len() as u8);
-        for links in layers {
-            u32_bytes(&mut bytes, links.len() as u32);
-            for link in links {
-                u32_bytes(&mut bytes, link as u32);
-            }
-        }
-    }
-    if bytes.len() + 4 > MAX_BYTES {
-        return Err(Error::InvalidInput("graph cache exceeds size limit".into()));
-    }
-    let crc = crc32(&bytes);
-    u32_bytes(&mut bytes, crc);
+    let (entry, rng_state) = index.graph_header();
     let temporary = path.join("index.tmp");
-    let mut file = OpenOptions::new()
+    let file = OpenOptions::new()
         .create(true)
         .truncate(true)
         .write(true)
         .open(&temporary)?;
-    crate::storage_io::write(&mut file, &bytes, "cache.write")?;
+    let mut writer = crate::stream::Writer::new(file, MAX_BYTES, "cache.write");
+    writer.bytes(MAGIC)?;
+    writer.u32(1)?;
+    writer.u32(snapshot_crc)?;
+    writer.u64(sequence)?;
+    writer.u64(index.capacity().physical_nodes as u64)?;
+    writer.u64(entry.map_or(u64::MAX, |n| n as u64))?;
+    writer.u64(rng_state)?;
+    for layers in index.graph_links() {
+        writer.u8(layers.len() as u8)?;
+        for links in layers {
+            writer.u32(links.len() as u32)?;
+            for &link in links {
+                writer.u32(link as u32)?;
+            }
+        }
+    }
+    let (file, _) = writer.finish()?;
     crate::storage_io::check("cache.sync")?;
     file.sync_all()?;
     drop(file);
@@ -66,20 +58,8 @@ pub(crate) fn read(
     count: usize,
 ) -> Result<GraphState> {
     let file = File::open(path.join("index.bin"))?;
-    if file.metadata()?.len() > MAX_BYTES as u64 {
-        return Err(Error::Corrupt("graph cache exceeds size limit".into()));
-    }
-    let mut bytes = Vec::new();
-    file.take(MAX_BYTES as u64 + 1).read_to_end(&mut bytes)?;
-    if bytes.len() < 52 || bytes.len() > MAX_BYTES {
-        return Err(Error::Corrupt("invalid graph cache length".into()));
-    }
-    let end = bytes.len() - 4;
-    if crc32(&bytes[..end]) != u32::from_le_bytes(bytes[end..].try_into().unwrap()) {
-        return Err(Error::Corrupt("graph cache checksum mismatch".into()));
-    }
-    let mut reader = Reader::new(&bytes[..end]);
-    if reader.take(8)? != MAGIC
+    let mut reader = crate::stream::Reader::new(file, 52, MAX_BYTES)?;
+    if &reader.array::<8>()? != MAGIC
         || reader.u32()? != 1
         || reader.u32()? != snapshot_crc
         || reader.u64()? != sequence

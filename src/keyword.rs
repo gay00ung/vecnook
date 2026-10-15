@@ -211,12 +211,20 @@ pub(crate) fn fuse(
     rrf_k: usize,
     k: usize,
 ) -> (Vec<HybridNeighbor>, usize) {
-    let mut merged = BTreeMap::<u64, HybridNeighbor>::new();
+    struct Candidate<'a> {
+        document: &'a Document,
+        score: f64,
+        vector_rank: Option<usize>,
+        keyword_rank: Option<usize>,
+        distance: Option<f64>,
+        keyword_score: Option<f64>,
+    }
+    let mut merged = BTreeMap::<u64, Candidate<'_>>::new();
     for (rank, neighbor) in vector.neighbors.iter().enumerate() {
         merged.insert(
             neighbor.document.id,
-            HybridNeighbor {
-                document: neighbor.document.clone(),
+            Candidate {
+                document: &neighbor.document,
                 score: 1.0 / (rrf_k as f64 + rank as f64 + 1.0),
                 vector_rank: Some(rank + 1),
                 keyword_rank: None,
@@ -228,8 +236,8 @@ pub(crate) fn fuse(
     for (rank, neighbor) in keyword.neighbors.iter().enumerate() {
         let fused = merged
             .entry(neighbor.document.id)
-            .or_insert_with(|| HybridNeighbor {
-                document: neighbor.document.clone(),
+            .or_insert_with(|| Candidate {
+                document: &neighbor.document,
                 score: 0.0,
                 vector_rank: None,
                 keyword_rank: None,
@@ -248,5 +256,18 @@ pub(crate) fn fuse(
             .then(a.document.id.cmp(&b.document.id))
     });
     ranked.truncate(k);
-    (ranked, count)
+    (
+        ranked
+            .into_iter()
+            .map(|c| HybridNeighbor {
+                document: c.document.clone(),
+                score: c.score,
+                vector_rank: c.vector_rank,
+                keyword_rank: c.keyword_rank,
+                distance: c.distance,
+                keyword_score: c.keyword_score,
+            })
+            .collect(),
+        count,
+    )
 }

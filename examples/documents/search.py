@@ -3,6 +3,7 @@
 
 import argparse
 from dataclasses import dataclass
+from datetime import date, datetime, timezone
 import json
 import hashlib
 import os
@@ -30,6 +31,8 @@ class Chunk:
     start_line: int
     end_line: int
     text: str
+    file_bytes: int = 0
+    modified: str = ""
 
 
 def read_chunks(root, *, allow_empty=False, include_sources=False):
@@ -66,6 +69,7 @@ def read_chunks(root, *, allow_empty=False, include_sources=False):
         if files > 512 or path.stat().st_size > MAX_FILE:
             raise ValueError("document limit: 512 files, 1 MiB per file")
         raw = path.read_bytes()
+        modified = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc).date().isoformat()
         total += len(raw)
         if len(raw) > MAX_FILE or total > MAX_TOTAL:
             raise ValueError("document byte limit exceeded")
@@ -87,7 +91,7 @@ def read_chunks(root, *, allow_empty=False, include_sources=False):
             for piece in pieces:
                 if text and len((text + piece).encode("utf-8")) > CHUNK_BYTES:
                     if text.strip():
-                        chunks.append(Chunk(source, start, end, text))
+                        chunks.append(Chunk(source, start, end, text, len(raw), modified))
                     text = ""
                 if not text:
                     start = line_number
@@ -96,7 +100,7 @@ def read_chunks(root, *, allow_empty=False, include_sources=False):
                 if len(chunks) >= MAX_CHUNKS:
                     raise ValueError("document limit: 10,000 chunks")
         if text.strip():
-            chunks.append(Chunk(source, start, end, text))
+            chunks.append(Chunk(source, start, end, text, len(raw), modified))
         if len(chunks) > MAX_CHUNKS:
             raise ValueError("document limit: 10,000 chunks")
     if not chunks and not allow_empty:
@@ -173,7 +177,7 @@ def coordinates(vector):
     return ",".join(format(value, ".9g") for value in vector)
 
 
-def encode_document(identifier, chunk, tags):
+def encode_document(identifier, chunk, tags, numbers=None, dates=None):
     if not 0 <= identifier <= 2**64 - 1 or len(tags) > 32 or len(set(tags)) != len(tags):
         raise ValueError("document ID/tag limits exceeded")
     data = struct.pack("<QII", identifier, chunk.start_line, chunk.end_line)
@@ -188,10 +192,34 @@ def encode_document(identifier, chunk, tags):
         if not tag or "\0" in tag:
             raise ValueError("document tags must be nonempty and contain no NUL")
         data += string(tag, 128)
-    payload = "VDOC1:" + data.hex()
+    numbers, dates = numbers or {}, dates or {}
+    if len(numbers) > 32 or len(dates) > 32:
+        raise ValueError("at most 32 attributes per type")
+    def field(key):
+        if not key or "\0" in key:
+            raise ValueError("attribute keys must be nonempty without NUL")
+        return string(key, 128)
+    if numbers or dates:
+        data += struct.pack("<I", len(numbers))
+        for key, value in sorted(numbers.items()):
+            value = float(value)
+            if not math.isfinite(value):
+                raise ValueError("numeric attributes must be finite")
+            data += field(key) + struct.pack("<d", 0.0 if value == 0 else value)
+        data += struct.pack("<I", len(dates))
+        for key, value in sorted(dates.items()):
+            parsed = date.fromisoformat(value)
+            if parsed.isoformat() != value:
+                raise ValueError("date must be YYYY-MM-DD")
+            data += field(key) + struct.pack("<I", parsed.year * 10000 + parsed.month * 100 + parsed.day)
+    payload = ("VDOC2:" if numbers or dates else "VDOC1:") + data.hex()
     if len(payload) > 16 * 1024:
         raise ValueError("encoded document payload exceeds 16 KiB")
     return payload
+
+
+def chunk_metadata(chunk, enabled):
+    return ({"file_bytes": chunk.file_bytes}, {"modified": chunk.modified}) if enabled else ({}, {})
 
 
 SYNC_PREFIX = "vecnook:sync:v1:"
@@ -236,7 +264,7 @@ def index_documents(args, client):
     with tempfile.TemporaryDirectory(prefix="vecnook-import-") as temporary:
         grouped = {}
         for index, (chunk, vector) in enumerate(zip(chunks, vectors)):
-            payload = encode_document(index, chunk, tags)
+            payload = encode_document(index, chunk, tags, *chunk_metadata(chunk, getattr(args, "record_metadata", False)))
             rows, size = grouped.setdefault(chunk.source, ([], [13]))
             rows.append(f"put\t{index}\t{coordinates(vector)}\t{payload}\n")
             size[0] += 13 + len(vector) * 4 + len(payload.encode())
@@ -301,6 +329,10 @@ def sync_documents(args, client):
             stored.setdefault(document["source"], []).append(document)
         else:
             unmanaged.add(document["source"])
+    record_metadata = getattr(args, "record_metadata", None)
+    if record_metadata is None:
+        record_metadata = any("file_bytes" in d.get("numbers", {}) or "modified" in d.get("dates", {})
+                              for docs in stored.values() for d in docs)
     incoming = {source: [] for source in sources}
     for chunk in chunks:
         incoming[chunk.source].append(chunk)
@@ -315,8 +347,8 @@ def sync_documents(args, client):
                 old = sorted(stored.get(source, []), key=lambda d: int(d["id"]))
                 if old:
                     next_id = max(next_id, int(old[-1]["id"]) + 1)
-                old_content = [(d["text"], d["start_line"], d["end_line"], d["tags"]) for d in old]
-                new_content = [(c.text, c.start_line, c.end_line, tags) for c in source_chunks]
+                old_content = [(d["text"], d["start_line"], d["end_line"], d["tags"], d.get("numbers", {}), d.get("dates", {})) for d in old]
+                new_content = [(c.text, c.start_line, c.end_line, tags, *chunk_metadata(c, record_metadata)) for c in source_chunks]
                 if old_content == new_content:
                     unchanged += 1
                     continue
@@ -343,7 +375,7 @@ def sync_documents(args, client):
                             raise ValueError("document ID space exhausted")
                         identifier = next_id
                         used.add(identifier)
-                    payload = encode_document(identifier, chunk, tags)
+                    payload = encode_document(identifier, chunk, tags, *chunk_metadata(chunk, record_metadata))
                     payload_bytes += 13 + 4 * len(vector) + len(payload.encode())
                     rows.append(f"put\t{identifier}\t{coordinates(vector)}\t{payload}\n")
                 for document in old[len(source_chunks):]:
@@ -408,6 +440,8 @@ def search_documents(args, client):
         filters.extend(["--tag", tag])
     if getattr(args, "source", None) is not None:
         filters.extend(["--source", args.source])
+    if getattr(args, "where", None) is not None:
+        filters.extend(["--where", args.where])
     space = [db.parent, db.name, manifest["dimensions"], manifest["model"], "cosine"]
     if mode == "keyword":
         response = json.loads(cli(args.binary, "docs-keywords", *space, args.query, args.k, *filters))
@@ -463,8 +497,12 @@ def main():
     search.add_argument("--json", action="store_true")
     search.add_argument("--tag", dest="tags", action="append", default=[])
     search.add_argument("--source", help="exact source-relative path")
+    search.add_argument("--where", help='Boolean expression, e.g. tag("rust") AND number("file_bytes") >= 100')
     search.add_argument("--mode", choices=["auto", "vector", "keyword", "hybrid"], default="vector",
                         help="auto uses hybrid for identifiers and vector for prose questions")
+    for command in [index, sync]:
+        command.add_argument("--record-metadata", action=argparse.BooleanOptionalAction, default=None,
+                             help="record file_bytes and UTC modified date; sync infers the existing setting")
     # Native docs-sync/docs-find keep the origin next to the command's own flags.
     for command in [index, sync, search]:
         command.add_argument("--ollama-url", default=argparse.SUPPRESS,

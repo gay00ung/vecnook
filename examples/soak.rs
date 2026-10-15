@@ -8,8 +8,8 @@ use std::{
     time::{Duration, Instant},
 };
 use vecnook::{
-    Collection, Config, Database, Document, DocumentFilter, DocumentMutation, HybridSearchOptions,
-    Mutation, SearchOptions, SearchReason, VectorIndex,
+    Collection, Config, Database, Date, Document, DocumentFilter, DocumentMutation, FilterExpr,
+    HybridSearchOptions, Mutation, SearchOptions, SearchReason, SearchStrategy, VectorIndex,
 };
 type Model = BTreeMap<u64, ([f32; 4], String)>;
 fn hex(bytes: &[u8]) -> String {
@@ -88,6 +88,18 @@ fn verify(db: &Database, model: &Model) {
 fn document(id: u64, text: &str) -> Document {
     let mut document = Document::new(id, text, format!("source-{}.md", id % 7));
     document.tags = vec!["all".into(), format!("bucket-{}", id % 3)];
+    let step: u64 = text.split_whitespace().nth(3).unwrap().parse().unwrap();
+    if !id.is_multiple_of(4) {
+        document = document.with_number("revision", step as f64).unwrap();
+    }
+    if !id.is_multiple_of(5) {
+        document = document
+            .with_date(
+                "modified",
+                Date::new(2026, 10, 1 + ((step + id) % 28) as u32).unwrap(),
+            )
+            .unwrap();
+    }
     document
 }
 fn verify_documents(collection: &Collection, model: &Model) {
@@ -149,6 +161,65 @@ fn verify_documents(collection: &Collection, model: &Model) {
         oracle.into_iter().take(10).collect::<Vec<_>>()
     );
     collection.check_invariants().unwrap();
+    // Independent eligibility oracle from the ACK model, including missing fields,
+    // changing attributes on replacement, OR, AND and NOT. Do not use filter evaluation.
+    let expression = FilterExpr::parse(r#"(NOT tag("bucket-1") AND number("revision") >= 100) OR (date("modified") <= "2026-10-14" AND NOT source("source-2.md"))"#).unwrap();
+    let expected = model
+        .iter()
+        .filter_map(|(&id, (_, text))| {
+            let step: u64 = text.split_whitespace().nth(3).unwrap().parse().unwrap();
+            ((id % 3 != 1 && !id.is_multiple_of(4) && step >= 100)
+                || (!id.is_multiple_of(5) && (step + id) % 28 < 14 && id % 7 != 2))
+                .then_some(id)
+        })
+        .collect::<std::collections::BTreeSet<_>>();
+    let filter = DocumentFilter::default().with_expression(&expression);
+    let vector = collection
+        .search(
+            &vector_query,
+            model.len(),
+            SearchOptions::default().with_strategy(SearchStrategy::Exact),
+            filter,
+        )
+        .unwrap();
+    assert_eq!(vector.search.eligible_count, expected.len());
+    assert_eq!(
+        vector
+            .neighbors
+            .iter()
+            .map(|n| n.document.id)
+            .collect::<std::collections::BTreeSet<_>>(),
+        expected
+    );
+    // Every authored chunk contains this token, so lexical and fused sets must agree.
+    let lexical = collection
+        .search_keywords("original", model.len(), filter)
+        .unwrap();
+    assert_eq!(
+        lexical
+            .neighbors
+            .iter()
+            .map(|n| n.document.id)
+            .collect::<std::collections::BTreeSet<_>>(),
+        expected
+    );
+    let fused = collection
+        .search_hybrid(
+            &vector_query,
+            "original",
+            model.len(),
+            HybridSearchOptions::default().with_candidates(512),
+            filter,
+        )
+        .unwrap();
+    assert_eq!(
+        fused
+            .neighbors
+            .iter()
+            .map(|n| n.document.id)
+            .collect::<std::collections::BTreeSet<_>>(),
+        expected
+    );
 }
 fn verify_policy(index: &VectorIndex) {
     let report = index
@@ -177,7 +248,7 @@ fn progress(
 ) -> std::io::Result<()> {
     let elapsed = start.elapsed().as_secs_f64();
     let text = format!(
-        "{{\"workload\":\"vectors+bm25+rrf+selective-auto\",\"completed\":{complete},\"elapsed_seconds\":{elapsed},\"ack_mutations\":{mutations},\"restarts\":{restarts},\"backups_verified\":{backups},\"duration_gate_24h\":{},\"mutation_gate_100k\":{}}}\n",
+        "{{\"workload\":\"vectors+bm25+rrf+selective-auto+compound-ranges+streamed-compaction\",\"completed\":{complete},\"elapsed_seconds\":{elapsed},\"ack_mutations\":{mutations},\"restarts\":{restarts},\"backups_verified\":{backups},\"duration_gate_24h\":{},\"mutation_gate_100k\":{}}}\n",
         elapsed >= 86400.0,
         mutations >= 100000
     );

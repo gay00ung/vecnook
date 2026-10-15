@@ -9,8 +9,8 @@ use std::{
 
 use vecnook::{
     Collection, Config, Database, Document, DocumentFilter, DocumentMutation, EmbeddingSpace,
-    Error, HybridSearchOptions, MaintenancePolicy, Metric, Mutation, Result, SearchOptions,
-    SearchStrategy,
+    Error, FilterExpr, HybridSearchOptions, MaintenancePolicy, Metric, Mutation, Result,
+    SearchOptions, SearchStrategy,
     bench::{self, BenchConfig, Dataset},
 };
 
@@ -20,8 +20,8 @@ mod demo_data;
 const HELP: &str = "vecnook: dependency-free vector database\n\
 Usage:\n\
   vecnook demo [demo-root] [prepared-query=1..3]\n\
-  vecnook docs-sync <markdown-folder> --db <collection-dir> [--model name] [--tag value] [--namespace name] [--prune]\n\
-  vecnook docs-find <question> --db <collection-dir> [--mode auto|hybrid|vector|keyword] [--k N] [--json] [--tag value] [--source value]\n\
+  vecnook docs-sync <markdown-folder> --db <collection-dir> [--model name] [--tag value] [--namespace name] [--prune] [--record-metadata|--no-record-metadata]\n\
+  vecnook docs-find <question> --db <collection-dir> [--mode auto|hybrid|vector|keyword] [--k N] [--json] [--tag value] [--source value] [--where expression]\n\
   vecnook init <db-dir> <dimensions> [m] [ef-construction] [seed] [--metric l2|cosine|ip]\n\
   vecnook put <db-dir> <id> <comma-separated-vector> [metadata]\n\
   vecnook get <db-dir> <id>\n\
@@ -44,9 +44,9 @@ Usage:\n\
   vecnook docs-info <root> <name>\n\
   vecnook docs-list <root> <name> <dimensions> <model-identity> <metric> [after-id|-] [limit=128]\n\
   vecnook docs-batch <root> <name> <dimensions> <model-identity> <metric> <tsv-file> [--if-sequence N]\n\
-  vecnook docs-search <root> <name> <dimensions> <model-identity> <metric> <vector> [k] [ef] [auto|hnsw|exact] [--tag value] [--source value]\n\
-  vecnook docs-keywords <root> <name> <dimensions> <model-identity> <metric> <text> [k] [--tag value] [--source value]\n\
-  vecnook docs-hybrid <root> <name> <dimensions> <model-identity> <metric> <vector> <text> [k] [--candidates N] [--rrf-k N] [--tag value] [--source value]\n\
+  vecnook docs-search <root> <name> <dimensions> <model-identity> <metric> <vector> [k] [ef] [auto|hnsw|exact] [--tag value] [--source value] [--where expression]\n\
+  vecnook docs-keywords <root> <name> <dimensions> <model-identity> <metric> <text> [k] [--tag value] [--source value] [--where expression]\n\
+  vecnook docs-hybrid <root> <name> <dimensions> <model-identity> <metric> <vector> <text> [k] [--candidates N] [--rrf-k N] [--tag value] [--source value] [--where expression]\n\
   vecnook docs-checkpoint <root> <name> <dimensions> <model-identity> <metric>\n\
   vecnook bench [count=10000] [dimensions=512] [queries=200] [ef=128] [seed=42] [clustered|uniform] [l2|cosine|ip]\n\
   vecnook bench-file <base.fvecs> <query.fvecs> [count=10000] [queries=200] [ef=128] [l2|cosine|ip]\n\n\
@@ -440,7 +440,7 @@ fn json_string(value: &str) -> String {
 }
 
 fn document_json(document: &Document) -> String {
-    format!(
+    let mut result = format!(
         "{{\"schema_version\":1,\"id\":{},\"source\":{},\"text\":{},\"start_line\":{},\"end_line\":{},\"tags\":[{}]}}",
         json_string(&document.id.to_string()),
         json_string(&document.source),
@@ -453,7 +453,32 @@ fn document_json(document: &Document) -> String {
             .map(|tag| json_string(tag))
             .collect::<Vec<_>>()
             .join(",")
-    )
+    );
+    if !document.numbers.is_empty() || !document.dates.is_empty() {
+        result.pop();
+        if !document.numbers.is_empty() {
+            let fields = document
+                .numbers
+                .iter()
+                .map(|(key, value)| format!("{}:{}", json_string(key), value))
+                .collect::<Vec<_>>()
+                .join(",");
+            result.push_str(&format!(",\"numbers\":{{{fields}}}"));
+        }
+        if !document.dates.is_empty() {
+            let fields = document
+                .dates
+                .iter()
+                .map(|(key, value)| {
+                    format!("{}:{}", json_string(key), json_string(&value.to_string()))
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            result.push_str(&format!(",\"dates\":{{{fields}}}"));
+        }
+        result.push('}');
+    }
+    result
 }
 
 fn document_command(args: &[String]) -> Result<()> {
@@ -546,12 +571,16 @@ fn document_command(args: &[String]) -> Result<()> {
             }
             let mut source = None;
             let mut tags = Vec::new();
+            let mut expression = None;
             let mut candidates = None;
             let mut rrf_k = None;
             for pair in flags.as_chunks::<2>().0 {
                 match pair[0].as_str() {
                     "--source" if source.is_none() => source = Some(pair[1].as_str()),
                     "--tag" => tags.push(pair[1].as_str()),
+                    "--where" if expression.is_none() => {
+                        expression = Some(FilterExpr::parse(&pair[1])?)
+                    }
                     "--candidates" if hybrid && candidates.is_none() => {
                         candidates = Some(parse(&pair[1], "candidates")?)
                     }
@@ -567,7 +596,8 @@ fn document_command(args: &[String]) -> Result<()> {
             }
             let filter = DocumentFilter::default()
                 .with_optional_source(source)
-                .with_tags(&tags);
+                .with_tags(&tags)
+                .with_optional_expression(expression.as_ref());
             if hybrid {
                 let query = vector_values(&extra[0])?;
                 let options = HybridSearchOptions::default()
@@ -703,8 +733,8 @@ fn document_command(args: &[String]) -> Result<()> {
             require_count(
                 extra,
                 1,
-                70,
-                "docs-search ... <vector> [k] [ef] [strategy] [--tag value] [--source value]",
+                74,
+                "docs-search ... <vector> [k] [ef] [strategy] [--tag value] [--source value] [--where expression]",
             )?;
             let query = vector_values(&extra[0])?;
             let flag = extra
@@ -738,10 +768,14 @@ fn document_command(args: &[String]) -> Result<()> {
             }
             let mut source = None;
             let mut tags = Vec::new();
+            let mut expression = None;
             for pair in flags.as_chunks::<2>().0 {
                 match pair[0].as_str() {
                     "--source" if source.is_none() => source = Some(pair[1].as_str()),
                     "--tag" => tags.push(pair[1].as_str()),
+                    "--where" if expression.is_none() => {
+                        expression = Some(FilterExpr::parse(&pair[1])?)
+                    }
                     _ => {
                         return Err(Error::InvalidInput(
                             "unknown/duplicate document filter flag".into(),
@@ -757,7 +791,8 @@ fn document_command(args: &[String]) -> Result<()> {
                     .with_ef_search(ef_search),
                 DocumentFilter::default()
                     .with_optional_source(source)
-                    .with_tags(&tags),
+                    .with_tags(&tags)
+                    .with_optional_expression(expression.as_ref()),
             )?;
             let documents = report
                 .neighbors
