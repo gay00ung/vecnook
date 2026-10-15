@@ -27,6 +27,12 @@ the checked receipt JSON to that candidate's GitHub release. The Publish workflo
 requires `candidate_version=VERSION-rc.N` and rejects missing or mismatched evidence.
 Prerelease publication can proceed with those stable-only gates explicitly pending.
 
+For local publication, run `tools/check_release.py` with the candidate archive,
+all distribution receipts, completed soak receipt and `--release-crate` for the
+prepared stable archive. After that gate and the clean commit's CI pass, existing
+local Cargo authentication can publish with `cargo publish --locked`; the same
+evidence requirements apply as in the workflow.
+
 Follow the [Cargo publishing instructions](https://doc.rust-lang.org/cargo/reference/publishing.html) to sign in, verify the registry account, and create a narrowly scoped token for this crate. Use `cargo login` locally, or store the token in the repository's `CARGO_REGISTRY_TOKEN` Actions secret. Keep it out of source, command-line arguments and logs.
 
 The `Publish` workflow uses `workflow_dispatch`. Its default mode verifies the package without uploading it. Select `publish=true` on the intended commit only after checking CI and credentials. The publishing step refuses an empty credential and uses Cargo's environment credential provider. It is never run for a pull request.
@@ -35,7 +41,7 @@ Before publication, the source package must contain installation instructions fo
 
 ## GitHub source release
 
-Create an annotated `vVERSION` tag on the checked commit and push it. Attach the `.crate` source archive and its SHA-256 digest to a GitHub prerelease. Include the version, supported systems, storage compatibility, new behavior, validation and measured limits. Install once from the actual remote tag, independently of the working tree.
+Create an annotated `vVERSION` tag on the checked commit and push it. Attach the `.crate` source archive and its SHA-256 digest to a GitHub release, marking release candidates as prereleases. Include the version, supported systems, storage compatibility, new behavior, validation and measured limits. Install once from the actual remote tag, independently of the working tree.
 
 Publish the registry version before pushing its tag. Tag CI installs the exact
 registry version with a fresh Cargo cache and preserves one distribution receipt

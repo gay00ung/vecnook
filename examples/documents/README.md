@@ -15,7 +15,7 @@ vecnook docs-find "write_batch_if_sequence" --db data/notes --json
 These commands work outside the checkout. `docs-find` defaults to automatic
 vector/hybrid selection; `--mode keyword` skips embedding calls. The direct
 Python `search` command below keeps its existing vector default and also accepts
-`--mode auto|vector|keyword|hybrid`. See the [candidate quickstart](../../docs/quickstart.md#search-your-own-folder-in-the-11-candidate).
+`--mode auto|vector|keyword|hybrid`. See the [first-use guide](../../docs/quickstart.md#search-your-own-folder).
 
 From the repository root:
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0 — 2026-10-15
+
+- Promote the checked `1.1.0-rc.1` document-search implementation to stable. Runtime source, tests, tools and build settings match the registered candidate after normalizing the package version; the existing 1.x API, JSON v1 and storage/model contracts remain compatible.
+- Complete the registered archive's 86,401-second mixed workload with 189,284 acknowledged mutations, 89 restarts and 17 independent backup verifications. Exact-registry consumers pass on Linux, macOS, Windows Server and Windows 11 ARM64/NTFS with Rust 1.89 and current stable.
+- Provide exact stable-version installation instructions and the measured search/first-use results in [1.1 validation](docs/validation-1.1.md). BM25/RRF, selective-filter Auto search and installed folder commands are described below.
+
 ## 1.1.0-rc.1 — 2026-10-14
 
 - Add standard-library BM25 document postings and RRF hybrid search with indexed source/tag filters, branch ranks/scores and deterministic ties. Rebuild postings from existing original payloads after restart, backup and import; preserve API/JSON v1 and storage compatibility.

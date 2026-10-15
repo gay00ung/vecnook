@@ -1,6 +1,6 @@
 # Release candidate validation
 
-The 1.1 candidate preserves the public application API, CLI JSON v1 and storage/model
+The 1.1 release preserves the public application API, CLI JSON v1 and storage/model
 contracts in [compatibility.md](compatibility.md). Runtime changes after a candidate
 require another RC and repeated affected validation. Stable publication is a
 separate step with additional duration and desktop-system requirements.
@@ -55,6 +55,11 @@ GitHub release. The stable `Publish` workflow downloads these and the registry
 archive, compares evidence and prepared stable source, then permits upload.
 Missing, incomplete or mismatched evidence stops publication. A prerelease may be
 published while stable-only checks remain pending; release notes show their status.
+
+Local publication uses the same `check_release.py` gate with the prepared stable
+archive before `cargo publish --locked`. Existing Cargo credentials remain in the
+local credential store. The 1.1 validation record includes the completed registered
+candidate workload and its attached receipts in [validation-1.1.md](validation-1.1.md).
 
 External first-run observations and real apps' repeat usage are adoption goals.
 Repository examples do not count as external users. Record that evidence separately
