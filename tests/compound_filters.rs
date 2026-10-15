@@ -247,7 +247,7 @@ fn random_expression_trees_match_document_scan_and_legacy_intersection() {
             Unbounded,
             Excluded(Date::new(2026, 10, 1 + (next() % 28) as u32).unwrap()),
         );
-        let expr = if next().is_multiple_of(2) {
+        let expr = if (next() >> 32).is_multiple_of(2) {
             FilterExpr::all(vec![a.negated(), FilterExpr::any(vec![b, d])])
         } else {
             FilterExpr::any(vec![a, FilterExpr::all(vec![b, d.negated()])])
@@ -411,7 +411,9 @@ fn typed_payload_roundtrip_old_bytes_and_corrupt_bounds() {
     }
     let base = original.to_payload().unwrap();
     let base = base.as_bytes()[6..]
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|p| u8::from_str_radix(std::str::from_utf8(p).unwrap(), 16).unwrap())
         .collect::<Vec<_>>();
     let numeric = |value: f64| {
@@ -532,4 +534,32 @@ fn worker_accepts_owned_compound_filters_and_rejects_invalid_bounds_before_enque
     );
     drop(client);
     drop(worker.join().unwrap());
+}
+
+#[test]
+fn invalid_programmatic_bounds_are_rejected_by_all_search_entry_points() {
+    let temp = TempDir::new();
+    let mut c = Collection::create(temp.path(), "docs", Config::new(1), "fixture").unwrap();
+    let doc = Document::new(1, "common", "a.md")
+        .with_number("score", 2.0)
+        .unwrap();
+    c.put(&doc, &[1.0]).unwrap();
+    let expression = FilterExpr::number_range("score", Included(num(3.0)), Included(num(1.0)));
+    let filter = DocumentFilter::default().with_expression(&expression);
+    for k in [0, 1] {
+        assert!(matches!(
+            c.search(&[1.0], k, SearchOptions::default(), filter),
+            Err(vecnook::Error::InvalidInput(_))
+        ));
+        assert!(matches!(
+            c.search_keywords("common", k, filter),
+            Err(vecnook::Error::InvalidInput(_))
+        ));
+        assert!(matches!(
+            c.search_hybrid(&[1.0], "common", k, HybridSearchOptions::default(), filter),
+            Err(vecnook::Error::InvalidInput(_))
+        ));
+    }
+    assert_eq!(c.sequence(), 1);
+    assert_eq!(c.get(1).unwrap(), Some(doc));
 }
