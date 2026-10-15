@@ -22,6 +22,13 @@ An empty `DocumentFilter` uses unfiltered Auto search. Source equality and all-t
 
 ## Payload bounds and persistence
 
+The 1.1 candidate also maintains a derived keyword index over chunk text.
+`search_keywords` ranks BM25 matches; `search_hybrid` merges vector and keyword
+ranks with RRF. Both use the same source/tag filters and return original chunks.
+Keyword postings follow ordered mutations and rebuild on open/import, including
+legacy collections, backup and restore. See [ranking choices](hybrid-search.md)
+before selecting hybrid for prose questions.
+
 The immutable, checksummed `collection.bin` binds name and embedding space. `describe` checks that header without locking or validating the vector files. `open` also recovers/locks the database, checks config compatibility and validates every active document payload. A missing/damaged header or malformed payload fails opening rather than being skipped.
 
 Document text is bounded to 6000 UTF-8 bytes, a nonempty source to 1024 bytes, and tags to 32 unique nonempty strings of at most 128 bytes each. Lines start at one and end at or after the start. All fields combined must fit 16 KiB of encoded metadata, so simultaneous field maxima can exceed the combined bound.

@@ -4,6 +4,19 @@ This demo turns Markdown into local embeddings, stores each chunk with its sourc
 
 You need Python 3.10+, the Vecnook CLI, and [Ollama](https://ollama.com/download) running locally. The Python client uses only its standard library. Ollama supplies the embedding model; it is not a database dependency.
 
+With the 1.1 candidate, the installed CLI includes this client:
+
+```bash
+vecnook docs-sync ./my-markdown --db data/notes
+vecnook docs-find "How do I recover my documents?" --db data/notes
+vecnook docs-find "write_batch_if_sequence" --db data/notes --json
+```
+
+These commands work outside the checkout. `docs-find` defaults to automatic
+vector/hybrid selection; `--mode keyword` skips embedding calls. The direct
+Python `search` command below keeps its existing vector default and also accepts
+`--mode auto|vector|keyword|hybrid`. See the [first-use guide](../../docs/quickstart.md#search-your-own-folder).
+
 From the repository root:
 
 ```bash

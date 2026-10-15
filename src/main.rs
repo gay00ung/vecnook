@@ -3,13 +3,14 @@ use std::{
     fmt::Display,
     fs::File,
     io::{self, BufRead, Read, Write},
-    process::ExitCode,
+    process::{Command, ExitCode},
     str::FromStr,
 };
 
 use vecnook::{
     Collection, Config, Database, Document, DocumentFilter, DocumentMutation, EmbeddingSpace,
-    Error, MaintenancePolicy, Metric, Mutation, Result, SearchOptions, SearchStrategy,
+    Error, HybridSearchOptions, MaintenancePolicy, Metric, Mutation, Result, SearchOptions,
+    SearchStrategy,
     bench::{self, BenchConfig, Dataset},
 };
 
@@ -19,6 +20,8 @@ mod demo_data;
 const HELP: &str = "vecnook: dependency-free vector database\n\
 Usage:\n\
   vecnook demo [demo-root] [prepared-query=1..3]\n\
+  vecnook docs-sync <markdown-folder> --db <collection-dir> [--model name] [--tag value] [--namespace name] [--prune]\n\
+  vecnook docs-find <question> --db <collection-dir> [--mode auto|hybrid|vector|keyword] [--k N] [--json] [--tag value] [--source value]\n\
   vecnook init <db-dir> <dimensions> [m] [ef-construction] [seed] [--metric l2|cosine|ip]\n\
   vecnook put <db-dir> <id> <comma-separated-vector> [metadata]\n\
   vecnook get <db-dir> <id>\n\
@@ -42,6 +45,8 @@ Usage:\n\
   vecnook docs-list <root> <name> <dimensions> <model-identity> <metric> [after-id|-] [limit=128]\n\
   vecnook docs-batch <root> <name> <dimensions> <model-identity> <metric> <tsv-file> [--if-sequence N]\n\
   vecnook docs-search <root> <name> <dimensions> <model-identity> <metric> <vector> [k] [ef] [auto|hnsw|exact] [--tag value] [--source value]\n\
+  vecnook docs-keywords <root> <name> <dimensions> <model-identity> <metric> <text> [k] [--tag value] [--source value]\n\
+  vecnook docs-hybrid <root> <name> <dimensions> <model-identity> <metric> <vector> <text> [k] [--candidates N] [--rrf-k N] [--tag value] [--source value]\n\
   vecnook docs-checkpoint <root> <name> <dimensions> <model-identity> <metric>\n\
   vecnook bench [count=10000] [dimensions=512] [queries=200] [ef=128] [seed=42] [clustered|uniform] [l2|cosine|ip]\n\
   vecnook bench-file <base.fvecs> <query.fvecs> [count=10000] [queries=200] [ef=128] [l2|cosine|ip]\n\n\
@@ -70,6 +75,9 @@ fn run(args: &[String]) -> Result<()> {
     if matches!(command, "help" | "--help" | "-h") {
         print!("{HELP}");
         return Ok(());
+    }
+    if matches!(command, "docs-sync" | "docs-find") {
+        return markdown_command(args);
     }
     if command.starts_with("docs-") {
         return document_command(args);
@@ -191,6 +199,36 @@ fn run(args: &[String]) -> Result<()> {
         println!("{}", execute(&mut db, command, &args[2..])?);
         Ok(())
     }
+}
+
+// Ship the existing standard-library Markdown client inside the installed binary,
+// so folder sync does not require a repository checkout or a downloaded script.
+fn markdown_command(args: &[String]) -> Result<()> {
+    let python = std::env::var_os("VECNOOK_PYTHON")
+        .unwrap_or_else(|| if cfg!(windows) { "python" } else { "python3" }.into());
+    let mut command = Command::new(python);
+    command
+        .env("PYTHONIOENCODING", "utf-8")
+        .arg("-c")
+        .arg(include_str!("../examples/documents/search.py"))
+        .arg("--binary")
+        .arg(std::env::current_exe()?);
+    if args[0] == "docs-sync" {
+        command.arg("sync");
+    } else {
+        command.args(["search", "--mode", "auto"]);
+    }
+    let status = command.args(&args[1..]).status().map_err(|error| {
+        Error::InvalidInput(format!(
+            "Markdown commands require Python 3.10+ (set VECNOOK_PYTHON to its path): {error}"
+        ))
+    })?;
+    if !status.success() {
+        return Err(Error::InvalidInput(
+            "Markdown command failed; see the message above".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> {
@@ -441,7 +479,7 @@ fn document_command(args: &[String]) -> Result<()> {
     require_count(
         args,
         6,
-        79,
+        90,
         "docs-<command> <root> <name> <dimensions> <model-identity> <metric> [parameters]",
     )?;
     let space = EmbeddingSpace::new(&args[4], parse(&args[3], "dimensions")?, metric(&args[5])?);
@@ -468,6 +506,8 @@ fn document_command(args: &[String]) -> Result<()> {
             | "docs-export"
             | "docs-backup"
             | "docs-search"
+            | "docs-keywords"
+            | "docs-hybrid"
             | "docs-checkpoint"
             | "docs-get"
             | "docs-compact"
@@ -477,6 +517,98 @@ fn document_command(args: &[String]) -> Result<()> {
     let mut collection = Collection::open(&args[1], &args[2], &space)?;
     let extra = &args[6..];
     match command {
+        "docs-keywords" | "docs-hybrid" => {
+            let hybrid = command == "docs-hybrid";
+            let prefix = if hybrid { 2 } else { 1 };
+            require_count(
+                extra,
+                prefix,
+                80,
+                "docs-keywords ... <text> [k]; docs-hybrid ... <vector> <text> [k] [flags]",
+            )?;
+            let flag = extra[prefix..]
+                .iter()
+                .position(|s| s.starts_with("--"))
+                .map_or(extra.len(), |i| prefix + i);
+            let positional = &extra[..flag];
+            require_count(
+                positional,
+                prefix,
+                prefix + 1,
+                "unexpected keyword/hybrid positional arguments",
+            )?;
+            let k = optional(positional, prefix, 10usize, "K")?;
+            let flags = &extra[flag..];
+            if !flags.len().is_multiple_of(2) {
+                return Err(Error::InvalidInput(
+                    "document search flags need values".into(),
+                ));
+            }
+            let mut source = None;
+            let mut tags = Vec::new();
+            let mut candidates = None;
+            let mut rrf_k = None;
+            for pair in flags.as_chunks::<2>().0 {
+                match pair[0].as_str() {
+                    "--source" if source.is_none() => source = Some(pair[1].as_str()),
+                    "--tag" => tags.push(pair[1].as_str()),
+                    "--candidates" if hybrid && candidates.is_none() => {
+                        candidates = Some(parse(&pair[1], "candidates")?)
+                    }
+                    "--rrf-k" if hybrid && rrf_k.is_none() => {
+                        rrf_k = Some(parse(&pair[1], "RRF offset")?)
+                    }
+                    _ => {
+                        return Err(Error::InvalidInput(
+                            "unknown/duplicate document search flag".into(),
+                        ));
+                    }
+                }
+            }
+            let filter = DocumentFilter::default()
+                .with_optional_source(source)
+                .with_tags(&tags);
+            if hybrid {
+                let query = vector_values(&extra[0])?;
+                let options = HybridSearchOptions::default()
+                    .with_candidates(candidates.unwrap_or(64))
+                    .with_rrf_k(rrf_k.unwrap_or(60));
+                let report = collection.search_hybrid(&query, &extra[1], k, options, filter)?;
+                let matches = report.neighbors.iter().map(|n| format!(
+                    "{{\"score\":{},\"vector_rank\":{},\"keyword_rank\":{},\"distance\":{},\"keyword_score\":{},\"document\":{}}}",
+                    n.score, json_optional(n.vector_rank), json_optional(n.keyword_rank),
+                    json_optional(n.distance), json_optional(n.keyword_score), document_json(&n.document)
+                )).collect::<Vec<_>>().join(",");
+                println!(
+                    "{{\"schema_version\":1,\"mode\":\"hybrid\",\"complete\":{},\"candidate_count\":{},\"rrf_k\":{},\"search\":{},\"keyword\":{},\"matches\":[{}]}}",
+                    report.complete,
+                    report.candidate_count,
+                    report.rrf_k,
+                    search_json(&report.vector),
+                    keyword_json(&report.keyword),
+                    matches
+                );
+            } else {
+                let report = collection.search_keywords(&extra[0], k, filter)?;
+                let matches = report
+                    .neighbors
+                    .iter()
+                    .map(|n| {
+                        format!(
+                            "{{\"score\":{},\"document\":{}}}",
+                            n.score,
+                            document_json(&n.document)
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(",");
+                println!(
+                    "{{\"schema_version\":1,\"mode\":\"keyword\",\"keyword\":{},\"matches\":[{}]}}",
+                    keyword_json(&report),
+                    matches
+                );
+            }
+        }
         "docs-export" => {
             require_count(extra, 1, 1, "docs-export ... <new-export-file>")?;
             collection.export(&extra[0])?;
@@ -721,6 +853,17 @@ fn search_json(report: &vecnook::SearchReport) -> String {
         report.filter_evaluations,
         report.reason,
         neighbors.join(",")
+    )
+}
+
+fn json_optional(value: Option<impl Display>) -> String {
+    value.map_or_else(|| "null".to_owned(), |v| v.to_string())
+}
+
+fn keyword_json(report: &vecnook::KeywordSearchReport) -> String {
+    format!(
+        "{{\"eligible_count\":{},\"matching_count\":{},\"postings_visited\":{}}}",
+        report.eligible_count, report.matching_count, report.postings_visited
     )
 }
 
