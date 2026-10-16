@@ -1,9 +1,10 @@
-# 1.2 candidate validation
+# 1.2 release validation
 
-This candidate implements memory/update cost reductions and indexed Boolean,
+This release implements memory/update cost reductions and indexed Boolean,
 numeric and date filtering. The core remains Rust std-only with Rust 1.89 support.
-Full-duration registry QA and cross-platform distribution evidence are required
-before promoting it to stable; this document does not claim those checks complete.
+The registered candidate completed the full 24-hour QA on 2026-10-16. Eight
+cross-platform registry distribution receipts also pass; the completed evidence
+is linked below.
 
 ## Memory and update comparison
 
@@ -83,12 +84,29 @@ fixture, not improvement on arbitrary documents. Separately, 320-record fixtures
 in all three metrics produce byte-identical snapshots/graph caches and identical
 HNSW reports between the two binaries before any tombstone reclamation.
 
-## Candidate QA and promotion
+## Completed registry QA and promotion
 
-The mixed workload derives changing numeric/date attributes from its independent
-ACK model, checks Boolean eligibility across all three ranking modes, and repeats
-compaction, restart, backup and import. Stable requires the actual registry
-archive's completed 86,400-second/100,000-ACK run, matching executable fingerprint,
-eight distribution receipts including Windows 11 NTFS, clean-commit CI and stable
-archive equality through [the release gate](release-readiness.md). Failed or
-interrupted runs remain preserved and cannot supply successful evidence.
+The exact crates.io `1.2.0-rc.1` archive ran from 2026-10-15 at 13:53:12 KST to
+2026-10-16 at 13:53:12 KST. Its final receipt reports exit code zero,
+`completed=true`, 86,401.130573 elapsed seconds, 189,283 acknowledged mutations,
+89 restarts and 17 independent backup verifications. Both duration and mutation
+gates pass. The receipt, progress file and final stdout agree; stderr is empty.
+The archive, executed workload and current runtime/test/build fingerprints match.
+See the [completed receipt](https://github.com/gay00ung/vecnook/releases/download/v1.2.0-rc.1/soak-receipt.json).
+
+The workload derives changing numeric/date attributes from an independent ACK
+model, checks Boolean eligibility across all three ranking modes, and repeats
+compaction, restart, backup and logical import. Failed or interrupted runs cannot
+supply successful release evidence.
+
+All ten [candidate tag-CI jobs passed](https://github.com/gay00ung/vecnook/actions/runs/38683872221),
+including eight fresh-cache exact-registry CLI/library consumers across Linux,
+macOS, Windows Server and Windows 11 ARM64 with Rust 1.89 and current stable.
+Both Windows 11 receipts record desktop product type 1 and NTFS. The individual
+`distribution-*.json` receipts are attached to the
+[candidate release](https://github.com/gay00ung/vecnook/releases/tag/v1.2.0-rc.1).
+
+Stable promotion changes the package version and Markdown documentation only.
+[The release gate](release-readiness.md) checks all receipts and requires identical
+normalized runtime, tests, tools and build settings in the prepared stable archive;
+publication also requires the clean stable commit's CI to pass.

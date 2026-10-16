@@ -4,7 +4,7 @@ This demo turns Markdown into local embeddings, stores each chunk with its sourc
 
 You need Python 3.10+, the Vecnook CLI, and [Ollama](https://ollama.com/download) running locally. The Python client uses only its standard library. Ollama supplies the embedding model; it is not a database dependency.
 
-With the 1.2 candidate, the installed CLI includes this client:
+In 1.2.0, the installed CLI includes this client:
 
 ```bash
 vecnook docs-sync ./my-markdown --db data/notes

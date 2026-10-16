@@ -95,7 +95,7 @@ Document listing uses a decimal string `sequence`, a nullable decimal string `ne
 
 ## Migrating from 1.1 to 1.2
 
-The 1.2 candidate preserves existing Rust methods, public fields, Document's Eq
+The 1.2 release preserves existing Rust methods, public fields, Document's Eq
 contract, JSON required fields and low-level snapshot/WAL/cache formats. New
 `Number`, `Date` and `FilterExpr` types and builders add compound filtering.
 Source/tag-only documents retain byte-identical VDOC1 encoding. Adding numeric or

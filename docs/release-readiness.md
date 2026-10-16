@@ -64,5 +64,5 @@ candidate workload and its attached receipts in [validation-1.1.md](validation-1
 External first-run observations and real apps' repeat usage are adoption goals.
 Repository examples do not count as external users. Record that evidence separately
 through the [feedback forms](feedback.md). These observations are not a release
-approval requirement. The 1.2 candidate's [memory/filter measurements](validation-1.2.md)
-are separate from the completed 1.1 record.
+approval requirement. The 1.2 [memory/filter measurements and completed registry QA](validation-1.2.md)
+are recorded separately from the completed 1.1 run.

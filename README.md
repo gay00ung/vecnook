@@ -2,12 +2,12 @@
 
 A small embedded vector database for Rust applications, built with the standard library. Vecnook implements its own HNSW graph, exact search, and persistent storage. It has no external crates or vector search library dependencies.
 
-**1.2.0-rc.1** adds [Boolean and range filters](docs/compound-filters.md) and reduces memory used by checkpoints, reopening and compaction. See [candidate measurements and QA status](docs/validation-1.2.md). This is a release candidate; stable promotion follows the full registry-bound 24-hour QA.
+**1.2.0** adds [Boolean and range filters](docs/compound-filters.md) and reduces memory used by checkpoints, reopening and compaction. The registered candidate passed the full 24-hour QA. See [measurements and release validation](docs/validation-1.2.md).
 
 [![CI](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml/badge.svg)](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml)
-[crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/1.2.0-rc.1/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
+[crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/1.2.0/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
 
-**Vecnook targets local Rust applications.** Use one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS, Linux and Windows. The index stays in RAM. [Release validation](docs/validation-1.1.md) includes a full 24-hour workload and Windows 11 NTFS verification. See [compatibility](docs/compatibility.md) before upgrading from 0.3.
+**Vecnook targets local Rust applications.** Use one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS, Linux and Windows. The index stays in RAM. [Release validation](docs/validation-1.2.md) includes a full 24-hour workload and Windows 11 NTFS verification. See [compatibility](docs/compatibility.md) before upgrading from 0.3.
 
 ## Get started
 
@@ -16,7 +16,7 @@ Install the database and run an [offline prepared-query demo](docs/quickstart.md
 Requires Rust 1.89 or later. The package, library, and executable are all named `vecnook`.
 
 ```bash
-cargo install vecnook --version '=1.2.0-rc.1' --locked
+cargo install vecnook --version '=1.2.0' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -24,20 +24,20 @@ vecnook demo data/first-demo 1
 For a Rust application, add the registry dependency:
 
 ```bash
-cargo add vecnook@=1.2.0-rc.1
+cargo add vecnook@=1.2.0
 ```
 
 Or edit `Cargo.toml`:
 
 ```toml
 [dependencies]
-vecnook = "=1.2.0-rc.1"
+vecnook = "=1.2.0"
 ```
 
-The exact version pins this release; commit your application lockfile as well. The [API reference](https://docs.rs/vecnook/1.2.0-rc.1/vecnook/) documents exported types and methods. See the [API guide](docs/api.md), [compatibility contracts](docs/compatibility.md) and [release procedure](docs/releasing.md). Versioned source is also available through the Git tag:
+The exact version pins this release; commit your application lockfile as well. The [API reference](https://docs.rs/vecnook/1.2.0/vecnook/) documents exported types and methods. See the [API guide](docs/api.md), [compatibility contracts](docs/compatibility.md) and [release procedure](docs/releasing.md). Versioned source is also available through the Git tag:
 
 ```bash
-cargo install --git https://github.com/gay00ung/vecnook --tag v1.2.0-rc.1 --locked
+cargo install --git https://github.com/gay00ung/vecnook --tag v1.2.0 --locked
 ```
 
 To build a checkout:

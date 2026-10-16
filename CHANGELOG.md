@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0 — 2026-10-16
+
+- Promote the checked `1.2.0-rc.1` memory/update improvements and compound document filters to stable, retaining the standard-library-only Rust core and Rust 1.89 support.
+- Complete the registered archive's 86,401.130573-second mixed workload with 189,283 acknowledged mutations, 89 restarts and 17 independent backup verifications. Eight exact-registry consumers pass on Linux, macOS, Windows Server and Windows 11 ARM64/NTFS with Rust 1.89 and current stable.
+- Preserve the candidate's normalized runtime, tests, tools and build settings. Provide exact stable installation instructions, [measured results](docs/validation-1.2.md) and [reader migration guidance](docs/compatibility.md#migrating-from-11-to-12).
+
 ## 1.2.0-rc.1 — 2026-10-15
 
 - Add indexed AND/OR/NOT expressions, finite numeric intervals and Gregorian date intervals to vector, keyword and hybrid document search. Preserve source/all-tag conditions and add the owned-filter app-worker method.
