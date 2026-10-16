@@ -62,12 +62,28 @@ def main():
         diagnostic = json.loads(cli(binary, "doctor", root / "documents"))
         assert diagnostic["active_records"] == 1 and diagnostic["model"] == "fixture-v1"
         assert before == {p.name: p.read_bytes() for p in (root / "documents").iterdir()}
+        typed_space = [root, "typed", 2, "fixture-v1", "cosine"]
+        cli(binary, "docs-init", *typed_space)
+        payload = encode_document(int(identifier), Chunk("한글.md", 1, 3, original), ["rust"],
+                                  {"score": 0.8, 'quoted"key': -0.0}, {"modified": "2026-10-15"})
+        batch.write_text(f"put\t{identifier}\t1,0\t{payload}\n", encoding="utf-8")
+        cli(binary, "docs-batch", *typed_space, batch)
+        typed = json.loads(cli(binary, "docs-get", *typed_space, identifier))
+        assert typed["numbers"] == {"score": 0.8, 'quoted"key': 0}
+        assert typed["dates"] == {"modified": "2026-10-15"}
+        where = 'number("score") >= 0.8 AND date("modified") == "2026-10-15" AND NOT tag("missing")'
+        for command, query in [("docs-search", ["1,0"]), ("docs-keywords", ["한글"]),
+                               ("docs-hybrid", ["1,0", "한글"])]:
+            result = json.loads(cli(binary, command, *typed_space, *query, 1, "--where", where))
+            assert result["matches"][0]["document"] == typed
+        cli(binary, "docs-backup", *typed_space, root, "typed-backup")
+        assert json.loads(cli(binary, "docs-get", root, "typed-backup", 2, "fixture-v1", "cosine", identifier)) == typed
         script = """
 const assert = require('node:assert/strict');
 let input = ''; process.stdin.setEncoding('utf8');
 process.stdin.on('data', part => input += part);
 process.stdin.on('end', () => {
-  const {report, document, matches, keyword, hybrid, original} = JSON.parse(input);
+  const {report, document, matches, keyword, hybrid, typed, original} = JSON.parse(input);
   assert.equal(report.schema_version, 1);
   assert.equal(typeof document.id, 'string');
   assert.equal(BigInt(document.id), (1n << 64n) - 1n);
@@ -80,11 +96,16 @@ process.stdin.on('end', () => {
   assert.equal(hybrid.matches[0].vector_rank, 1);
   assert.equal(hybrid.matches[0].keyword_rank, 1);
   assert.ok(Math.abs(hybrid.matches[0].score - 2/61) < 1e-12);
+  assert.equal(typed.schema_version, 1);
+  assert.equal(typed.numbers.score, 0.8);
+  assert.equal(typed.numbers['quoted"key'], 0);
+  assert.equal(typed.dates.modified, '2026-10-15');
+  assert.equal(BigInt(typed.id), (1n << 64n) - 1n);
   console.log('Python/JavaScript JSON v1, full u64 and original UTF-8 passed');
 });
 """
         subprocess.run([node, "-e", script], input=json.dumps(dict(report=report, document=document,
-                       matches=matches, keyword=keyword, hybrid=hybrid, original=original)), text=True, encoding="utf-8", check=True)
+                       matches=matches, keyword=keyword, hybrid=hybrid, typed=typed, original=original)), text=True, encoding="utf-8", check=True)
 
 
 if __name__ == "__main__":

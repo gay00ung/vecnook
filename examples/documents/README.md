@@ -4,7 +4,7 @@ This demo turns Markdown into local embeddings, stores each chunk with its sourc
 
 You need Python 3.10+, the Vecnook CLI, and [Ollama](https://ollama.com/download) running locally. The Python client uses only its standard library. Ollama supplies the embedding model; it is not a database dependency.
 
-With the 1.1 candidate, the installed CLI includes this client:
+In 1.2.0, the installed CLI includes this client:
 
 ```bash
 vecnook docs-sync ./my-markdown --db data/notes
@@ -67,3 +67,18 @@ Run the offline integration tests with a locally built binary:
 ```bash
 VECNOOK_BINARY=target/debug/vecnook python3 -m unittest discover -s examples/documents -p 'test_*.py'
 ```
+
+## File dates, byte counts and Boolean filters
+
+```bash
+vecnook docs-sync ./my-markdown --db data/notes --record-metadata
+vecnook docs-find "backup" --db data/notes --mode keyword \
+  --where '(tag("rust") OR tag("notes")) AND number("file_bytes") > 100 AND date("modified") >= "2026-10-01"'
+```
+
+`--record-metadata` stores whole-file UTF-8 byte counts and UTC modification dates
+on every chunk. A later sync infers this setting when omitted;
+`--no-record-metadata` explicitly removes the attributes. Metadata-only changes
+currently re-embed the affected source. Direct Python index/sync/search accepts
+the same flags. Default new imports retain VDOC1. Attribute-bearing documents
+use VDOC2 and require a 1.2 reader. See [Boolean and range semantics](../../docs/compound-filters.md).

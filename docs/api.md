@@ -16,7 +16,7 @@ Choose dimensions, metric, M and efConstruction before constructing the database
 
 Coordinates are finite `f32`. Dimension mismatch, NaN/infinity, and a zero vector for cosine return `Error::InvalidInput`. IDs cover the full `u64` range. Metadata is UTF-8 with a 16 KiB bound; it is application data, never executed. The README lists all storage and transaction limits.
 
-Results sort by ascending distance then ID. K=0 is empty and K larger than the eligible set is capped. `SearchStrategy::Hnsw` requires efSearch≥min(K, eligible count) and efSearch in 1..=4096. Exact strategy ignores efSearch. Auto uses exact search for small sets, oversized K or bounded selective filters and repairs an underfilled graph result. In the 1.1 candidate, the additional filter path selects exact when eligibility is at most 1/8 of active records and at most `filtered_exact_threshold` (default 4096); zero disables it. `complete` describes candidate count, not recall. For additive `Collection::search_keywords` and `search_hybrid` APIs and descending scores, see [document ranking](hybrid-search.md).
+Results sort by ascending distance then ID. K=0 is empty and K larger than the eligible set is capped. `SearchStrategy::Hnsw` requires efSearch≥min(K, eligible count) and efSearch in 1..=4096. Exact strategy ignores efSearch. Auto uses exact search for small sets, oversized K or bounded selective filters and repairs an underfilled graph result. Since 1.1, the additional filter path selects exact when eligibility is at most 1/8 of active records and at most `filtered_exact_threshold` (default 4096); zero disables it. `complete` describes candidate count, not recall. For additive `Collection::search_keywords` and `search_hybrid` APIs and descending scores, see [document ranking](hybrid-search.md).
 
 Use `search_metadata(query, k, options, value)` for indexed equality of a complete metadata string, or `search_ids(query, k, options, ids)` for an application-selected subset. Unfiltered `search` prepares eligibility without a full record predicate scan. Arbitrary `search_filtered` still evaluates its predicate once per active record. The report's `filter_evaluations` counts these predicate/equality comparisons separately from vector distance evaluations.
 
@@ -34,7 +34,7 @@ assert_eq!(result.neighbors[0].id, 7);
 
 `Database::create` creates missing directories and refuses existing database files. `open` validates the snapshot and complete WAL frames. A handle keeps an exclusive OS lock until dropped; another process or handle cannot open that directory even for reading. Put the one application handle inside an `RwLock` for concurrent read access and exclusive mutation.
 
-`put` returns true for a newly active ID and false for replacement. `delete` returns false for an absent ID without writing a WAL frame. Replacement and deletion retain old physical nodes until compaction. `write_batch` prevalidates all ordered operations and syncs one frame before modifying memory. Operations on the same ID observe earlier operations in that batch.
+`put` returns true for a newly active ID and false for replacement. `delete` returns false for an absent ID without writing a WAL frame. Replacement and deletion retain old coordinates/links until compaction; 1.2 releases inactive payload strings immediately. `write_batch` prevalidates all ordered operations and syncs one frame before modifying memory. Operations on the same ID observe earlier operations in that batch.
 
 | Error | Application response |
 | --- | --- |
@@ -54,3 +54,11 @@ There are no implicit retries for storage failures. Dropping the handle releases
 See [embedded.rs](../examples/embedded.rs) for batch, reopen and backup, and the [document search demo](../examples/documents/README.md) for a real embedding client. Keep source data, embeddings and backups outside public source control.
 
 See [compatibility](compatibility.md) for the 0.3-to-1.0 constructor/JSON migration, and [operations](operations.md) for read-only diagnostics, capacity and logical transfer.
+
+## Compound document filters
+
+`Document.numbers` and `dates` hold validated `Number` and `Date` values. Use
+`with_number`/`with_date` and `DocumentFilter::with_expression`; the same expression
+applies to vector, keyword and hybrid ranking. The bounded GUI worker exposes
+`submit_filtered` for an owned expression. [Examples and range semantics](compound-filters.md)
+include missing fields, NOT, UTC folder dates and optional VDOC2 reader migration.

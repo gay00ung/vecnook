@@ -113,7 +113,7 @@ def main():
     command(sys.executable, source / "tools/check_contracts.py", env=env)
     command(sys.executable, "-m", "unittest", "discover", "-s", source / "examples/documents", "-p", "test_*.py", env=env)
     command(*cargo, "test", "--offline", "--locked", "--manifest-path", source / "Cargo.toml",
-            "--target-dir", root / "tests", "--test", "upgrade", "--test", "operations")
+            "--target-dir", root / "tests", "--test", "upgrade", "--test", "operations", "--test", "compound_filters")
     consumer = root / "consumer"
     (consumer / "src").mkdir(parents=True)
     dependency = 'version='+json.dumps("="+args.registry) if args.registry else 'path='+json.dumps(str(source))
@@ -132,7 +132,7 @@ def main():
                 or resolved[0].get("checksum") != digest(archive)):
             raise ValueError("consumer did not resolve the exact checked crates.io library")
     checks = ["installed_cli", "json_contracts", "document_flow", "legacy_upgrade",
-              "doctor_export_import_backup", "external_app_restart", "offline_demo_restart"]
+              "doctor_export_import_backup", "external_app_restart", "offline_demo_restart", "compound_filters"]
     if args.registry:
         checks += ["registry_cli_install", "registry_library_resolution"]
     receipt = dict(schema_version=1, passed=True, version=version, registry=bool(args.registry),

@@ -2,12 +2,12 @@
 
 A small embedded vector database for Rust applications, built with the standard library. Vecnook implements its own HNSW graph, exact search, and persistent storage. It has no external crates or vector search library dependencies.
 
-**1.1.0** adds [BM25/RRF document search](docs/hybrid-search.md), selective-filter Auto search, and installed `docs-sync`/`docs-find` commands. See [validation](docs/validation-1.1.md) for search measurements and the completed 24-hour workload. The instructions below select this exact stable version.
+**1.2.0** adds [Boolean and range filters](docs/compound-filters.md) and reduces memory used by checkpoints, reopening and compaction. The registered candidate passed the full 24-hour QA. See [measurements and release validation](docs/validation-1.2.md).
 
 [![CI](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml/badge.svg)](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml)
-[crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/1.1.0/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
+[crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/1.2.0/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
 
-**Vecnook targets local Rust applications.** Use one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS, Linux and Windows. The index stays in RAM. [Release validation](docs/validation-1.1.md) includes a full 24-hour workload and Windows 11 NTFS verification. See [compatibility](docs/compatibility.md) before upgrading from 0.3.
+**Vecnook targets local Rust applications.** Use one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS, Linux and Windows. The index stays in RAM. [Release validation](docs/validation-1.2.md) includes a full 24-hour workload and Windows 11 NTFS verification. See [compatibility](docs/compatibility.md) before upgrading from 0.3.
 
 ## Get started
 
@@ -16,7 +16,7 @@ Install the database and run an [offline prepared-query demo](docs/quickstart.md
 Requires Rust 1.89 or later. The package, library, and executable are all named `vecnook`.
 
 ```bash
-cargo install vecnook --version '=1.1.0' --locked
+cargo install vecnook --version '=1.2.0' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -24,20 +24,20 @@ vecnook demo data/first-demo 1
 For a Rust application, add the registry dependency:
 
 ```bash
-cargo add vecnook@=1.1.0
+cargo add vecnook@=1.2.0
 ```
 
 Or edit `Cargo.toml`:
 
 ```toml
 [dependencies]
-vecnook = "=1.1.0"
+vecnook = "=1.2.0"
 ```
 
-The exact version pins this release; commit your application lockfile as well. The [API reference](https://docs.rs/vecnook/1.1.0/vecnook/) documents exported types and methods. See the [API guide](docs/api.md), [compatibility contracts](docs/compatibility.md) and [release procedure](docs/releasing.md). Versioned source is also available through the Git tag:
+The exact version pins this release; commit your application lockfile as well. The [API reference](https://docs.rs/vecnook/1.2.0/vecnook/) documents exported types and methods. See the [API guide](docs/api.md), [compatibility contracts](docs/compatibility.md) and [release procedure](docs/releasing.md). Versioned source is also available through the Git tag:
 
 ```bash
-cargo install --git https://github.com/gay00ung/vecnook --tag v1.1.0 --locked
+cargo install --git https://github.com/gay00ung/vecnook --tag v1.2.0 --locked
 ```
 
 To build a checkout:
@@ -105,7 +105,7 @@ Neighbors sort by distance, then ID. Use `search_exact` as an exact reference an
 
 `search_metadata` uses a maintained inverted index for exact equality of the complete metadata string. Only matching hash-bucket candidates are compared, with full string checks to reject collisions. `search_ids` accepts an application-selected subset and skips other records when preparing eligibility. Unfiltered `search` does not evaluate a predicate across all records. These indexes are rebuilt from authoritative records on open and updated through mutations and compaction.
 
-`search_filtered` evaluates an arbitrary predicate once per active record, which costs O(active records). Ineligible/deleted nodes can be traversed but are not returned. Auto scans small eligible sets exactly. `filter_evaluations` reports predicate/metadata comparison counts; it does not count every graph operation. Graph traversal still initializes a visited bitmap proportional to physical node count. A predicate is not an access-control mechanism.
+`search_filtered` evaluates an arbitrary predicate once per active record, which costs O(active records). Ineligible/deleted nodes can be traversed but are not returned. Auto scans small eligible sets exactly. `filter_evaluations` reports predicate/metadata comparison counts; it does not count every graph operation. Graph traversal initializes one visited bit per physical node, local to the query. A predicate is not an access-control mechanism.
 
 Results expose `mode`, `reason`, `eligible_count`, `distance_computations`, and `complete`. **`complete=true` means min(K, eligible count) results were returned; it does not certify recall.** Auto repairs a missing result count, not inaccurate full-length approximate results. K=0 returns no neighbors; K above the eligible count is capped at that count. For forced HNSW, efSearch must be at least the capped K.
 
@@ -133,17 +133,17 @@ Recovery trims only an incomplete final WAL frame at EOF. A complete checksum er
 
 `backup(new_directory)` checkpoints and copies a synced, independently openable snapshot/cache with an empty WAL. It refuses an existing destination. A failed copy may leave an incomplete destination, and backup changes the source's checkpoint state. Do not copy live database files individually.
 
-Use a local filesystem and keep all database files together. Tests cover process kills, truncated WAL frames, and injected corruption. Hardware power loss, network filesystems, and secure erasure are not validated. Compaction temporarily holds a replacement index and can increase peak memory use.
+Use a local filesystem and keep all database files together. Tests cover process kills, truncated WAL frames, and injected corruption. Hardware power loss, network filesystems, and secure erasure are not validated. Compaction moves live payloads into a replacement graph after persisting them; its old and replacement graph allocations can still overlap.
 
 ## Documents and collections
 
-Use `Collection` to keep original text, source paths, line ranges and tags with vectors. Each named collection binds its model identity, dimensions and metric; opening with a different embedding space fails. Source/tag filters use maintained posting lists. See the [collection guide](docs/collections.md) and runnable `collections` example. The underlying snapshot/WAL format is unchanged.
+Use `Collection` to keep original text, source paths, line ranges, tags and optional numeric/date attributes with vectors. Each named collection binds its model identity, dimensions and metric; opening with a different embedding space fails. Source/tag and [compound filters](docs/compound-filters.md) use maintained posting lists. Existing documents keep VDOC1; optional attributes use VDOC2 and require a 1.2 reader. See the [collection guide](docs/collections.md) and runnable `collections` example. The underlying snapshot/WAL format is unchanged.
 
 ## Search real documents
 
 The [Markdown search demo](examples/documents/README.md) uses a local Ollama embedding model, stores source paths and line ranges, and prints original chunks for natural-language queries. Python uses only its standard library; the Rust database keeps zero external dependencies.
 
-With the 1.1 CLI, Python 3.10+ and a local Ollama model:
+With the 1.2 CLI, Python 3.10+ and a local Ollama model:
 
 ```bash
 ollama pull embeddinggemma
@@ -152,7 +152,7 @@ vecnook docs-find "How do I recover my documents?" --db data/notes
 vecnook docs-find "write_batch_if_sequence" --db data/notes --json
 ```
 
-`docs-sync` creates a collection on first use and skips unchanged files later. Add `--prune` to remove missing sources in the managed namespace. `docs-find` infers model settings and selects vector/hybrid ranking; `--mode` overrides it. `Collection` exposes `search_keywords` and `search_hybrid` with the same source/tag filters. See [ranking choices and limits](docs/hybrid-search.md) and the [first-use guide](docs/quickstart.md#search-your-own-folder).
+`docs-sync` creates a collection on first use and skips unchanged files later. Add `--prune` to remove missing sources in the managed namespace. `docs-find` infers model settings and selects vector/hybrid ranking; `--mode` overrides it. `Collection` exposes `search_keywords` and `search_hybrid` with the same filters. Add `docs-sync --record-metadata` to store file byte counts and UTC modification dates, then use `docs-find --where` for Boolean/range conditions. See [ranking choices and limits](docs/hybrid-search.md) and the [first-use guide](docs/quickstart.md#search-your-own-folder).
 
 ## CLI
 

@@ -16,6 +16,21 @@
 //! # Ok::<(), vecnook::Error>(())
 //! ```
 //!
+//! Optional numeric/date attributes use VDOC2; source/tag-only documents keep VDOC1.
+//! All document ranking methods accept the same indexed Boolean expression:
+//!
+//! ```
+//! use vecnook::{Date, Document, DocumentFilter, FilterExpr};
+//! let doc = Document::new(7, "Backup recovery", "recovery.md")
+//!     .with_number("priority", 0.8)?
+//!     .with_date("modified", Date::parse("2026-10-15")?)?;
+//! let expr = FilterExpr::parse(r#"number("priority") >= 0.5 AND NOT tag("archived")"#)?;
+//! let filter = DocumentFilter::default().with_expression(&expr);
+//! assert_eq!(Document::from_payload(&doc.to_payload()?)?, doc);
+//! # let _ = filter;
+//! # Ok::<(), vecnook::Error>(())
+//! ```
+//!
 //! Use [`SearchOptions`] for Auto search and inspect [`SearchReport::reason`].
 //! Candidate completeness is independent of approximate search recall:
 //!
@@ -58,6 +73,7 @@ mod db;
 mod diagnostics;
 mod document;
 mod error;
+mod filter;
 mod graph;
 mod index;
 mod keyword;
@@ -68,6 +84,7 @@ mod storage;
 #[cfg(test)]
 mod storage_fault_tests;
 mod storage_io;
+mod stream;
 mod transfer;
 
 pub use batch::{BatchReport, Mutation};
@@ -83,6 +100,7 @@ pub use db::{
 pub use diagnostics::{CapacityStatus, DiagnosticReport, doctor};
 pub use document::Document;
 pub use error::{Error, ErrorKind, Result};
+pub use filter::{Date, FilterExpr, Number};
 pub use index::{IndexStats, Neighbor, Record, SearchMode, SearchReport, VectorIndex};
 pub use keyword::{
     HybridNeighbor, HybridSearchOptions, HybridSearchReport, KeywordNeighbor, KeywordSearchReport,

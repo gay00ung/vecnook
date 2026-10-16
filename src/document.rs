@@ -1,5 +1,5 @@
-use crate::{Error, Result, config::MAX_METADATA};
-use std::collections::BTreeSet;
+use crate::{Date, Error, Number, Result, config::MAX_METADATA};
+use std::collections::{BTreeMap, BTreeSet};
 
 /// A document chunk with its original text, source and application tags.
 /// The encoded payload, including all fields, must fit 16 KiB.
@@ -18,6 +18,10 @@ pub struct Document {
     pub end_line: u32,
     /// At most 32 unique, nonempty tags of at most 128 UTF-8 bytes each.
     pub tags: Vec<String>,
+    /// At most 32 finite numeric attributes, with keys of 1..128 UTF-8 bytes without NUL.
+    pub numbers: BTreeMap<String, Number>,
+    /// At most 32 Gregorian calendar-date attributes, with the same key bounds.
+    pub dates: BTreeMap<String, Date>,
 }
 
 impl Document {
@@ -30,7 +34,34 @@ impl Document {
             start_line: 1,
             end_line: 1,
             tags: Vec::new(),
+            numbers: BTreeMap::new(),
+            dates: BTreeMap::new(),
         }
+    }
+
+    /// Set a finite numeric attribute; rejects invalid keys and more than 32 fields.
+    /// Using attributes opts into VDOC2; older VDOC1-only readers cannot decode it.
+    pub fn with_number(mut self, field: impl Into<String>, value: f64) -> Result<Self> {
+        let field = field.into();
+        crate::filter::key(&field)?;
+        self.numbers.insert(field, Number::new(value)?);
+        if self.numbers.len() > 32 {
+            return Err(Error::InvalidInput(
+                "more than 32 numeric attributes".into(),
+            ));
+        }
+        Ok(self)
+    }
+    /// Set a calendar-date attribute; rejects invalid keys and more than 32 fields.
+    /// Using attributes opts into VDOC2; older VDOC1-only readers cannot decode it.
+    pub fn with_date(mut self, field: impl Into<String>, value: Date) -> Result<Self> {
+        let field = field.into();
+        crate::filter::key(&field)?;
+        self.dates.insert(field, value);
+        if self.dates.len() > 32 {
+            return Err(Error::InvalidInput("more than 32 date attributes".into()));
+        }
+        Ok(self)
     }
 
     /// Encode a versioned payload for CLI batch import. The representation is
@@ -47,6 +78,19 @@ impl Document {
         for tag in &self.tags {
             put_string(&mut bytes, tag);
         }
+        let typed = !self.numbers.is_empty() || !self.dates.is_empty();
+        if typed {
+            bytes.extend_from_slice(&(self.numbers.len() as u32).to_le_bytes());
+            for (field, value) in &self.numbers {
+                put_string(&mut bytes, field);
+                bytes.extend_from_slice(&value.get().to_le_bytes());
+            }
+            bytes.extend_from_slice(&(self.dates.len() as u32).to_le_bytes());
+            for (field, value) in &self.dates {
+                put_string(&mut bytes, field);
+                bytes.extend_from_slice(&value.encoded().to_le_bytes());
+            }
+        }
         if 6 + bytes.len() * 2 > MAX_METADATA {
             return Err(Error::InvalidInput(
                 "encoded document exceeds 16 KiB".into(),
@@ -54,7 +98,7 @@ impl Document {
         }
         const HEX: &[u8] = b"0123456789abcdef";
         let mut payload = String::with_capacity(6 + bytes.len() * 2);
-        payload.push_str("VDOC1:");
+        payload.push_str(if typed { "VDOC2:" } else { "VDOC1:" });
         for byte in bytes {
             payload.push(HEX[(byte >> 4) as usize] as char);
             payload.push(HEX[(byte & 15) as usize] as char);
@@ -67,8 +111,9 @@ impl Document {
         if payload.len() > MAX_METADATA {
             return Err(corrupt("document payload too large"));
         }
+        let typed = payload.starts_with("VDOC2:");
         let hex = payload
-            .strip_prefix("VDOC1:")
+            .strip_prefix(if typed { "VDOC2:" } else { "VDOC1:" })
             .ok_or_else(|| corrupt("document payload version"))?;
         if !hex.len().is_multiple_of(2) {
             return Err(corrupt("document hex length"));
@@ -98,6 +143,33 @@ impl Document {
         let tags = (0..count)
             .map(|_| reader.string(128))
             .collect::<Result<_>>()?;
+        let mut numbers = BTreeMap::new();
+        let mut dates = BTreeMap::new();
+        if typed {
+            let count = reader.u32()?;
+            if count > 32 {
+                return Err(corrupt("numeric attribute count"));
+            }
+            for _ in 0..count {
+                let field = reader.string(128)?;
+                let value = f64::from_le_bytes(reader.take(8)?.try_into().unwrap());
+                let value = Number::new(value).map_err(|e| corrupt(&e.to_string()))?;
+                if numbers.insert(field, value).is_some() {
+                    return Err(corrupt("duplicate numeric attribute"));
+                }
+            }
+            let count = reader.u32()?;
+            if count > 32 {
+                return Err(corrupt("date attribute count"));
+            }
+            for _ in 0..count {
+                let field = reader.string(128)?;
+                let value = Date::decode(reader.u32()?).map_err(|e| corrupt(&e.to_string()))?;
+                if dates.insert(field, value).is_some() {
+                    return Err(corrupt("duplicate date attribute"));
+                }
+            }
+        }
         reader.finish()?;
         let document = Self {
             id,
@@ -106,12 +178,22 @@ impl Document {
             start_line,
             end_line,
             tags,
+            numbers,
+            dates,
         };
         document.validate().map_err(|e| corrupt(&e.to_string()))?;
         Ok(document)
     }
 
     fn validate(&self) -> Result<()> {
+        if self.numbers.len() > 32 || self.dates.len() > 32 {
+            return Err(Error::InvalidInput(
+                "more than 32 attributes per type".into(),
+            ));
+        }
+        for field in self.numbers.keys().chain(self.dates.keys()) {
+            crate::filter::key(field)?;
+        }
         if self.text.len() > 6000
             || self.source.is_empty()
             || self.source.len() > 1024

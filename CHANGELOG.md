@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.2.0 — 2026-10-16
+
+- Promote the checked `1.2.0-rc.1` memory/update improvements and compound document filters to stable, retaining the standard-library-only Rust core and Rust 1.89 support.
+- Complete the registered archive's 86,401.130573-second mixed workload with 189,283 acknowledged mutations, 89 restarts and 17 independent backup verifications. Eight exact-registry consumers pass on Linux, macOS, Windows Server and Windows 11 ARM64/NTFS with Rust 1.89 and current stable.
+- Preserve the candidate's normalized runtime, tests, tools and build settings. Provide exact stable installation instructions, [measured results](docs/validation-1.2.md) and [reader migration guidance](docs/compatibility.md#migrating-from-11-to-12).
+
+## 1.2.0-rc.1 — 2026-10-15
+
+- Add indexed AND/OR/NOT expressions, finite numeric intervals and Gregorian date intervals to vector, keyword and hybrid document search. Preserve source/all-tag conditions and add the owned-filter app-worker method.
+- Add bounded Number/Date metadata and opt-in VDOC2 payloads. Default documents keep byte-identical VDOC1; 1.2 reads existing files, including actual 1.1 snapshots/WAL/cache. Attribute-bearing documents require a 1.2 document reader.
+- Add `--where` to document search commands and `--record-metadata` for Markdown file byte counts and UTC modification dates, with inferred repeat sync and explicit opt-out.
+- Stream snapshots/caches, move live payloads during durable compaction, release inactive payload strings, pack search scratch bits, update repeated-ID batch postings once and clone only returned RRF documents.
+- Compare fresh-process memory/update/search measurements with registry 1.1.0; add independent compound-filter oracles, streaming fault coverage and candidate-bound distribution/long-soak checks. [Measurements and validation status](docs/validation-1.2.md) distinguish local checks from the required full-duration registry QA.
+
 ## 1.1.0 — 2026-10-15
 
 - Promote the checked `1.1.0-rc.1` document-search implementation to stable. Runtime source, tests, tools and build settings match the registered candidate after normalizing the package version; the existing 1.x API, JSON v1 and storage/model contracts remain compatible.

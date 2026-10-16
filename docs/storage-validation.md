@@ -1,6 +1,6 @@
-# Storage validation and remaining release gates
+# Storage validation
 
-The 1.0 candidate includes explicit failure-point tests around standard-library
+The library includes explicit failure-point tests around standard-library
 I/O. Test controls are thread-local and compiled only under `cfg(test)`; the
 published library has no environment-controlled fault injection.
 
@@ -46,9 +46,24 @@ verifies independent backups. `progress.json` records actual elapsed time,
 acknowledged mutation count and completed verification counts. Both elapsed-time
 and mutation gates must pass; a quick 100k run is not a 24-hour result.
 
-A final 1.0 release still requires a completed 24-hour run on the release
-candidate and real Windows 11 installation/ownership/restart/backup checks.
+Each stable release requires a completed 24-hour run bound to its registered
+candidate and actual Windows 11 installation/ownership/restart/backup checks.
 Windows Server NTFS CI is useful evidence and is reported as such; it does not
 substitute for Windows 11. Hardware power loss and network filesystems remain
 outside the validated scope. Report corruption with version, filesystem,
 reproduction and preserved original files through the project's issue paths.
+
+## 1.2 streaming and typed-filter coverage
+
+Snapshots and graph caches retain their existing bytes/layout but stream through
+64 KiB buffers. Failure tests cross buffer boundaries, retry short/interrupted
+writes and verify recovery after authoritative snapshot commit before cache/WAL
+completion. Compaction writes a durable active-only snapshot, moves original
+live payloads into a graph, writes its cache, then clears the WAL. Snapshot and
+WAL recovery discard inactive payloads and use the same byte budget as writes.
+
+An actual registry-installed 1.1.0 CLI generates another public fixture containing
+superseded/deleted snapshot records and a later WAL batch. It upgrades with typed
+attributes, searches, backs up, exports/imports and reopens. The mixed workload
+now changes numeric/date attributes, uses missing-field complements and compares
+all three search modes with its independent ACK model. See [1.2 evidence](validation-1.2.md).

@@ -172,6 +172,51 @@ fn checkpoint_and_compaction_failure_points_preserve_all_acknowledged_records() 
 }
 
 #[test]
+fn streamed_files_retry_short_writes_and_recover_after_partial_buffer_flushes() {
+    for point in ["snapshot.write", "cache.write"] {
+        for mode in [
+            Mode::Short,
+            Mode::Interrupted,
+            Mode::Partial(0),
+            Mode::Partial(65535),
+            Mode::Partial(65536),
+        ] {
+            let tmp = Temp::new();
+            let mut db = Database::create(&tmp.0, Config::new(1)).unwrap();
+            // Both files cross the 64 KiB writer-buffer boundary.
+            for start in (0..2000).step_by(500) {
+                let vectors = (start..start + 500)
+                    .map(|id| (id, [id as f32]))
+                    .collect::<Vec<_>>();
+                let payload = "original".repeat(64);
+                let ops = vectors
+                    .iter()
+                    .map(|(id, vector)| Mutation::Put {
+                        id: *id,
+                        vector,
+                        metadata: &payload,
+                    })
+                    .collect::<Vec<_>>();
+                db.write_batch(&ops).unwrap();
+            }
+            let guard = Guard::new(point, mode);
+            let result = db.checkpoint();
+            if matches!(mode, Mode::Short | Mode::Interrupted) {
+                result.unwrap();
+            } else {
+                assert!(matches!(result, Err(Error::Io(_))));
+            }
+            drop(guard);
+            drop(db);
+            let db = Database::open(&tmp.0).unwrap();
+            assert_eq!(db.len(), 2000);
+            assert_eq!(db.get(1999).unwrap().metadata, "original".repeat(64));
+            db.check_invariants().unwrap();
+        }
+    }
+}
+
+#[test]
 fn failed_backup_copy_and_export_leave_source_intact_and_invalid_artifacts_are_rejected() {
     for point in ["backup.copy", "backup.sync", "export.write", "export.sync"] {
         let tmp = Temp::new();

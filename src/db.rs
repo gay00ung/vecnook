@@ -328,7 +328,7 @@ impl Database {
     /// close, reopen and inspect the ID. Metadata is bounded to 16 KiB of UTF-8.
     pub fn put(&mut self, id: u64, vector: &[f32], metadata: &str) -> Result<bool> {
         self.ensure_writable()?;
-        self.index.validate_put(vector, metadata)?;
+        self.index.validate_replacement(id, vector, metadata)?;
         let next = self.next_sequence()?;
         let frame = storage::encode_frame(
             next,
@@ -491,19 +491,22 @@ impl Database {
     }
 
     /// Rebuild active records, persist them and reclaim tombstones; returns removed node count.
-    /// Temporarily holds a second index. I/O failure poisons writes.
+    /// Persists live records before moving their payloads into a rebuilt graph.
+    /// I/O failure poisons writes; reopen to recover acknowledged records.
     pub fn compact(&mut self) -> Result<usize> {
         self.ensure_writable()?;
-        let replacement = self.index.compacted()?;
-        let removed = self.index.stats().physical_nodes - replacement.stats().physical_nodes;
-        let result = storage::write_snapshot(&self.path, &replacement, self.sequence)
-            .and_then(|()| storage::clear_wal(&mut self.wal));
-        if let Err(error) = result {
+        let result = (|| {
+            let checksum =
+                storage::write_compacted_snapshot(&self.path, &self.index, self.sequence)?;
+            let removed = self.index.compact()?;
+            crate::graph::write(&self.path, &self.index, self.sequence, checksum)?;
+            storage::clear_wal(&mut self.wal)?;
+            Ok(removed)
+        })();
+        if result.is_err() {
             self.poisoned = true;
-            return Err(error);
         }
-        self.index = replacement;
-        Ok(removed)
+        result
     }
 
     fn ensure_writable(&self) -> Result<()> {

@@ -87,6 +87,7 @@ def metrics(rows):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", default="target/release/vecnook")
+    parser.add_argument("--baseline-binary", help="compare every response with this binary on identical vectors/storage")
     parser.add_argument("--model", default="embeddinggemma:latest")
     parser.add_argument("--output", required=True, help="new directory")
     args = parser.parse_args()
@@ -134,6 +135,10 @@ def main():
             started = time.perf_counter()
             response = json.loads(cli(args.binary, *command))
             elapsed = (time.perf_counter() - started) * 1000
+            if args.baseline_binary:
+                baseline = json.loads(cli(args.baseline_binary, *command))
+                if baseline != response:
+                    raise ValueError(f"paired baseline response changed: {mode} / {query}")
             sources = [match["document"]["source"] for match in response["matches"]]
             rank = sources.index(expected) + 1 if expected in sources else None
             rows.append(dict(language=language, kind=kind, query=query, expected=expected,
@@ -150,6 +155,8 @@ def main():
                   vectors_sha256=hashlib.sha256(b"".join(struct.pack("<f", v) for row in vectors for v in row)).hexdigest(),
                   judgments_sha256=hashlib.sha256(json.dumps(questions, ensure_ascii=False).encode()).hexdigest(),
                   binary_sha256=hashlib.sha256(Path(args.binary).read_bytes()).hexdigest(),
+                  baseline_binary_sha256=hashlib.sha256(Path(args.baseline_binary).read_bytes()).hexdigest() if args.baseline_binary else None,
+                  identical_baseline_responses=bool(args.baseline_binary),
                   rrf_k=60, candidates=64, metrics=grouped, questions=rows,
                   scope="22 fixed authored questions on 31 authored documents, including 20 deliberately repetitive fictional error-code entries; meaning questions retained from the existing evaluation. Source labels follow these documents. CLI timings include process startup, reopen and decoding; embedding excluded.")
     (root / "results.json").write_text(json.dumps(report, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")

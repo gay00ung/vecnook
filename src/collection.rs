@@ -1,15 +1,17 @@
 use crate::{
-    BatchReport, Config, Database, Document, Error, HybridSearchOptions, HybridSearchReport,
-    IndexStats, KeywordNeighbor, KeywordSearchReport, Metric, Mutation, RecoveryInfo, Result,
-    SearchOptions, SearchReport,
+    BatchReport, Config, Database, Date, Document, Error, FilterExpr, HybridSearchOptions,
+    HybridSearchReport, IndexStats, KeywordNeighbor, KeywordSearchReport, Metric, Mutation, Number,
+    RecoveryInfo, Result, SearchOptions, SearchReport,
     document::{PayloadReader, corrupt, put_string},
     keyword::{self, KeywordIndex},
     storage,
 };
 use std::{
+    cell::OnceCell,
     collections::{BTreeMap, BTreeSet},
     fs::{self, File, OpenOptions},
     io::Read,
+    ops::Bound,
     path::{Path, PathBuf},
 };
 
@@ -55,6 +57,8 @@ pub struct DocumentFilter<'a> {
     pub source: Option<&'a str>,
     /// Every listed tag must be present; duplicate filter tags have no effect.
     pub tags: &'a [&'a str],
+    /// Additional Boolean/range expression, intersected with source and every tag.
+    pub expression: Option<&'a FilterExpr>,
 }
 
 impl<'a> DocumentFilter<'a> {
@@ -72,6 +76,25 @@ impl<'a> DocumentFilter<'a> {
     pub fn with_tags(mut self, tags: &'a [&'a str]) -> Self {
         self.tags = tags;
         self
+    }
+    /// Combine an indexed Boolean/range expression with the existing source/tags.
+    pub fn with_expression(mut self, expression: &'a FilterExpr) -> Self {
+        self.expression = Some(expression);
+        self
+    }
+    /// Select an optional Boolean/range expression for request adapters.
+    pub fn with_optional_expression(mut self, expression: Option<&'a FilterExpr>) -> Self {
+        self.expression = expression;
+        self
+    }
+    fn validate(self) -> Result<()> {
+        if self.tags.len() > 32 {
+            return Err(Error::InvalidInput("filter exceeds 32 tags".into()));
+        }
+        if let Some(expr) = self.expression {
+            expr.validate()?;
+        }
+        Ok(())
     }
 }
 
@@ -113,13 +136,25 @@ pub struct DocumentSearchReport {
 }
 
 type PostingMap = BTreeMap<String, BTreeSet<u64>>;
-#[derive(Default)]
+type RangeMap<T> = BTreeMap<String, BTreeMap<T, BTreeSet<u64>>>;
+#[derive(Default, PartialEq)]
 struct Postings {
     sources: PostingMap,
     tags: PostingMap,
+    numbers: RangeMap<Number>,
+    dates: RangeMap<Date>,
 }
 impl Postings {
-    fn add(&mut self, id: u64, source: &str, tags: &[String]) {
+    fn add(&mut self, document: &Document) {
+        let Document {
+            id,
+            source,
+            tags,
+            numbers,
+            dates,
+            ..
+        } = document;
+        let id = *id;
         self.sources
             .entry(source.to_owned())
             .or_default()
@@ -127,8 +162,19 @@ impl Postings {
         for tag in tags {
             self.tags.entry(tag.clone()).or_default().insert(id);
         }
+        add_ranges(&mut self.numbers, id, numbers);
+        add_ranges(&mut self.dates, id, dates);
     }
-    fn remove(&mut self, id: u64, source: &str, tags: &[String]) {
+    fn remove(&mut self, document: &Document) {
+        let Document {
+            id,
+            source,
+            tags,
+            numbers,
+            dates,
+            ..
+        } = document;
+        let id = *id;
         fn remove_key(map: &mut PostingMap, key: &str, id: u64) {
             if let Some(set) = map.get_mut(key) {
                 set.remove(&id);
@@ -141,6 +187,8 @@ impl Postings {
         for tag in tags {
             remove_key(&mut self.tags, tag, id);
         }
+        remove_ranges(&mut self.numbers, id, numbers);
+        remove_ranges(&mut self.dates, id, dates);
     }
     fn from_db(db: &Database) -> Result<(Self, KeywordIndex)> {
         let mut result = Self::default();
@@ -150,22 +198,24 @@ impl Postings {
             if doc.id != record.id {
                 return Err(corrupt("document ID differs from record ID"));
             }
-            result.add(doc.id, &doc.source, &doc.tags);
+            result.add(&doc);
             keywords.add(doc.id, &doc.text);
         }
         Ok((result, keywords))
     }
     fn covers_all(&self, filter: DocumentFilter<'_>, active: usize) -> bool {
-        filter.source.is_none_or(|source| {
-            self.sources
-                .get(source)
-                .is_some_and(|ids| ids.len() == active)
-        }) && filter
-            .tags
-            .iter()
-            .all(|tag| self.tags.get(*tag).is_some_and(|ids| ids.len() == active))
+        filter.expression.is_none()
+            && filter.source.is_none_or(|source| {
+                self.sources
+                    .get(source)
+                    .is_some_and(|ids| ids.len() == active)
+            })
+            && filter
+                .tags
+                .iter()
+                .all(|tag| self.tags.get(*tag).is_some_and(|ids| ids.len() == active))
     }
-    fn select(&self, filter: DocumentFilter<'_>) -> Vec<u64> {
+    fn select(&self, filter: DocumentFilter<'_>, db: &Database) -> Vec<u64> {
         let mut sets = Vec::new();
         if let Some(source) = filter.source {
             let Some(set) = self.sources.get(source) else {
@@ -179,15 +229,116 @@ impl Postings {
             };
             sets.push(set);
         }
-        let Some(smallest) = sets.iter().min_by_key(|set| set.len()) else {
-            return Vec::new();
-        };
-        smallest
-            .iter()
-            .copied()
-            .filter(|id| sets.iter().all(|set| set.contains(id)))
-            .collect()
+        let universe = OnceCell::new();
+        if let Some(expr) = filter.expression {
+            let mut ids = self.evaluate(expr, db, &universe);
+            ids.retain(|id| sets.iter().all(|set| set.contains(id)));
+            ids.into_iter().collect()
+        } else if let Some(smallest) = sets.iter().min_by_key(|set| set.len()) {
+            smallest
+                .iter()
+                .copied()
+                .filter(|id| sets.iter().all(|set| set.contains(id)))
+                .collect()
+        } else {
+            db.iter().map(|record| record.id).collect()
+        }
     }
+    fn evaluate(
+        &self,
+        expr: &FilterExpr,
+        db: &Database,
+        universe: &OnceCell<BTreeSet<u64>>,
+    ) -> BTreeSet<u64> {
+        match expr {
+            FilterExpr::Source(value) => self.sources.get(value).cloned().unwrap_or_default(),
+            FilterExpr::Tag(value) => self.tags.get(value).cloned().unwrap_or_default(),
+            FilterExpr::NumberRange {
+                field,
+                lower,
+                upper,
+            } => range_ids(&self.numbers, field, lower, upper),
+            FilterExpr::DateRange {
+                field,
+                lower,
+                upper,
+            } => range_ids(&self.dates, field, lower, upper),
+            FilterExpr::And(children) => {
+                let mut children = children.iter();
+                let Some(first) = children.next() else {
+                    return universe
+                        .get_or_init(|| db.iter().map(|r| r.id).collect())
+                        .clone();
+                };
+                let mut ids = self.evaluate(first, db, universe);
+                for child in children {
+                    if ids.is_empty() {
+                        break;
+                    }
+                    let other = self.evaluate(child, db, universe);
+                    ids.retain(|id| other.contains(id));
+                }
+                ids
+            }
+            FilterExpr::Or(children) => {
+                let mut ids = BTreeSet::new();
+                for child in children {
+                    ids.append(&mut self.evaluate(child, db, universe));
+                }
+                ids
+            }
+            FilterExpr::Not(child) => {
+                let excluded = self.evaluate(child, db, universe);
+                universe
+                    .get_or_init(|| db.iter().map(|r| r.id).collect())
+                    .difference(&excluded)
+                    .copied()
+                    .collect()
+            }
+        }
+    }
+}
+
+fn add_ranges<T: Copy + Ord>(index: &mut RangeMap<T>, id: u64, values: &BTreeMap<String, T>) {
+    for (field, &value) in values {
+        index
+            .entry(field.clone())
+            .or_default()
+            .entry(value)
+            .or_default()
+            .insert(id);
+    }
+}
+fn remove_ranges<T: Copy + Ord>(index: &mut RangeMap<T>, id: u64, values: &BTreeMap<String, T>) {
+    for (field, value) in values {
+        if let Some(ranges) = index.get_mut(field) {
+            if let Some(ids) = ranges.get_mut(value) {
+                ids.remove(&id);
+                if ids.is_empty() {
+                    ranges.remove(value);
+                }
+            }
+            if ranges.is_empty() {
+                index.remove(field);
+            }
+        }
+    }
+}
+fn range_ids<T: Copy + Ord>(
+    index: &RangeMap<T>,
+    field: &str,
+    lower: &Bound<T>,
+    upper: &Bound<T>,
+) -> BTreeSet<u64> {
+    if crate::filter::empty_range(lower, upper) {
+        return BTreeSet::new();
+    }
+    index
+        .get(field)
+        .into_iter()
+        .flat_map(|ranges| ranges.range((*lower, *upper)))
+        .flat_map(|(_, ids)| ids.iter().copied())
+        .collect()
 }
 
 /// Named document database under an application-owned root. Each collection is
@@ -391,19 +542,25 @@ impl Collection {
             })
             .collect();
         let report = self.db.write_batch(&mutations)?;
+        let mut final_documents = BTreeMap::new();
         for operation in operations {
-            let id = match operation {
-                DocumentMutation::Put { document, .. } => document.id,
-                DocumentMutation::Delete { id } => *id,
-            };
-            if let Some(document) = states.get_mut(&id).unwrap().take() {
-                self.postings.remove(id, &document.source, &document.tags);
-                self.keywords.remove(id, &document.text);
+            match operation {
+                DocumentMutation::Put { document, .. } => {
+                    final_documents.insert(document.id, Some(*document));
+                }
+                DocumentMutation::Delete { id } => {
+                    final_documents.insert(*id, None);
+                }
             }
-            if let DocumentMutation::Put { document, .. } = operation {
-                self.postings.add(id, &document.source, &document.tags);
+        }
+        for (id, document) in final_documents {
+            if let Some(old) = states.remove(&id).flatten() {
+                self.postings.remove(&old);
+                self.keywords.remove(id, &old.text);
+            }
+            if let Some(document) = document {
+                self.postings.add(document);
                 self.keywords.add(id, &document.text);
-                states.insert(id, Some((*document).clone()));
             }
         }
         Ok(report)
@@ -417,14 +574,12 @@ impl Collection {
         options: SearchOptions,
         filter: DocumentFilter<'_>,
     ) -> Result<DocumentSearchReport> {
-        if filter.tags.len() > 32 {
-            return Err(Error::InvalidInput("filter exceeds 32 tags".into()));
-        }
+        filter.validate()?;
         let search = if self.postings.covers_all(filter, self.db.len()) {
             self.db.search(query, k, options)?
         } else {
             self.db
-                .search_ids(query, k, options, &self.postings.select(filter))?
+                .search_ids(query, k, options, &self.postings.select(filter, &self.db))?
         };
         let neighbors = search
             .neighbors
@@ -449,12 +604,10 @@ impl Collection {
         filter: DocumentFilter<'_>,
     ) -> Result<KeywordSearchReport> {
         keyword::validate_query(text)?;
-        if filter.tags.len() > 32 {
-            return Err(Error::InvalidInput("filter exceeds 32 tags".into()));
-        }
+        filter.validate()?;
         let allowed = (!self.postings.covers_all(filter, self.db.len())).then(|| {
             self.postings
-                .select(filter)
+                .select(filter, &self.db)
                 .into_iter()
                 .collect::<BTreeSet<_>>()
         });
@@ -526,7 +679,7 @@ impl Collection {
     pub fn check_invariants(&self) -> Result<()> {
         self.db.check_invariants()?;
         let (expected, keywords) = Postings::from_db(&self.db)?;
-        if expected.sources != self.postings.sources || expected.tags != self.postings.tags {
+        if expected != self.postings {
             return Err(corrupt("document posting mismatch"));
         }
         if keywords != self.keywords {

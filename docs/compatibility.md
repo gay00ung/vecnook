@@ -92,3 +92,25 @@ The reason for preparing these changes before 1.0 is explained by Cargo's
 [MSRV reference](https://doc.rust-lang.org/cargo/reference/rust-version.html).
 
 Document listing uses a decimal string `sequence`, a nullable decimal string `next_after`, and at most 256 `documents` per page. Keep the same sequence across pages. Pass it to `docs-batch ... --if-sequence N` to reject intervening writes.
+
+## Migrating from 1.1 to 1.2
+
+The 1.2 release preserves existing Rust methods, public fields, Document's Eq
+contract, JSON required fields and low-level snapshot/WAL/cache formats. New
+`Number`, `Date` and `FilterExpr` types and builders add compound filtering.
+Source/tag-only documents retain byte-identical VDOC1 encoding. Adding numeric or
+date attributes explicitly opts into VDOC2; 1.1 and older typed document readers
+reject that version. Keep a pre-upgrade backup for downgrade, or remove attributes
+using 1.2 into a separate checkpointed/exported collection first. JSON v1 includes
+optional `numbers` and `dates` objects when nonempty; consumers ignore these
+additional fields. See [the complete reader and range contract](compound-filters.md).
+
+Deleted/superseded payloads may be empty in physical tombstone records. Those
+records were already excluded from public active-record APIs. Original live
+vectors, metadata and sequence ordering remain intact. Memory allocation details
+and disposable graph structure are outside the compatibility contract.
+Before using an older binary on 1.2-written VDOC1 data, checkpoint with 1.2 or
+create a separate logical export/import. An uncheckpointed replacement-heavy WAL
+may exceed the older reader's byte accounting because 1.2 reclaims inactive
+payloads during replay. This does not change acknowledged active records or the
+snapshot/WAL layout.

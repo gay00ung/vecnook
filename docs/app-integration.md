@@ -43,3 +43,9 @@ For a JavaScript frontend, encode document IDs as decimal strings: Vecnook suppo
 Persistent storage is supported on Linux, macOS and Windows with Rust 1.89 or later. On Windows, directory flush uses `OpenOptionsExt::custom_flags(FILE_FLAG_BACKUP_SEMANTICS)` and write access; a read-only handle cannot supply the required flush contract. Failures are returned rather than silently disabling synchronization. See Microsoft's [directory handle rules](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew) and [FlushFileBuffers access requirements](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-flushfilebuffers).
 
 CI exercises persistent CRUD, locking, recovery, checkpoint, compaction, backups, document search and this backend on all three systems. Windows CI uses NTFS on Windows Server 2025. Network shares, other filesystem implementations and power-cut durability are outside the validated scope. Keep verified backups and investigate a reported synchronization error before writing again.
+
+`submit_filtered(model, vector, k, expression)` accepts an owned `FilterExpr`
+through the same queue and K limit. It rejects invalid key/range/complexity bounds
+before enqueueing and combines source/tag predicates inside the expression.
+See [Boolean and range filters](compound-filters.md). Queued expression trees add
+bounded string/node allocations to the memory estimates above.

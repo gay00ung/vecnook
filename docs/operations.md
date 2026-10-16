@@ -23,7 +23,9 @@ and node budget while the application owns its handle. `raw_vector_bytes` counts
 coordinate payload only. Text, graph edges, allocation overhead and snapshot
 buffers also consume memory; the count is not total process RSS. A write can hit
 the 256 MiB snapshot cap before reaching 100,000 physical nodes. Replaced/deleted
-versions still consume both budgets until explicit compaction. Checkpointing
+versions retain coordinates and physical-node budget until explicit compaction.
+In 1.2 their inactive payload strings are released, reducing the estimated
+snapshot byte budget before compaction. Checkpointing
 reduces WAL recovery work but retains tombstones; compaction reclaims them.
 
 ## Logical export and import
@@ -32,7 +34,7 @@ The Rust API offers `Database::export/import` and `Collection::export/import`.
 Exports contain active original records, fixed construction settings and, for
 collections, the embedding identity and document payloads. IDs preserve all
 64 bits, original f32 coordinates preserve their bit representation, and source,
-text, tags and line ranges round-trip. Tombstones, graph cache and WAL history
+text, tags, line ranges and optional numeric/date attributes round-trip. Tombstones, graph cache and WAL history
 are omitted; imports rebuild a fresh graph and begin at sequence zero.
 
 For a vector database:
