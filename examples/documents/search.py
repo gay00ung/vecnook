@@ -175,6 +175,13 @@ def query_input(model, query):
 
 
 def cli(binary, *args):
+    if args and args[0] in {"docs-search", "docs-hybrid"} and len(args) > 6 and len(str(args[6])) > 8192:
+        with tempfile.TemporaryDirectory(prefix="vecnook-query-") as temporary:
+            vector = Path(temporary) / "query.csv"
+            vector.write_text(str(args[6]), encoding="utf-8")
+            arguments = list(args)
+            arguments[6] = "@"+str(vector)
+            return cli(binary, *arguments)
     result = subprocess.run([str(binary), *map(str, args)], capture_output=True, text=True,
                             encoding="utf-8", timeout=120)
     if result.returncode:
@@ -658,9 +665,11 @@ def import_jsonl(args, _client):
         raise ValueError("JSONL input exceeds 512 MiB")
     with source.open(encoding="utf-8") as stream:
         header = json.loads(stream.readline(64*1024))
-        if header.get("type") != "vecnook_collection" or header.get("schema_version") != 1:
+        if not isinstance(header, dict) or header.get("type") != "vecnook_collection" or type(header.get("schema_version")) is not int or header["schema_version"] != 1:
             raise ValueError("unsupported JSONL collection header")
         info, rows, seen, encoded = header["space"], [], set(), 56
+        if not isinstance(info, dict) or not isinstance(info.get("model"), str):
+            raise ValueError("invalid JSONL embedding identity")
         dimension = info["dimensions"]
         if type(dimension) is not int or not 1 <= dimension <= 4096:
             raise ValueError("invalid JSONL dimensions")
@@ -689,7 +698,10 @@ def import_jsonl(args, _client):
             c = Chunk(d["source"], d["start_line"], d["end_line"], d["text"])
             if not c.source or "\0" in c.source:
                 raise ValueError("invalid JSONL source")
-            payload = encode_document(identifier, c, d["tags"], d.get("numbers"), d.get("dates"))
+            numbers, dates = d.get("numbers", {}), d.get("dates", {})
+            if not isinstance(numbers, dict) or not isinstance(dates, dict) or any(not isinstance(k, str) or type(v) not in {int, float} or not math.isfinite(v) for k, v in numbers.items()) or any(not isinstance(k, str) or not isinstance(v, str) for k, v in dates.items()):
+                raise ValueError("invalid JSONL typed attributes")
+            payload = encode_document(identifier, c, d["tags"], numbers, dates)
             encoded += 13+4*dimension+len(payload.encode())
             if encoded > 256*MAX_FILE:
                 raise ValueError("JSONL snapshot capacity exceeded")
@@ -712,6 +724,8 @@ def import_jsonl(args, _client):
 
 def reindex_documents(args, client):
     old, destination = Path(args.db), Path(args.to)
+    if destination.resolve().is_relative_to(old.resolve()):
+        raise ValueError("reindex destination must be outside the original collection, including with --resume")
     if destination.exists() and not getattr(args, "resume", False):
         raise ValueError("reindex needs a fresh --to path, or explicit --resume for a partial new collection")
     original = inspected_state(args)

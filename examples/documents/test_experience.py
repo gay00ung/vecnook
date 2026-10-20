@@ -105,6 +105,11 @@ class ExperienceTests(unittest.TestCase):
             search.reindex_documents(self.args, self.client)
         self.assertEqual(search.inspected_state(self.args), old)
         self.assertTrue(self.args.to.exists())
+        self.args.to = self.args.db
+        self.args.resume = True
+        with self.assertRaisesRegex(ValueError, 'outside the original'):
+            search.reindex_documents(self.args, self.client)
+        self.assertEqual(search.inspected_state(self.args), old)
 
     def test_jsonl_roundtrip_large_ids_f32_bits_and_invalid_import_is_unclaimed(self):
         self.sync()
@@ -152,6 +157,26 @@ class ExperienceTests(unittest.TestCase):
         with self.assertRaises(module.VecnookError) as error:
             client.get('1')
         self.assertEqual(error.exception.kind, 'InvalidInput')
+
+    def test_large_vector_query_uses_a_bounded_file_without_enabling_batch_file_reads(self):
+        package = Path(__file__).resolve().parents[2]/'clients/python/vecnook.py'
+        spec = importlib.util.spec_from_file_location('large_vector_client', package)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        client = module.Client.create(self.root/'large', 4096, 'large-fixture', binary=self.args.binary)
+        vector = [0.123456789]*4096
+        client.put(dict(id='1', source='large.md', text='original'), vector)
+        result = client.search_vector(vector, k=1, strategy='exact')
+        self.assertEqual(result['matches'][0]['document']['id'], '1')
+        self.assertEqual(result['matches'][0]['distance'], 0.0)
+        reference = self.root/'vector.csv'
+        reference.write_text(','.join(map(str,vector)), encoding='utf-8')
+        batch = self.root/'invalid-vector.tsv'
+        payload = search.encode_document(2, search.Chunk('hidden.md',1,1,'must not insert'), [])
+        batch.write_text(f'put\t2\t@{reference}\t{payload}\n', encoding='utf-8')
+        with self.assertRaisesRegex(module.VecnookError, 'invalid'):
+            client._run('docs-batch','--db',client.path,batch,json_result=False)
+        self.assertEqual(len(client.inspect()['documents']), 1)
 
 
 if __name__ == '__main__':

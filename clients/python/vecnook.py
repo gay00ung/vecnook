@@ -78,7 +78,13 @@ class Client:
     def search_vector(self, vector, k=10, *, where=None, strategy="auto"):
         """Query caller-provided coordinates from the collection's exact space."""
         flags = ["--where", where] if where is not None else []
-        return self._run("docs-search", "--db", self.path, _coordinates(vector), k,
+        encoded = _coordinates(vector)
+        if len(encoded) > 8192:
+            with tempfile.TemporaryDirectory(prefix="vecnook-python-query-") as temporary:
+                path = Path(temporary)/"vector.csv"
+                path.write_text(encoded, encoding="utf-8")
+                return self._run("docs-search", "--db", self.path, "@"+str(path), k, max(128,k), strategy, *flags)
+        return self._run("docs-search", "--db", self.path, encoded, k,
                          max(128, k), strategy, *flags)
 
     def search(self, text, k=3, *, mode="auto", analyzer="words", where=None,

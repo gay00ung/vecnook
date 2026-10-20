@@ -18,6 +18,10 @@ model. With `--db`, it also checks the stored digest. Exit 1 with `ready=false`
 means preparation is needed; its checks distinguish a missing server, missing
 model and changed identity. It does not install software or download a model.
 The prepared `demo` and low-level Rust commands need neither Python nor Ollama.
+The embedded script is sent through stdin, avoiding Windows argv limits. Search
+vector arguments additionally accept `@query.csv` (at most 128 KiB); document and
+Python clients use temporary vector files for long coordinates. Batch files still
+parse literal vectors and never resolve arbitrary `@` paths.
 
 Document commands accept `--db collection-dir` in place of the root/name/model
 prefix. For example, `docs-info --db data/notes`, `docs-export --db data/notes

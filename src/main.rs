@@ -3,7 +3,7 @@ use std::{
     fmt::Display,
     fs::File,
     io::{self, BufRead, Read, Write},
-    process::{Command, ExitCode},
+    process::{Command, ExitCode, Stdio},
     str::FromStr,
 };
 
@@ -272,7 +272,8 @@ fn markdown_command(args: &[String], json_errors: bool) -> Result<()> {
         .env("PYTHONIOENCODING", "utf-8")
         .env("VECNOOK_COMMAND", &args[0])
         .arg("-c")
-        .arg(include_str!("../examples/documents/search.py"))
+        .arg("import sys; exec(compile(sys.stdin.buffer.read(), '<vecnook-documents>', 'exec'))")
+        .stdin(Stdio::piped())
         .arg("--binary")
         .arg(std::env::current_exe()?);
     match args[0].as_str() {
@@ -297,29 +298,34 @@ fn markdown_command(args: &[String], json_errors: bool) -> Result<()> {
         _ => unreachable!(),
     }
     if json_errors {
-        let output = command.args(&args[1..]).output().map_err(|e| {
-            Error::InvalidInput(format!(
-                "Markdown commands require Python 3.10+ (set VECNOOK_PYTHON): {e}"
-            ))
-        })?;
-        io::stdout().write_all(&output.stdout)?;
-        if !output.status.success() {
-            return Err(Error::InvalidInput(
-                String::from_utf8_lossy(&output.stderr).trim().to_string(),
-            ));
-        }
-        return Ok(());
+        command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    } else {
+        command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
     }
-    let status = command.args(&args[1..]).status().map_err(|error| {
+    let mut child = command.args(&args[1..]).spawn().map_err(|error| {
         Error::InvalidInput(format!(
             "Markdown commands require Python 3.10+ (set VECNOOK_PYTHON to its path): {error}"
         ))
     })?;
-    if !status.success() {
-        return Err(Error::InvalidInput(
-            "Markdown command failed; see the message above".into(),
-        ));
+    // Keep the embedded source out of argv: Windows limits command lines to
+    // 32767 UTF-16 units. The wrapper consumes stdin before executing any client work.
+    let sent = child
+        .stdin
+        .take()
+        .ok_or_else(|| Error::InvalidInput("missing Python input pipe".into()))?
+        .write_all(include_bytes!("../examples/documents/search.py"));
+    let output = child.wait_with_output()?;
+    if json_errors {
+        io::stdout().write_all(&output.stdout)?;
     }
+    if !output.status.success() {
+        return Err(Error::InvalidInput(if json_errors {
+            String::from_utf8_lossy(&output.stderr).trim().to_string()
+        } else {
+            "Markdown command failed; see the message above".into()
+        }));
+    }
+    sent?;
     Ok(())
 }
 
@@ -366,7 +372,7 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
                 6,
                 "search <vector> [k] [ef] [exact|hnsw|auto] [--metadata value]",
             )?;
-            let query = vector_values(&args[0])?;
+            let query = cli_vector(&args[0])?;
             let k = optional(args, 1, 10, "K")?;
             let ef = optional(args, 2, 128, "efSearch")?;
             let mode = args.get(3).map_or("auto", String::as_str);
@@ -794,7 +800,7 @@ fn document_command(args: &[String]) -> Result<()> {
                 .with_tags(&tags)
                 .with_optional_expression(expression.as_ref());
             if hybrid {
-                let query = vector_values(&extra[0])?;
+                let query = cli_vector(&extra[0])?;
                 let options = HybridSearchOptions::default()
                     .with_candidates(candidates.unwrap_or(64))
                     .with_rrf_k(rrf_k.unwrap_or(60));
@@ -942,7 +948,7 @@ fn document_command(args: &[String]) -> Result<()> {
                 74,
                 "docs-search ... <vector> [k] [ef] [strategy] [--tag value] [--source value] [--where expression]",
             )?;
-            let query = vector_values(&extra[0])?;
+            let query = cli_vector(&extra[0])?;
             let flag = extra
                 .iter()
                 .position(|s| s.starts_with("--"))
@@ -1216,6 +1222,22 @@ where
     args.get(offset)
         .map_or(Ok(default), |text| parse(text, name))
 }
+fn cli_vector(text: &str) -> Result<Vec<f32>> {
+    if let Some(path) = text.strip_prefix('@') {
+        let mut body = String::new();
+        File::open(path)?
+            .take(128 * 1024 + 1)
+            .read_to_string(&mut body)?;
+        if body.len() > 128 * 1024 {
+            return Err(Error::InvalidInput(
+                "query vector file exceeds 128 KiB".into(),
+            ));
+        }
+        return vector_values(body.trim());
+    }
+    vector_values(text)
+}
+
 fn vector_values(text: &str) -> Result<Vec<f32>> {
     let mut vector = Vec::new();
     for value in text.split(',') {

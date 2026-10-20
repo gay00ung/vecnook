@@ -27,7 +27,7 @@ def main():
     archive = output/f'vecnook-{version}-{target}.zip'
     if archive.exists():
         raise ValueError('binary archive already exists')
-    actual = subprocess.run([binary, '--version'], check=True, capture_output=True, text=True).stdout.strip()
+    actual = subprocess.run([binary, '--version'], check=True, capture_output=True, text=True, encoding="utf-8").stdout.strip()
     if actual != 'vecnook '+version:
         raise ValueError('binary/manifest version mismatch')
     with zipfile.ZipFile(archive, 'x', compression=zipfile.ZIP_DEFLATED) as package:
@@ -41,7 +41,9 @@ def main():
         executable = folder/binary.name
         executable.chmod(0o755)
         for command in [['--version'], ['demo', folder/'demo'], ['demo', folder/'demo', '1'], ['docs-sync', '--help']]:
-            subprocess.run([str(executable), *map(str,command)], check=True, capture_output=True, text=True)
+            result = subprocess.run([str(executable), *map(str,command)], capture_output=True, text=True, encoding="utf-8")
+            if result.returncode:
+                raise RuntimeError(f"extracted CLI failed {command[0]}: {result.stderr}")
     checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
     (output/(archive.name+'.sha256')).write_text(checksum+'  '+archive.name+'\n')
     receipt = dict(schema_version=1, version=version, target=target, archive=archive.name,
