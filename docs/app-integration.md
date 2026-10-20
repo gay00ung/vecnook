@@ -49,3 +49,7 @@ through the same queue and K limit. It rejects invalid key/range/complexity boun
 before enqueueing and combines source/tag predicates inside the expression.
 See [Boolean and range filters](compound-filters.md). Queued expression trees add
 bounded string/node allocations to the memory estimates above.
+
+## Additional queued operations in 1.3
+
+`submit_keywords` and `submit_hybrid` take an owned `app::QueryFilter`. `status` reports sequence, capacity and maintenance recommendations on the locked handle. `activity` reports queued/running work without waiting for it. `compact`, `maintain` and named `backup` share the same FIFO and ACK/error rules. These operations can delay subsequent searches; there is no automatic compaction. See [the complete workflow and boundaries](user-experience.md#keep-one-application-owner).

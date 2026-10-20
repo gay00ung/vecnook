@@ -136,7 +136,7 @@ def main():
             response = json.loads(cli(args.binary, *command))
             elapsed = (time.perf_counter() - started) * 1000
             if args.baseline_binary:
-                baseline = json.loads(cli(args.baseline_binary, *command))
+                baseline = json.loads(cli(args.baseline_binary, *command, vector_files=False))
                 if baseline != response:
                     raise ValueError(f"paired baseline response changed: {mode} / {query}")
             sources = [match["document"]["source"] for match in response["matches"]]

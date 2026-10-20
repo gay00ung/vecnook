@@ -101,8 +101,40 @@ pub struct DiagnosticReport {
 /// checkpoint or rebuild a cache. Concurrent open returns Locked; complete corruption
 /// fails closed. An incomplete final frame is reported and ignored in the report.
 pub fn doctor(path: impl AsRef<Path>) -> Result<DiagnosticReport> {
+    inspect_records(path.as_ref()).map(|(report, _)| report)
+}
+
+/// Inspect original document/vector rows without recovery or file modification.
+/// Holds the same exclusive read-only file lock as doctor while validating all
+/// rows. An incomplete final WAL frame is reported and left untouched.
+pub fn inspect_documents(path: impl AsRef<Path>) -> Result<DocumentInspection> {
+    let (report, records) = inspect_records(path.as_ref())?;
+    if report.space.is_none() {
+        return Err(Error::InvalidInput("expected a document collection".into()));
+    }
+    let documents = records
+        .into_iter()
+        .filter(|r| !r.deleted)
+        .map(|r| Ok((crate::Document::from_payload(&r.metadata)?, r.vector)))
+        .collect::<Result<_>>()?;
+    Ok(DocumentInspection {
+        diagnostics: report,
+        documents,
+    })
+}
+
+/// A validated read-only collection view. Coordinates remain original f32 values.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct DocumentInspection {
+    /// Storage validation, sequence, capacity and any untouched incomplete tail.
+    pub diagnostics: DiagnosticReport,
+    /// Active original documents and their vectors. Ordering is unspecified.
+    pub documents: Vec<(crate::Document, Vec<f32>)>,
+}
+
+fn inspect_records(path: &Path) -> Result<(DiagnosticReport, Vec<Record>)> {
     storage::ensure_platform()?;
-    let path = path.as_ref();
     let lock = File::open(path.join("LOCK"))?;
     match lock.try_lock() {
         Ok(()) => (),
@@ -140,20 +172,23 @@ pub fn doctor(path: impl AsRef<Path>) -> Result<DiagnosticReport> {
     };
     let policy = crate::MaintenancePolicy::default();
     let ratio = capacity.tombstones as f64 / capacity.physical_nodes.max(1) as f64;
-    Ok(DiagnosticReport {
-        config: recovered.config,
-        space,
-        sequence: recovered.sequence,
-        compact_recommended: capacity.tombstones >= policy.min_tombstones
-            && ratio >= policy.tombstone_ratio,
-        checkpoint_recommended: wal_bytes >= policy.wal_bytes,
-        capacity,
-        snapshot_file_bytes: fs::metadata(path.join("snapshot.bin"))?.len(),
-        wal_bytes,
-        cache_bytes,
-        pending_tail_bytes: recovered.truncated_bytes,
-        replayed_frames: recovered.replayed,
-        graph_cache_valid: recovered.graph.is_some(),
-        graph_cache_note: recovered.cache_note,
-    })
+    Ok((
+        DiagnosticReport {
+            config: recovered.config,
+            space,
+            sequence: recovered.sequence,
+            compact_recommended: capacity.tombstones >= policy.min_tombstones
+                && ratio >= policy.tombstone_ratio,
+            checkpoint_recommended: wal_bytes >= policy.wal_bytes,
+            capacity,
+            snapshot_file_bytes: fs::metadata(path.join("snapshot.bin"))?.len(),
+            wal_bytes,
+            cache_bytes,
+            pending_tail_bytes: recovered.truncated_bytes,
+            replayed_frames: recovered.replayed,
+            graph_cache_valid: recovered.graph.is_some(),
+            graph_cache_note: recovered.cache_note,
+        },
+        recovered.records,
+    ))
 }

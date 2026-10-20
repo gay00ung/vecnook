@@ -97,12 +97,15 @@ pub use db::{
     Database, MaintenanceAction, MaintenancePolicy, MaintenanceReport, MaintenanceStatus,
     RecoveryInfo,
 };
-pub use diagnostics::{CapacityStatus, DiagnosticReport, doctor};
+pub use diagnostics::{
+    CapacityStatus, DiagnosticReport, DocumentInspection, doctor, inspect_documents,
+};
 pub use document::Document;
 pub use error::{Error, ErrorKind, Result};
 pub use filter::{Date, FilterExpr, Number};
 pub use index::{IndexStats, Neighbor, Record, SearchMode, SearchReport, VectorIndex};
 pub use keyword::{
-    HybridNeighbor, HybridSearchOptions, HybridSearchReport, KeywordNeighbor, KeywordSearchReport,
+    HybridNeighbor, HybridSearchOptions, HybridSearchReport, KeywordAnalyzer, KeywordNeighbor,
+    KeywordSearchReport,
 };
 pub use search::{SearchOptions, SearchReason, SearchStrategy};

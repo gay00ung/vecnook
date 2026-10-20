@@ -3,14 +3,14 @@ use std::{
     fmt::Display,
     fs::File,
     io::{self, BufRead, Read, Write},
-    process::{Command, ExitCode},
+    process::{Command, ExitCode, Stdio},
     str::FromStr,
 };
 
 use vecnook::{
     Collection, Config, Database, Document, DocumentFilter, DocumentMutation, EmbeddingSpace,
-    Error, FilterExpr, HybridSearchOptions, MaintenancePolicy, Metric, Mutation, Result,
-    SearchOptions, SearchStrategy,
+    Error, FilterExpr, HybridSearchOptions, KeywordAnalyzer, MaintenancePolicy, Metric, Mutation,
+    Result, SearchOptions, SearchStrategy,
     bench::{self, BenchConfig, Dataset},
 };
 
@@ -19,6 +19,10 @@ mod demo_data;
 
 const HELP: &str = "vecnook: dependency-free vector database\n\
 Usage:\n\
+  vecnook env-check [--model name] [--db collection-dir] [--json]\n\
+  vecnook docs-export-jsonl --db collection-dir --output new-file\n\
+  vecnook docs-import-jsonl input-file --db new-collection-dir\n\
+  vecnook docs-reindex folder --db existing-dir --to new-dir --model name\n\
   vecnook demo [demo-root] [prepared-query=1..3]\n\
   vecnook docs-sync <markdown-folder> --db <collection-dir> [--model name] [--tag value] [--namespace name] [--prune] [--record-metadata|--no-record-metadata]\n\
   vecnook docs-find <question> --db <collection-dir> [--mode auto|hybrid|vector|keyword] [--k N] [--json] [--tag value] [--source value] [--where expression]\n\
@@ -41,6 +45,10 @@ Usage:\n\
   vecnook compact <db-dir>\n\
   vecnook shell <db-dir>\n\
   vecnook docs-init <root> <name> <dimensions> <model-identity> <l2|cosine|ip>\n\
+  vecnook docs-inspect <root> <name>\n\
+  vecnook docs-context <root> <name> <dimensions> <model-identity> <metric> <id> [radius] [--where expression]\n\
+  vecnook docs-get <root> <name> <dimensions> <model-identity> <metric> <id> [--vector]\n\
+  vecnook docs-compact <root> <name> <dimensions> <model-identity> <metric>\n\
   vecnook docs-info <root> <name>\n\
   vecnook docs-list <root> <name> <dimensions> <model-identity> <metric> [after-id|-] [limit=128]\n\
   vecnook docs-batch <root> <name> <dimensions> <model-identity> <metric> <tsv-file> [--if-sequence N]\n\
@@ -50,20 +58,34 @@ Usage:\n\
   vecnook docs-checkpoint <root> <name> <dimensions> <model-identity> <metric>\n\
   vecnook bench [count=10000] [dimensions=512] [queries=200] [ef=128] [seed=42] [clustered|uniform] [l2|cosine|ip]\n\
   vecnook bench-file <base.fvecs> <query.fvecs> [count=10000] [queries=200] [ef=128] [l2|cosine|ip]\n\n\
+Global --json-errors before the command emits structured failures on stderr.\n\
+Document commands also accept --db collection-dir instead of the identity prefix.\n\
 Distances sort ascending. The shell accepts the same DB commands without <db-dir>, plus quit.\n";
 
 fn main() -> ExitCode {
-    let args: Vec<String> = std::env::args().skip(1).collect();
-    match run(&args) {
+    let mut args: Vec<String> = std::env::args().skip(1).collect();
+    let json_errors = args.first().is_some_and(|s| s == "--json-errors");
+    if json_errors {
+        args.remove(0);
+    }
+    match run(&args, json_errors) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("ERROR {error}");
+            if json_errors {
+                eprintln!(
+                    "{{\"schema_version\":1,\"error\":{{\"kind\":{},\"message\":{}}}}}",
+                    json_string(&format!("{:?}", error.kind())),
+                    json_string(&error.to_string())
+                );
+            } else {
+                eprintln!("ERROR {error}");
+            }
             ExitCode::FAILURE
         }
     }
 }
 
-fn run(args: &[String]) -> Result<()> {
+fn run(args: &[String], json_errors: bool) -> Result<()> {
     let Some(command) = args.first().map(String::as_str) else {
         print!("{HELP}");
         return Ok(());
@@ -76,8 +98,47 @@ fn run(args: &[String]) -> Result<()> {
         print!("{HELP}");
         return Ok(());
     }
-    if matches!(command, "docs-sync" | "docs-find") {
-        return markdown_command(args);
+    if args.len() == 2
+        && matches!(args[1].as_str(), "--help" | "-h")
+        && !matches!(
+            command,
+            "docs-sync"
+                | "docs-find"
+                | "env-check"
+                | "docs-export-jsonl"
+                | "docs-import-jsonl"
+                | "docs-reindex"
+        )
+    {
+        let prefix = format!("vecnook {command} ");
+        let usage: Vec<_> = HELP
+            .lines()
+            .filter(|line| line.trim_start().starts_with(&prefix))
+            .collect();
+        if usage.is_empty() {
+            return Err(Error::InvalidInput(format!("unknown command {command}")));
+        }
+        println!("{}", usage.join("\n"));
+        if command.starts_with("docs-") {
+            println!(
+                "Or replace root/name/identity with --db <collection-dir>.\nKeyword/hybrid queries support --analyzer words|korean-ngram.\ndocs-list/get support --vectors/--vector respectively."
+            );
+        }
+        return Ok(());
+    }
+    if matches!(
+        command,
+        "docs-sync"
+            | "docs-find"
+            | "env-check"
+            | "docs-export-jsonl"
+            | "docs-import-jsonl"
+            | "docs-reindex"
+    ) {
+        return markdown_command(args, json_errors);
+    }
+    if command.starts_with("docs-") && args.iter().any(|s| s == "--db") {
+        return document_alias(args);
     }
     if command.starts_with("docs-") {
         return document_command(args);
@@ -203,31 +264,68 @@ fn run(args: &[String]) -> Result<()> {
 
 // Ship the existing standard-library Markdown client inside the installed binary,
 // so folder sync does not require a repository checkout or a downloaded script.
-fn markdown_command(args: &[String]) -> Result<()> {
+fn markdown_command(args: &[String], json_errors: bool) -> Result<()> {
     let python = std::env::var_os("VECNOOK_PYTHON")
         .unwrap_or_else(|| if cfg!(windows) { "python" } else { "python3" }.into());
     let mut command = Command::new(python);
     command
         .env("PYTHONIOENCODING", "utf-8")
+        .env("VECNOOK_COMMAND", &args[0])
         .arg("-c")
-        .arg(include_str!("../examples/documents/search.py"))
+        .arg("import sys; exec(compile(sys.stdin.buffer.read(), '<vecnook-documents>', 'exec'))")
+        .stdin(Stdio::piped())
         .arg("--binary")
         .arg(std::env::current_exe()?);
-    if args[0] == "docs-sync" {
-        command.arg("sync");
-    } else {
-        command.args(["search", "--mode", "auto"]);
+    match args[0].as_str() {
+        "docs-sync" => {
+            command.arg("sync");
+        }
+        "docs-find" => {
+            command.args(["search", "--mode", "auto"]);
+        }
+        "env-check" => {
+            command.arg("env-check");
+        }
+        "docs-export-jsonl" => {
+            command.arg("export-jsonl");
+        }
+        "docs-import-jsonl" => {
+            command.arg("import-jsonl");
+        }
+        "docs-reindex" => {
+            command.arg("reindex");
+        }
+        _ => unreachable!(),
     }
-    let status = command.args(&args[1..]).status().map_err(|error| {
+    if json_errors {
+        command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    } else {
+        command.stdout(Stdio::inherit()).stderr(Stdio::inherit());
+    }
+    let mut child = command.args(&args[1..]).spawn().map_err(|error| {
         Error::InvalidInput(format!(
             "Markdown commands require Python 3.10+ (set VECNOOK_PYTHON to its path): {error}"
         ))
     })?;
-    if !status.success() {
-        return Err(Error::InvalidInput(
-            "Markdown command failed; see the message above".into(),
-        ));
+    // Keep the embedded source out of argv: Windows limits command lines to
+    // 32767 UTF-16 units. The wrapper consumes stdin before executing any client work.
+    let sent = child
+        .stdin
+        .take()
+        .ok_or_else(|| Error::InvalidInput("missing Python input pipe".into()))?
+        .write_all(include_bytes!("../examples/documents/search.py"));
+    let output = child.wait_with_output()?;
+    if json_errors {
+        io::stdout().write_all(&output.stdout)?;
     }
+    if !output.status.success() {
+        return Err(Error::InvalidInput(if json_errors {
+            String::from_utf8_lossy(&output.stderr).trim().to_string()
+        } else {
+            "Markdown command failed; see the message above".into()
+        }));
+    }
+    sent?;
     Ok(())
 }
 
@@ -274,7 +372,7 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
                 6,
                 "search <vector> [k] [ef] [exact|hnsw|auto] [--metadata value]",
             )?;
-            let query = vector_values(&args[0])?;
+            let query = cli_vector(&args[0])?;
             let k = optional(args, 1, 10, "K")?;
             let ef = optional(args, 2, 128, "efSearch")?;
             let mode = args.get(3).map_or("auto", String::as_str);
@@ -481,12 +579,99 @@ fn document_json(document: &Document) -> String {
     result
 }
 
+fn document_with_vector_json(collection: &Collection, doc: &Document, include: bool) -> String {
+    let mut json = document_json(doc);
+    if include {
+        json.pop();
+        let vector = collection
+            .vector(doc.id)
+            .unwrap_or(&[])
+            .iter()
+            .map(|v| format!("{v:?}"))
+            .collect::<Vec<_>>()
+            .join(",");
+        json.push_str(&format!(",\"vector\":[{vector}]}}"));
+    }
+    json
+}
+
+fn document_alias(args: &[String]) -> Result<()> {
+    let mut rest = args[1..].to_vec();
+    let index = rest.iter().position(|s| s == "--db").unwrap();
+    if index + 1 >= rest.len() {
+        return Err(Error::InvalidInput("--db needs a collection path".into()));
+    }
+    let path = std::path::PathBuf::from(rest.remove(index + 1));
+    rest.remove(index);
+    let name = path
+        .file_name()
+        .and_then(|s| s.to_str())
+        .ok_or_else(|| Error::InvalidInput("invalid collection path".into()))?;
+    let root = path.parent().unwrap_or_else(|| std::path::Path::new("."));
+    let root = if root.as_os_str().is_empty() {
+        std::path::Path::new(".")
+    } else {
+        root
+    };
+    let space = Collection::describe(root, name)?;
+    let mut expanded = vec![
+        args[0].clone(),
+        root.to_string_lossy().into_owned(),
+        name.to_string(),
+    ];
+    if !matches!(args[0].as_str(), "docs-info" | "docs-inspect") {
+        expanded.extend([
+            space.dimensions.to_string(),
+            space.model,
+            match space.metric {
+                Metric::SquaredL2 => "l2",
+                Metric::Cosine => "cosine",
+                Metric::InnerProduct => "ip",
+                _ => return Err(Error::InvalidInput("unsupported metric".into())),
+            }
+            .to_string(),
+        ]);
+    }
+    expanded.extend(rest);
+    document_command(&expanded)
+}
+
 fn document_command(args: &[String]) -> Result<()> {
     let command = args[0].as_str();
     if command == "docs-import" {
         require_count(args, 4, 4, "docs-import <export-file> <root> <new-name>")?;
         let collection = Collection::import(&args[1], &args[2], &args[3])?;
         println!("OK imported documents={}", collection.len());
+        return Ok(());
+    }
+    if command == "docs-inspect" {
+        require_count(args, 3, 3, "docs-inspect <root> <name>")?;
+        let path = std::path::Path::new(&args[1]).join(&args[2]);
+        let inspection = vecnook::inspect_documents(path)?;
+        let report = inspection.diagnostics;
+        let mut rows = inspection.documents;
+        rows.sort_unstable_by_key(|(d, _)| d.id);
+        let documents = rows
+            .iter()
+            .map(|(d, v)| {
+                let mut json = document_json(d);
+                json.pop();
+                let coordinates = v
+                    .iter()
+                    .map(|v| format!("{v:?}"))
+                    .collect::<Vec<_>>()
+                    .join(",");
+                json.push_str(&format!(",\"vector\":[{coordinates}]}}"));
+                json
+            })
+            .collect::<Vec<_>>()
+            .join(",");
+        println!(
+            "{{\"schema_version\":1,\"sequence\":\"{}\",\"diagnostics\":{},\"documents\":[{}]}}",
+            report.sequence,
+            diagnostic_json(&report),
+            documents
+        );
         return Ok(());
     }
     if command == "docs-info" {
@@ -535,12 +720,28 @@ fn document_command(args: &[String]) -> Result<()> {
             | "docs-hybrid"
             | "docs-checkpoint"
             | "docs-get"
+            | "docs-context"
             | "docs-compact"
     ) {
         return Err(Error::InvalidInput("unknown document command".into()));
     }
     let mut collection = Collection::open(&args[1], &args[2], &space)?;
-    let extra = &args[6..];
+    let mut extra_owned = args[6..].to_vec();
+    if let Some(i) = extra_owned.iter().position(|s| s == "--analyzer") {
+        if !matches!(command, "docs-keywords" | "docs-hybrid") || i + 1 >= extra_owned.len() {
+            return Err(Error::InvalidInput(
+                "--analyzer requires words|korean-ngram on keyword/hybrid queries".into(),
+            ));
+        }
+        let analyzer = match extra_owned[i + 1].as_str() {
+            "words" => KeywordAnalyzer::Words,
+            "korean-ngram" => KeywordAnalyzer::KoreanNgram,
+            _ => return Err(Error::InvalidInput("unknown keyword analyzer".into())),
+        };
+        collection.set_keyword_analyzer(analyzer)?;
+        extra_owned.drain(i..i + 2);
+    }
+    let extra = &extra_owned[..];
     match command {
         "docs-keywords" | "docs-hybrid" => {
             let hybrid = command == "docs-hybrid";
@@ -599,7 +800,7 @@ fn document_command(args: &[String]) -> Result<()> {
                 .with_tags(&tags)
                 .with_optional_expression(expression.as_ref());
             if hybrid {
-                let query = vector_values(&extra[0])?;
+                let query = cli_vector(&extra[0])?;
                 let options = HybridSearchOptions::default()
                     .with_candidates(candidates.unwrap_or(64))
                     .with_rrf_k(rrf_k.unwrap_or(60));
@@ -696,7 +897,18 @@ fn document_command(args: &[String]) -> Result<()> {
             );
         }
         "docs-list" => {
-            require_count(extra, 0, 2, "docs-list ... [after-id|-] [limit=128]")?;
+            let include_vectors = extra.last().is_some_and(|s| s == "--vectors");
+            let extra = if include_vectors {
+                &extra[..extra.len() - 1]
+            } else {
+                extra
+            };
+            require_count(
+                extra,
+                0,
+                2,
+                "docs-list ... [after-id|-] [limit=128] [--vectors]",
+            )?;
             let after = extra
                 .first()
                 .filter(|s| s.as_str() != "-")
@@ -719,7 +931,7 @@ fn document_command(args: &[String]) -> Result<()> {
             let documents = page
                 .iter()
                 .take(limit)
-                .map(document_json)
+                .map(|doc| document_with_vector_json(&collection, doc, include_vectors))
                 .collect::<Vec<_>>()
                 .join(",");
             println!(
@@ -736,7 +948,7 @@ fn document_command(args: &[String]) -> Result<()> {
                 74,
                 "docs-search ... <vector> [k] [ef] [strategy] [--tag value] [--source value] [--where expression]",
             )?;
-            let query = vector_values(&extra[0])?;
+            let query = cli_vector(&extra[0])?;
             let flag = extra
                 .iter()
                 .position(|s| s.starts_with("--"))
@@ -812,13 +1024,65 @@ fn document_command(args: &[String]) -> Result<()> {
                 documents
             );
         }
+        "docs-context" => {
+            require_count(
+                extra,
+                1,
+                72,
+                "docs-context ... <id> [radius=1] [--where expression] [--source value] [--tag value]",
+            )?;
+            let flag = extra
+                .iter()
+                .position(|s| s.starts_with("--"))
+                .unwrap_or(extra.len());
+            require_count(&extra[..flag], 1, 2, "docs-context ... <id> [radius]")?;
+            let flags = &extra[flag..];
+            if !flags.len().is_multiple_of(2) {
+                return Err(Error::InvalidInput("context flags need values".into()));
+            }
+            let mut source = None;
+            let mut tags = Vec::new();
+            let mut expression = None;
+            for pair in flags.as_chunks::<2>().0 {
+                match pair[0].as_str() {
+                    "--source" if source.is_none() => source = Some(pair[1].as_str()),
+                    "--tag" => tags.push(pair[1].as_str()),
+                    "--where" if expression.is_none() => {
+                        expression = Some(FilterExpr::parse(&pair[1])?)
+                    }
+                    _ => return Err(Error::InvalidInput("unknown/duplicate context flag".into())),
+                }
+            }
+            let documents = collection.context(
+                parse(&extra[0], "ID")?,
+                optional(&extra[..flag], 1, 1usize, "radius")?,
+                DocumentFilter::default()
+                    .with_optional_source(source)
+                    .with_tags(&tags)
+                    .with_optional_expression(expression.as_ref()),
+            )?;
+            println!(
+                "{{\"schema_version\":1,\"documents\":[{}]}}",
+                documents
+                    .iter()
+                    .map(document_json)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            );
+        }
         "docs-get" => {
-            require_count(extra, 1, 1, "docs-get ... <id>")?;
+            require_count(extra, 1, 2, "docs-get ... <id> [--vector]")?;
+            if extra.len() == 2 && extra[1] != "--vector" {
+                return Err(Error::InvalidInput("expected --vector".into()));
+            }
             let id = parse(&extra[0], "ID")?;
             let doc = collection
                 .get(id)?
                 .ok_or_else(|| Error::InvalidInput("document ID not found".into()))?;
-            println!("{}", document_json(&doc));
+            println!(
+                "{}",
+                document_with_vector_json(&collection, &doc, extra.len() == 2)
+            );
         }
         "docs-checkpoint" => {
             require_count(extra, 0, 0, "docs-checkpoint ...")?;
@@ -958,6 +1222,22 @@ where
     args.get(offset)
         .map_or(Ok(default), |text| parse(text, name))
 }
+fn cli_vector(text: &str) -> Result<Vec<f32>> {
+    if let Some(path) = text.strip_prefix('@') {
+        let mut body = String::new();
+        File::open(path)?
+            .take(128 * 1024 + 1)
+            .read_to_string(&mut body)?;
+        if body.len() > 128 * 1024 {
+            return Err(Error::InvalidInput(
+                "query vector file exceeds 128 KiB".into(),
+            ));
+        }
+        return vector_values(body.trim());
+    }
+    vector_values(text)
+}
+
 fn vector_values(text: &str) -> Result<Vec<f32>> {
     let mut vector = Vec::new();
     for value in text.split(',') {

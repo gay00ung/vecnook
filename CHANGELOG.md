@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.0-rc.1 — 2026-10-20
+
+- Added read-only document/vector inspection and sync dry-run plans without recovering or modifying database files. Unchanged embedding inputs reuse original stored vectors, including metadata-only edits.
+- Added environment checks, document path aliases, per-command help, structured error opt-in, explicit empty-result messages and search explanations.
+- Added opt-in Korean word grams, structural Markdown chunking, UTF-8 text input, source grouping, bounded adjacent context and distance bounds. Default tokenization and retrieval selection remain unchanged; context retains filters.
+- Added queued keyword/hybrid queries, live queue activity, owning-handle diagnostics, compaction, policy maintenance and named backups.
+- Added bounded JSONL exchange, new-path model reindex with source verification, a standard-library Python subprocess client and an asynchronous Node.js example.
+- Added native CLI archive/checksum CI and expanded correctness/relevance checks. Candidate distribution and 24-hour stable-release gates must complete before stable promotion.
+
+
 ## 1.2.0 — 2026-10-16
 
 - Promote the checked `1.2.0-rc.1` memory/update improvements and compound document filters to stable, retaining the standard-library-only Rust core and Rust 1.89 support.

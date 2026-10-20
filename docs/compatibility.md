@@ -114,3 +114,7 @@ create a separate logical export/import. An uncheckpointed replacement-heavy WAL
 may exceed the older reader's byte accounting because 1.2 reclaims inactive
 payloads during replay. This does not change acknowledged active records or the
 snapshot/WAL layout.
+
+## Migrating from 1.2 to 1.3
+
+Default tokenization, retrieval selection, original coordinates, VDOC1/VDOC2 and snapshot/WAL/cache formats remain unchanged. Optional Korean tokenization rebuilds only the runtime keyword index and must be reselected after open. Structural Markdown chunking creates a new collection identity with input schema 2; older convenience clients reject it. Native readers retain the opaque identity and original payloads. Existing CLI JSON v1 fields and positional commands remain supported. New optional context/group/distance selection is explicit and documents candidate versus final count completeness in the [1.3 guide](user-experience.md). The Python client is a separate standard-library subprocess package; it does not add core Cargo dependencies.

@@ -1,6 +1,19 @@
 use crate::{Document, Error, Result, SearchOptions, SearchReport, config::MAX_EF};
 use std::collections::{BTreeMap, BTreeSet};
 
+/// Token policy for the disposable keyword index. Select it on every open;
+/// original documents, vectors and persisted formats are unchanged.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum KeywordAnalyzer {
+    /// Lowercased Unicode words, preserving underscores and hyphens.
+    #[default]
+    Words,
+    /// Words plus two/three-character Hangul syllable grams. This improves
+    /// partial Korean word matching but can introduce unrelated partial matches.
+    KoreanNgram,
+}
+
 /// Original document ranked by lexical BM25 score, descending, then ID.
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
@@ -116,6 +129,7 @@ pub struct HybridSearchReport {
 
 #[derive(Default, PartialEq)]
 pub(crate) struct KeywordIndex {
+    analyzer: KeywordAnalyzer,
     terms: BTreeMap<String, BTreeMap<u64, usize>>,
     lengths: BTreeMap<u64, usize>,
     total_tokens: usize,
@@ -123,11 +137,29 @@ pub(crate) struct KeywordIndex {
 
 // Preserve snake_case and hyphenated error/product identifiers. Unicode case
 // folding here is lowercase only: no stemming, morphology or normalization.
-fn frequencies(text: &str) -> BTreeMap<String, usize> {
+fn frequencies(text: &str, analyzer: KeywordAnalyzer) -> BTreeMap<String, usize> {
     let mut result = BTreeMap::new();
     for token in text.split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-') {
         if token.chars().any(char::is_alphanumeric) {
-            *result.entry(token.to_lowercase()).or_default() += 1;
+            let word = token.to_lowercase();
+            if analyzer == KeywordAnalyzer::Words {
+                *result.entry(word).or_default() += 1;
+                continue;
+            }
+            let mut terms = BTreeSet::from([word.clone()]);
+            if analyzer == KeywordAnalyzer::KoreanNgram {
+                for run in word.split(|c: char| !('\u{ac00}'..='\u{d7a3}').contains(&c)) {
+                    let chars: Vec<_> = run.chars().collect();
+                    for width in [2, 3] {
+                        for part in chars.windows(width) {
+                            terms.insert(part.iter().collect());
+                        }
+                    }
+                }
+            }
+            for term in terms {
+                *result.entry(term).or_default() += 1;
+            }
         }
     }
     result
@@ -143,8 +175,19 @@ pub(crate) fn validate_query(text: &str) -> Result<()> {
 }
 
 impl KeywordIndex {
+    pub(crate) fn with_analyzer(analyzer: KeywordAnalyzer) -> Self {
+        Self {
+            analyzer,
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn analyzer(&self) -> KeywordAnalyzer {
+        self.analyzer
+    }
+
     pub(crate) fn add(&mut self, id: u64, text: &str) {
-        let terms = frequencies(text);
+        let terms = frequencies(text, self.analyzer);
         let length = terms.values().sum();
         self.lengths.insert(id, length);
         self.total_tokens += length;
@@ -156,7 +199,7 @@ impl KeywordIndex {
     pub(crate) fn remove(&mut self, id: u64, text: &str) {
         if let Some(length) = self.lengths.remove(&id) {
             self.total_tokens -= length;
-            for term in frequencies(text).keys() {
+            for term in frequencies(text, self.analyzer).keys() {
                 if let Some(postings) = self.terms.get_mut(term) {
                     postings.remove(&id);
                     if postings.is_empty() {
@@ -180,7 +223,7 @@ impl KeywordIndex {
         }
         let n = self.lengths.len() as f64;
         let average = self.total_tokens as f64 / n;
-        for term in frequencies(text).keys() {
+        for term in frequencies(text, self.analyzer).keys() {
             let Some(postings) = self.terms.get(term) else {
                 continue;
             };

@@ -88,8 +88,10 @@ class SyncTests(unittest.TestCase):
         self.assertEqual(self.state()[:2], before)
         (self.documents / '한글 notes 🚀.md').write_text("changed", encoding="utf-8")
         Handler.broken = True
-        with self.assertRaisesRegex(ValueError, "count mismatch"):
-            self.run_sync()
+        with contextlib.redirect_stderr(io.StringIO()) as error_output:
+            with self.assertRaisesRegex(ValueError, "count mismatch"):
+                self.run_sync()
+        self.assertIn("failed_source='한글 notes 🚀.md'", error_output.getvalue())
         self.assertEqual(self.state()[:2], before)
         Handler.broken, Handler.digest = False, "different"
         requests = len(self.server.inputs)

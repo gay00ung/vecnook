@@ -2,7 +2,9 @@
 #![forbid(unsafe_code)]
 use std::time::Duration;
 use vecnook::app::{self as app_backend, WriteOperation};
-use vecnook::{Collection, Config, Document, EmbeddingSpace, Metric};
+use vecnook::{
+    Collection, Config, Document, EmbeddingSpace, HybridSearchOptions, MaintenancePolicy, Metric,
+};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let root = std::env::args()
@@ -71,6 +73,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     for caller in callers {
         println!("{}", caller.join().unwrap());
     }
+    let mut filter = app_backend::QueryFilter::default();
+    filter.source = Some("recovery.md".into());
+    let keywords =
+        client.submit_keywords(&space.model, "acknowledged".into(), 5, filter.clone())?;
+    let hybrid = client.submit_hybrid(
+        &space.model,
+        vec![1.0, 0.1, 0.0],
+        "acknowledged".into(),
+        5,
+        HybridSearchOptions::default(),
+        filter,
+    )?;
+    assert_eq!(
+        keywords.recv_timeout(Duration::from_secs(10))??.neighbors[0].document,
+        updated
+    );
+    assert_eq!(
+        hybrid.recv_timeout(Duration::from_secs(10))??.neighbors[0].document,
+        updated
+    );
+    let status = client
+        .status(MaintenancePolicy::default())?
+        .recv_timeout(Duration::from_secs(10))??;
+    assert_eq!(status.capacity.active_records, 2);
+    println!(
+        "Vector, keyword and hybrid requests verified; owner sequence={}",
+        status.sequence
+    );
     let deletion =
         client.submit_batch(&space.model, vec![WriteOperation::Delete { id: 2 }], None)?;
     // Closing a response receiver does not cancel an accepted mutation.

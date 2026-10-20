@@ -221,6 +221,71 @@ fn verify_documents(collection: &Collection, model: &Model) {
         expected
     );
 }
+
+fn verify_application_worker(mut collection: Collection, model: &Model) -> Collection {
+    use vecnook::{KeywordAnalyzer, MaintenancePolicy, app};
+    collection
+        .set_keyword_analyzer(KeywordAnalyzer::KoreanNgram)
+        .unwrap();
+    let identity = collection.space().model.clone();
+    let expected_sequence = collection.sequence();
+    let (client, worker) = app::start(collection).unwrap();
+    let mut filter = app::QueryFilter::default();
+    filter.expression = Some(FilterExpr::tag("bucket-0"));
+    let keyword = client
+        .submit_keywords(&identity, "백업".into(), 10, filter.clone())
+        .unwrap();
+    let hybrid = client
+        .submit_hybrid(
+            &identity,
+            vec![0.1, 0.2, 0.3, 0.4],
+            "백업".into(),
+            10,
+            HybridSearchOptions::default(),
+            filter,
+        )
+        .unwrap();
+    let allowed = model.keys().filter(|id| **id % 3 == 0).count();
+    let keyword = keyword
+        .recv_timeout(Duration::from_secs(10))
+        .unwrap()
+        .unwrap();
+    assert_eq!(keyword.neighbors.len(), allowed.min(10));
+    for n in keyword.neighbors {
+        assert!(n.document.id.is_multiple_of(3));
+        assert_eq!(
+            n.document,
+            document(n.document.id, &model[&n.document.id].1)
+        );
+    }
+    for n in hybrid
+        .recv_timeout(Duration::from_secs(10))
+        .unwrap()
+        .unwrap()
+        .neighbors
+    {
+        assert!(n.document.id.is_multiple_of(3));
+        assert_eq!(
+            n.document,
+            document(n.document.id, &model[&n.document.id].1)
+        );
+    }
+    let status = client
+        .status(MaintenancePolicy::default())
+        .unwrap()
+        .recv_timeout(Duration::from_secs(10))
+        .unwrap()
+        .unwrap();
+    assert_eq!(status.sequence, expected_sequence);
+    assert_eq!(status.capacity.active_records, model.len());
+    drop(client);
+    let mut collection = worker.join().unwrap();
+    collection.check_invariants().unwrap();
+    collection
+        .set_keyword_analyzer(KeywordAnalyzer::Words)
+        .unwrap();
+    collection
+}
 fn verify_policy(index: &VectorIndex) {
     let report = index
         .search_metadata(&[17.2], 10, SearchOptions::default(), "selected")
@@ -313,7 +378,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             iterations as f32 / 100000.0,
         ];
         let text = format!(
-            "original 한글 step {iterations} lookup_{id} errno_{}\n",
+            "original 한글 step {iterations} lookup_{id} errno_{} 백업을\n",
             id % 17
         );
         let chunk = document(id, &text);
@@ -375,8 +440,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         if iterations.is_multiple_of(2000) {
             drop(db);
             drop(collection);
+            let inspection = vecnook::inspect_documents(root.join("documents"))?;
+            assert_eq!(inspection.documents.len(), model.len());
+            for (doc, vector) in inspection.documents {
+                assert_eq!(doc, document(doc.id, &model[&doc.id].1));
+                assert_eq!(vector.as_slice(), &model[&doc.id].0);
+            }
             db = Database::open(&db_path)?;
             collection = Collection::open(&root, "documents", &space)?;
+            collection = verify_application_worker(collection, &model);
             assert_eq!(replay(&ack_path), model);
             verify(&db, &model);
             verify_documents(&collection, &model);
