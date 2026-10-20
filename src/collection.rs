@@ -423,6 +423,36 @@ impl Collection {
     pub fn capacity(&self) -> crate::CapacityStatus {
         self.db.capacity()
     }
+    /// Inspect WAL/tombstone pressure through the handle that owns the lock.
+    pub fn maintenance_status(
+        &self,
+        policy: crate::MaintenancePolicy,
+    ) -> Result<crate::MaintenanceStatus> {
+        self.db.maintenance_status(policy)
+    }
+    /// Run synchronous policy-selected maintenance on the owning handle.
+    pub fn maintain(
+        &mut self,
+        policy: crate::MaintenancePolicy,
+    ) -> Result<crate::MaintenanceReport> {
+        self.db.maintain(policy)
+    }
+    /// Current in-memory keyword policy. Every open starts with Words.
+    pub fn keyword_analyzer(&self) -> crate::KeywordAnalyzer {
+        self.keywords.analyzer()
+    }
+    /// Rebuild the disposable keyword index with an explicitly selected policy.
+    /// Inserts and queries subsequently use this same policy. Reapply after open;
+    /// backups/exports preserve original text rather than this runtime preference.
+    pub fn set_keyword_analyzer(&mut self, analyzer: crate::KeywordAnalyzer) -> Result<()> {
+        let mut keywords = KeywordIndex::with_analyzer(analyzer);
+        for document in self.documents() {
+            let document = document?;
+            keywords.add(document.id, &document.text);
+        }
+        self.keywords = keywords;
+        Ok(())
+    }
     /// Export original documents/vectors and embedding identity to a new file.
     pub fn export(&self, destination: impl AsRef<Path>) -> Result<()> {
         self.db.export_collection(destination.as_ref(), &self.space)
@@ -488,6 +518,51 @@ impl Collection {
             .get(id)
             .map(|r| Document::from_payload(&r.metadata))
             .transpose()
+    }
+
+    /// Return up to `radius` original adjacent chunks on each side of a document
+    /// within its source, including that document. Radius is at most three.
+    /// Eligibility also applies to every context chunk; excluded rows never leak
+    /// into context. Ordering is by original start line, end line and ID.
+    pub fn context(
+        &self,
+        id: u64,
+        radius: usize,
+        filter: DocumentFilter<'_>,
+    ) -> Result<Vec<Document>> {
+        filter.validate()?;
+        if radius > 3 {
+            return Err(Error::InvalidInput("context radius must be 0..3".into()));
+        }
+        let Some(center) = self.get(id)? else {
+            return Ok(Vec::new());
+        };
+        let allowed: BTreeSet<_> = self.postings.select(filter, &self.db).into_iter().collect();
+        if !allowed.contains(&id) {
+            return Ok(Vec::new());
+        }
+        let mut documents = self
+            .postings
+            .sources
+            .get(&center.source)
+            .into_iter()
+            .flatten()
+            .map(|id| {
+                self.get(*id)?
+                    .ok_or_else(|| corrupt("context posting refers to missing document"))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        documents.sort_unstable_by_key(|d| (d.start_line, d.end_line, d.id));
+        let at = documents
+            .iter()
+            .position(|d| d.id == id)
+            .ok_or_else(|| corrupt("context source mismatch"))?;
+        Ok(documents
+            .into_iter()
+            .skip(at.saturating_sub(radius))
+            .take(at.min(radius) + radius + 1)
+            .filter(|d| allowed.contains(&d.id))
+            .collect())
     }
     /// Durably insert/replace a document and update derived filter/keyword postings.
     /// Returns true for a newly active ID. Input errors change nothing; I/O failures
@@ -678,7 +753,14 @@ impl Collection {
     /// Validate the graph and rebuild/compare filter and keyword postings.
     pub fn check_invariants(&self) -> Result<()> {
         self.db.check_invariants()?;
-        let (expected, keywords) = Postings::from_db(&self.db)?;
+        let (expected, mut keywords) = Postings::from_db(&self.db)?;
+        if self.keywords.analyzer() != crate::KeywordAnalyzer::Words {
+            keywords = KeywordIndex::with_analyzer(self.keywords.analyzer());
+            for document in self.documents() {
+                let document = document?;
+                keywords.add(document.id, &document.text);
+            }
+        }
         if expected != self.postings {
             return Err(corrupt("document posting mismatch"));
         }

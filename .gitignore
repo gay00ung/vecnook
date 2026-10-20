@@ -11,3 +11,5 @@
 /LOCAL_*.md
 __pycache__/
 *.pyc
+/clients/python/build/
+/clients/python/*.egg-info/

@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vecnook"
+version = "1.3.0rc1"
+description = "Standard-library Python client for the local Vecnook executable"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+readme = "README.md"
+
+[tool.setuptools]
+py-modules = ["vecnook"]

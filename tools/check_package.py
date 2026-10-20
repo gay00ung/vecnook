@@ -26,7 +26,8 @@ def check(path):
                 top = relative.parts[0]
                 allowed = ((top in {"src", "tests"} and relative.suffix == ".rs")
                            or (top == "docs" and len(relative.parts) == 2 and (relative.suffix == ".md" or name == "demo-provenance.json"))
-                           or (top == "examples" and relative.suffix in {".rs", ".md", ".py"})
+                           or (top == "examples" and relative.suffix in {".rs", ".md", ".py", ".mjs"})
+                           or (top == "clients" and relative.parts[:2] == ("clients", "python") and relative.suffix in {".py", ".md", ".toml"})
                            or (top == "tools" and len(relative.parts) == 2 and relative.suffix in {".rs", ".py", ".txt"}))
                 allowed |= relative.as_posix() == "docs/media/offline-demo.mp4" and member.size <= 1024 * 1024
             if not allowed:

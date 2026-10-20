@@ -2,6 +2,7 @@
 """Markdown search using Python's standard library, local Ollama and Vecnook."""
 
 import argparse
+import copy
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 import json
@@ -35,7 +36,7 @@ class Chunk:
     modified: str = ""
 
 
-def read_chunks(root, *, allow_empty=False, include_sources=False):
+def read_chunks(root, *, allow_empty=False, include_sources=False, chunker="bytes-v1", formats=(".md",)):
     """Read bounded UTF-8 Markdown files without following symlinks outside root."""
     root = Path(root).resolve(strict=True)
     if not root.is_dir():
@@ -56,7 +57,7 @@ def read_chunks(root, *, allow_empty=False, include_sources=False):
                     raise ValueError(f"symlink document/directory rejected: {path.name}")
                 if entry.is_dir(follow_symlinks=False):
                     stack.append(path)
-                elif path.suffix == ".md":
+                elif path.suffix.lower() in formats:
                     if not entry.is_file(follow_symlinks=False):
                         raise ValueError("document is not a regular file")
                     paths.append(path)
@@ -75,8 +76,16 @@ def read_chunks(root, *, allow_empty=False, include_sources=False):
             raise ValueError("document byte limit exceeded")
         source = path.relative_to(root).as_posix()
         sources.append(source)
-        text, start, end = "", 1, 1
+        text, start, end, fenced = "", 1, 1, False
         for line_number, line in enumerate(raw.decode("utf-8").splitlines(keepends=True), 1):
+            if chunker == "markdown-v1":
+                heading = bool(re.match(r"^#{1,6}\s", line)) and not fenced
+                boundary = heading or (not fenced and not line.strip() and len(text.encode("utf-8")) >= CHUNK_BYTES // 2)
+                if boundary and text.strip():
+                    chunks.append(Chunk(source, start, end, text, len(raw), modified))
+                    text = ""
+                if line.lstrip().startswith(("```", "~~~")):
+                    fenced = not fenced
             # A long Unicode line is split by UTF-8 bytes without breaking characters.
             pieces, piece, size = [], "", 0
             for character in line:
@@ -245,7 +254,8 @@ def index_documents(args, client):
     db = Path(args.db)
     if db.exists():
         raise ValueError("index requires a new database directory; choose a new --db path")
-    chunks = read_chunks(args.documents)
+    chunker = getattr(args, "chunker", None) or "bytes-v1"
+    chunks = read_chunks(args.documents, chunker=chunker, formats=input_formats(args))
     tags = import_tags(args)
     digest = client.digest(args.model)
     # Embed everything before creating storage, so model errors leave no partial database.
@@ -253,12 +263,16 @@ def index_documents(args, client):
     for offset in range(0, len(chunks), 16):
         vectors.extend(client.embed(args.model, [document_input(args.model, c)
                                                 for c in chunks[offset:offset + 16]]))
+        if getattr(args, "progress", True):
+            print(f"Embedded {min(offset+16, len(chunks))}/{len(chunks)} chunks", file=sys.stderr)
     if any(len(v) != len(vectors[0]) for v in vectors):
         raise ValueError("model returned inconsistent embedding dimensions")
     if client.digest(args.model) != digest:
         raise ValueError("model changed while indexing; retry with a fixed model")
-    identity = json.dumps({"provider": "ollama", "model": args.model, "digest": digest,
-                           "prompt_version": 1}, separators=(",", ":"))
+    settings = {"provider": "ollama", "model": args.model, "digest": digest, "prompt_version": 1}
+    if chunker != "bytes-v1":
+        settings.update(prompt_version=2, chunker=chunker)
+    identity = json.dumps(settings, separators=(",", ":"))
     space = [db.parent, db.name, len(vectors[0]), identity, "cosine"]
     # Prepare and bound complete source batches before creating the database.
     with tempfile.TemporaryDirectory(prefix="vecnook-import-") as temporary:
@@ -277,10 +291,13 @@ def index_documents(args, client):
             batch.write_text(body, encoding="utf-8")
             prepared.append(batch)
         cli(args.binary, "docs-init", *space)
-        for sequence, batch in enumerate(prepared):
+        for sequence, (source, batch) in enumerate(zip(grouped, prepared)):
             cli(args.binary, "docs-batch", *space, batch, "--if-sequence", sequence)
+            if getattr(args, "progress", True):
+                print(f"Synced {sequence+1}/{len(prepared)}: {source}", file=sys.stderr)
     cli(args.binary, "docs-checkpoint", *space)
-    print(f"Indexed {len(chunks)} chunks, {len(vectors[0])} dimensions, model {args.model}")
+    if not getattr(args, "sync_json", False):
+        print(f"Indexed {len(chunks)} chunks, {len(vectors[0])} dimensions, model {args.model}")
     return len(grouped)
 
 
@@ -301,27 +318,34 @@ def collection_state(args, manifest):
         after = page["next_after"]
 
 
-def sync_documents(args, client):
-    # A full, successful scan precedes any writes or pruning, including empty files.
-    chunks, sources = read_chunks(args.documents, allow_empty=True, include_sources=True)
-    tag, tags = managed_tag(args), import_tags(args)
+def input_formats(args):
+    return (".md", ".txt") if getattr(args, "include_text", False) else (".md",)
+
+
+def inspected_state(args):
+    """Read the authoritative view without trimming WAL or creating caches."""
     db = Path(args.db)
-    if not db.exists():
-        if not getattr(args, "model", None):
-            args.model = DEFAULT_MODEL
-        if not chunks:
-            raise ValueError("no nonempty Markdown documents found")
-        changed = index_documents(args, client)
-        print(f"Sync complete: changed={changed} unchanged=0 deleted=0 failed=0")
-        return
-    manifest = json.loads(cli(args.binary, "docs-info", db.parent, db.name))
-    identity = json.loads(manifest["model"])
-    if identity.get("provider") != "ollama" or identity.get("prompt_version") != 1:
+    return json.loads(cli(args.binary, "docs-inspect", db.parent, db.name))
+
+
+def sync_documents(args, client):
+    dry_run = getattr(args, "dry_run", False)
+    db = Path(args.db)
+    manifest = json.loads(cli(args.binary, "docs-info", db.parent, db.name)) if db.exists() else None
+    identity = json.loads(manifest["model"]) if manifest else {}
+    if manifest and (identity.get("provider") != "ollama" or identity.get("prompt_version") not in {1, 2}):
         raise ValueError("unsupported document embedding identity")
-    model = identity["model"]
-    if (getattr(args, "model", None) or model) != model or client.digest(model) != identity["digest"]:
-        raise ValueError("embedding model changed; rebuild into a new collection")
-    documents, sequence, space = collection_state(args, manifest)
+    model = (getattr(args, "model", None) or identity.get("model") or DEFAULT_MODEL)
+    chunker = getattr(args, "chunker", None) or identity.get("chunker", "bytes-v1")
+    if manifest and (model != identity["model"] or chunker != identity.get("chunker", "bytes-v1")):
+        raise ValueError("embedding model/chunker changed; rebuild into a new collection with docs-reindex")
+    chunks, sources = read_chunks(args.documents, allow_empty=True, include_sources=True,
+                                 chunker=chunker, formats=input_formats(args))
+    tag, tags = managed_tag(args), import_tags(args)
+    state = inspected_state(args) if manifest else dict(documents=[], sequence="0", diagnostics={})
+    documents, sequence = state["documents"], int(state["sequence"])
+    if len(documents) > MAX_CHUNKS:
+        raise ValueError("sync supports at most 10,000 stored chunks")
     stored, unmanaged = {}, set()
     used = {int(d["id"]) for d in documents}
     for document in documents:
@@ -336,74 +360,127 @@ def sync_documents(args, client):
     incoming = {source: [] for source in sources}
     for chunk in chunks:
         incoming[chunk.source].append(chunk)
-    changed = unchanged = deleted = 0
-    next_id = 0
+    plans, unchanged, next_id = [], 0, 0
+    for source, source_chunks in incoming.items():
+        if source in unmanaged:
+            raise ValueError(f"source belongs to an unmanaged import: {source}; use a new collection")
+        old = sorted(stored.get(source, []), key=lambda d: int(d["id"]))
+        if old:
+            next_id = max(next_id, int(old[-1]["id"]) + 1)
+        old_content = [(d["text"], d["start_line"], d["end_line"], d["tags"], d.get("numbers", {}), d.get("dates", {})) for d in old]
+        new_content = [(c.text, c.start_line, c.end_line, tags, *chunk_metadata(c, record_metadata)) for c in source_chunks]
+        if old_content == new_content:
+            unchanged += 1
+            continue
+        if max(len(old), len(source_chunks)) > 1024:
+            raise ValueError(f"source exceeds 1024-operation atomic batch: {source}")
+        reusable = {}
+        for d in old:
+            old_chunk = Chunk(d["source"], d["start_line"], d["end_line"], d["text"])
+            reusable[document_input(model, old_chunk)] = d["vector"]
+        vectors = [reusable.get(document_input(model, c)) for c in source_chunks]
+        rows = []
+        for i, c in enumerate(source_chunks):
+            if i < len(old):
+                identifier = int(old[i]["id"])
+            else:
+                while next_id in used:
+                    next_id += 1
+                if next_id > 2**64-1:
+                    raise ValueError("document ID space exhausted")
+                identifier = next_id
+                used.add(identifier)
+                next_id += 1
+            rows.append((identifier, c, encode_document(identifier, c, tags, *chunk_metadata(c, record_metadata))))
+        plans.append(dict(source=source, old=old, rows=rows, vectors=vectors))
+    removed = sorted(set(stored) - set(incoming)) if getattr(args, "prune", False) else []
+    for source in removed:
+        if len(stored[source]) > 1024:
+            raise ValueError(f"prune source exceeds 1024 operations: {source}")
+    dimensions = manifest["dimensions"] if manifest else None
+    puts = sum(len(p["rows"]) for p in plans)
+    # Conservative upper bound: existing physical rows plus every replacement/insert.
+    estimated = None if dimensions is None else state["diagnostics"]["estimated_snapshot_bytes"] + sum(
+        13 + 4 * dimensions + len(payload.encode()) for p in plans for _, _, payload in p["rows"])
+    report = dict(schema_version=1, dry_run=dry_run, namespace=tag, changed=len(plans), unchanged=unchanged,
+                  deleted=len(removed), failed=0, files=[dict(source=p["source"], chunks=len(p["rows"]),
+                  reembed=sum(v is None for v in p["vectors"])) for p in plans], deleted_sources=removed,
+                  reembed=sum(v is None for p in plans for v in p["vectors"]),
+                  reused_vectors=sum(v is not None for p in plans for v in p["vectors"]),
+                  dimensions=dimensions, estimated_snapshot_bytes_upper_bound=estimated,
+                  estimated_physical_nodes=state["diagnostics"].get("physical_nodes", 0)+puts,
+                  snapshot_limit_bytes=256*MAX_FILE, physical_node_limit=100000,
+                  current_diagnostics=state["diagnostics"])
+    if dry_run:
+        if getattr(args, "sync_json", False):
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+        else:
+            print(f"Sync plan (no writes): changed={len(plans)} unchanged={unchanged} deleted={len(removed)} reembed={report['reembed']} reused={report['reused_vectors']}")
+            for p in report["files"]:
+                print(f"  {p['source']}: chunks={p['chunks']} reembed={p['reembed']}")
+            for source in removed:
+                print(f"  delete {source}")
+            print("Capacity: "+(f"snapshot upper bound={estimated} bytes" if estimated is not None else "dimensions and snapshot estimate unknown until the first embedding"))
+        return report
+    if not manifest:
+        if not chunks:
+            raise ValueError("no nonempty Markdown documents found")
+        args.model = model
+        changed = index_documents(args, client)
+        report.update(changed=changed)
+        if getattr(args, "sync_json", False):
+            print(json.dumps(report, ensure_ascii=False))
+        else:
+            print(f"Sync complete: changed={changed} unchanged=0 deleted=0 failed=0")
+        return report
+    if client.digest(model) != identity["digest"]:
+        raise ValueError("embedding model changed; rebuild into a new collection")
+    space = [db.parent, db.name, dimensions, manifest["model"], "cosine"]
+    changed = deleted = 0
     with tempfile.TemporaryDirectory(prefix="vecnook-sync-") as temporary:
         batch = Path(temporary) / "source.tsv"
         try:
-            for source, source_chunks in incoming.items():
-                if source in unmanaged:
-                    raise ValueError(f"source belongs to an unmanaged import: {source}; use a new collection")
-                old = sorted(stored.get(source, []), key=lambda d: int(d["id"]))
-                if old:
-                    next_id = max(next_id, int(old[-1]["id"]) + 1)
-                old_content = [(d["text"], d["start_line"], d["end_line"], d["tags"], d.get("numbers", {}), d.get("dates", {})) for d in old]
-                new_content = [(c.text, c.start_line, c.end_line, tags, *chunk_metadata(c, record_metadata)) for c in source_chunks]
-                if old_content == new_content:
-                    unchanged += 1
-                    continue
-                operation_count = max(len(old), len(source_chunks))
-                if operation_count > 1024:
-                    raise ValueError(f"source exceeds 1024-operation atomic batch: {source}")
-                # Nothing for this source is written until all embeddings validate.
-                vectors = []
-                for offset in range(0, len(source_chunks), 16):
-                    vectors.extend(client.embed(model, [document_input(model, c)
-                                   for c in source_chunks[offset:offset + 16]]))
-                if any(len(v) != manifest["dimensions"] for v in vectors):
+            for p in plans:
+                missing = [i for i, v in enumerate(p["vectors"]) if v is None]
+                for offset in range(0, len(missing), 16):
+                    indices = missing[offset:offset+16]
+                    embedded = client.embed(model, [document_input(model, p["rows"][i][1]) for i in indices])
+                    for i, vector in zip(indices, embedded):
+                        p["vectors"][i] = vector
+                if any(v is None or len(v) != dimensions for v in p["vectors"]):
                     raise ValueError("embedding dimensions changed")
                 if client.digest(model) != identity["digest"]:
                     raise ValueError("embedding model changed during sync")
                 rows, payload_bytes = [], 13
-                for i, (chunk, vector) in enumerate(zip(source_chunks, vectors)):
-                    if i < len(old):
-                        identifier = int(old[i]["id"])
-                    else:
-                        while next_id in used:
-                            next_id += 1
-                        if next_id > 2**64 - 1:
-                            raise ValueError("document ID space exhausted")
-                        identifier = next_id
-                        used.add(identifier)
-                    payload = encode_document(identifier, chunk, tags, *chunk_metadata(chunk, record_metadata))
-                    payload_bytes += 13 + 4 * len(vector) + len(payload.encode())
+                for (identifier, chunk, payload), vector in zip(p["rows"], p["vectors"]):
                     rows.append(f"put\t{identifier}\t{coordinates(vector)}\t{payload}\n")
-                for document in old[len(source_chunks):]:
-                    rows.append(f"delete\t{document['id']}\n")
+                    payload_bytes += 13 + 4*len(vector) + len(payload.encode())
+                for d in p["old"][len(p["rows"]):]:
+                    rows.append(f"delete\t{d['id']}\n")
                     payload_bytes += 9
                 body = "".join(rows)
-                if payload_bytes > 8 * MAX_FILE or len(body.encode()) > 16 * MAX_FILE:
-                    raise ValueError(f"source exceeds atomic batch byte limits: {source}")
+                if payload_bytes > 8*MAX_FILE or len(body.encode()) > 16*MAX_FILE:
+                    raise ValueError(f"source exceeds atomic batch byte limits: {p['source']}")
                 if rows:
                     batch.write_text(body, encoding="utf-8")
                     cli(args.binary, "docs-batch", *space, batch, "--if-sequence", sequence)
                     sequence += 1
                 changed += 1
-            # Pruning is restricted to this namespace and requires explicit opt-in.
-            if getattr(args, "prune", False):
-                for source in sorted(set(stored) - set(incoming)):
-                    old = stored[source]
-                    if len(old) > 1024:
-                        raise ValueError(f"prune source exceeds 1024 operations: {source}")
-                    batch.write_text("".join(f"delete\t{d['id']}\n" for d in old), encoding="utf-8")
-                    cli(args.binary, "docs-batch", *space, batch, "--if-sequence", sequence)
-                    sequence += 1
-                    deleted += 1
+                if getattr(args, "progress", True):
+                    print(f"Synced {changed}/{len(plans)}: {p['source']}", file=sys.stderr)
+            for source in removed:
+                batch.write_text("".join(f"delete\t{d['id']}\n" for d in stored[source]), encoding="utf-8")
+                cli(args.binary, "docs-batch", *space, batch, "--if-sequence", sequence)
+                sequence += 1
+                deleted += 1
         except (ValueError, OSError, subprocess.SubprocessError):
             print(f"Sync incomplete: changed={changed} unchanged={unchanged} deleted={deleted} failed=1; rerun sync", file=sys.stderr)
             raise
-    # Source batches are already durable; checkpointing is optional maintenance.
-    print(f"Sync complete: changed={changed} unchanged={unchanged} deleted={deleted} failed=0")
+    if getattr(args, "sync_json", False):
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+    else:
+        print(f"Sync complete: changed={changed} unchanged={unchanged} deleted={deleted} failed=0 reembed={report['reembed']} reused={report['reused_vectors']}")
+    return report
 
 
 def retrieval_mode(query, requested):
@@ -418,17 +495,22 @@ def retrieval_mode(query, requested):
     return "hybrid" if identifier or single else "vector"
 
 
-def search_documents(args, client):
+def search_documents(args, client, reranker=None):
     db = Path(args.db)
     manifest = json.loads(cli(args.binary, "docs-info", db.parent, db.name))
-    identity = json.loads(manifest["model"])
-    if identity.get("provider") != "ollama" or identity.get("prompt_version") != 1:
-        raise ValueError("unsupported document embedding identity")
-    model = identity["model"]
     if not args.query.strip() or len(args.query.encode("utf-8")) > CHUNK_BYTES:
         raise ValueError("query must contain 1..3000 UTF-8 bytes")
     requested_mode = getattr(args, "mode", "vector")
     mode = retrieval_mode(args.query, requested_mode)
+    maximum = getattr(args, "max_distance", None)
+    if maximum is not None and (mode == "keyword" or not math.isfinite(maximum)):
+        raise ValueError("max distance requires vector/hybrid mode and a finite bound")
+    identity, model = {}, None
+    if mode != "keyword":
+        identity = json.loads(manifest["model"])
+        if identity.get("provider") != "ollama" or identity.get("prompt_version") not in {1, 2}:
+            raise ValueError("text embeddings require a supported Ollama identity; use keyword mode or caller-provided vectors")
+        model = identity["model"]
     if mode != "keyword":
         if client.digest(model) != identity["digest"]:
             raise ValueError("embedding model changed; rebuild this document database")
@@ -436,25 +518,29 @@ def search_documents(args, client):
         if len(query) != manifest["dimensions"]:
             raise ValueError("query embedding dimensions differ from the indexed model")
     filters = []
+    if mode != "vector" and getattr(args, "analyzer", "words") != "words":
+        filters += ["--analyzer", args.analyzer]
+    requested_k = args.k
+    candidate_k = 100 if getattr(args, "group_by_source", False) or getattr(args, "max_distance", None) is not None or reranker else requested_k
     for tag in getattr(args, "tags", []):
         filters.extend(["--tag", tag])
     if getattr(args, "source", None) is not None:
         filters.extend(["--source", args.source])
     if getattr(args, "where", None) is not None:
         filters.extend(["--where", args.where])
-    space = [db.parent, db.name, manifest["dimensions"], manifest["model"], "cosine"]
+    space = [db.parent, db.name, manifest["dimensions"], manifest["model"], {"cosine":"cosine", "squared_l2":"l2", "negative_inner_product":"ip"}[manifest["metric"]]]
     if mode == "keyword":
-        response = json.loads(cli(args.binary, "docs-keywords", *space, args.query, args.k, *filters))
+        response = json.loads(cli(args.binary, "docs-keywords", *space, args.query, candidate_k, *filters))
         result = dict(schema_version=1, mode=mode, **response["keyword"])
     elif mode == "hybrid":
         response = json.loads(cli(args.binary, "docs-hybrid", *space, coordinates(query),
-                              args.query, args.k, "--candidates", max(64, args.k), *filters))
+                              args.query, candidate_k, "--candidates", max(64, candidate_k), *filters))
         result = dict(schema_version=1, mode=mode, complete=response["complete"],
                       candidate_count=response["candidate_count"], rrf_k=response["rrf_k"],
                       vector=response["search"], keyword=response["keyword"])
     else:
         response = json.loads(cli(args.binary, "docs-search", *space, coordinates(query),
-                                  args.k, 128, "auto", *filters))
+                                  candidate_k, 128, "auto", *filters))
         result = response["search"]
     result["neighbors"] = [dict(match["document"],
                                 **{key: value for key, value in match.items() if key != "document"},
@@ -462,21 +548,216 @@ def search_documents(args, client):
                            for match in response["matches"]]
     if requested_mode == "auto":
         result["retrieval_mode"] = mode
+    result["retrieval_reason"] = ("explicit_mode" if requested_mode != "auto" else
+                                   "identifier_heuristic" if mode == "hybrid" else "prose_heuristic")
+    result["analyzer"] = getattr(args, "analyzer", "words")
+    if candidate_k != requested_k:
+        result["candidate_complete"] = result.get("complete")
+    if reranker:
+        before = {n["id"] for n in result["neighbors"]}
+        reordered = list(reranker(args.query, copy.deepcopy(result["neighbors"])))
+        if len(reordered) != len(before) or {n["id"] for n in reordered} != before:
+            raise ValueError("reranker must return every candidate exactly once")
+        # Accept only order changes; preserve original payloads, filters and scores.
+        original = {n["id"]: n for n in result["neighbors"]}
+        result["neighbors"] = [original[n["id"]] for n in reordered]
+        result["reranker_applied"] = True
+    maximum = getattr(args, "max_distance", None)
+    if maximum is not None:
+        if not math.isfinite(maximum):
+            raise ValueError("max distance must be finite")
+        result["neighbors"] = [n for n in result["neighbors"] if n.get("distance") is not None and n["distance"] <= maximum]
+    if getattr(args, "group_by_source", False):
+        seen, selected = set(), []
+        for n in result["neighbors"]:
+            if n["source"] not in seen:
+                selected.append(n)
+                seen.add(n["source"])
+        result["neighbors"] = selected
+    result["neighbors"] = result["neighbors"][:requested_k]
+    if candidate_k != requested_k and "complete" in result:
+        eligible = result.get("eligible_count", result.get("vector", {}).get("eligible_count", 0))
+        result["complete"] = len(result["neighbors"]) == min(requested_k, eligible)
+    context = getattr(args, "context_chunks", 0)
+    if context:
+        context_flags = []
+        for tag in getattr(args, "tags", []):
+            context_flags += ["--tag", tag]
+        if getattr(args, "source", None) is not None:
+            context_flags += ["--source", args.source]
+        if getattr(args, "where", None) is not None:
+            context_flags += ["--where", args.where]
+        for n in result["neighbors"]:
+            n["context"] = json.loads(cli(args.binary, "docs-context", *space, n["id"], context, *context_flags))["documents"]
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
+        print(f"Search mode={mode} reason={result['retrieval_reason']} analyzer={result['analyzer']}")
+        if not result["neighbors"]:
+            eligible = result.get("eligible_count", result.get("vector", {}).get("eligible_count", 0))
+            print("No results: filters select no documents." if eligible == 0 else
+                  "No results: no matching keyword tokens or candidates within the selected distance bound.")
+        if getattr(args, "explain", False):
+            details = {k: v for k, v in result.items() if k != "neighbors"}
+            print("Diagnostics (scores are not confidence percentages): "+json.dumps(details, ensure_ascii=False))
         for neighbor in result["neighbors"]:
             score = (f"score={neighbor['score']:.6f}" if "score" in neighbor
                      else f"distance={neighbor['distance']:.6f}")
             print(f"{neighbor['source']}:{neighbor['start_line']}-{neighbor['end_line']} {score}")
             print(neighbor["text"].strip() + "\n")
+            for context in neighbor.get("context", []):
+                if context["id"] != neighbor["id"]:
+                    print(f"Context {context['start_line']}-{context['end_line']}: {context['text'].strip()}")
+
+
+def environment_check(args, client):
+    checks = [dict(kind="python", ready=sys.version_info >= (3, 10), version=sys.version.split()[0],
+                   hint="Install Python 3.10+ and set VECNOOK_PYTHON if needed")]
+    model = getattr(args, "model", None) or DEFAULT_MODEL
+    expected = None
+    if getattr(args, "db", None):
+        db = Path(args.db)
+        info = json.loads(cli(args.binary, "docs-info", db.parent, db.name))
+        identity = json.loads(info["model"])
+        model, expected = identity["model"], identity["digest"]
+    try:
+        digest = client.digest(model)
+        ready = expected is None or digest == expected
+        checks.append(dict(kind="model" if ready else "model_mismatch", ready=ready, model=model,
+                           hint="Ready" if ready else "Use docs-reindex into a new collection; keep the old collection for rollback"))
+    except ValueError as error:
+        checks.append(dict(kind="model_missing" if "not installed" in str(error) else "model_server",
+                           ready=False, model=model, hint=str(error)))
+    result = dict(schema_version=1, ready=all(c["ready"] for c in checks), checks=checks)
+    if getattr(args, "json", False):
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        for check in checks:
+            print(f"{check['kind']}: {'ready' if check['ready'] else 'action required'}; {check['hint']}")
+    return 0 if result["ready"] else 1
+
+
+def export_jsonl(args, _client):
+    db = Path(args.db)
+    info = json.loads(cli(args.binary, "docs-info", db.parent, db.name))
+    state = inspected_state(args)
+    # x mode refuses overwriting an existing archive.
+    with Path(args.output).open("x", encoding="utf-8", newline="\n") as output:
+        output.write(json.dumps(dict(type="vecnook_collection", schema_version=1, space=info), ensure_ascii=False)+"\n")
+        for d in state["documents"]:
+            output.write(json.dumps(d, ensure_ascii=False, allow_nan=False)+"\n")
+    print(f"Exported {len(state['documents'])} documents")
+
+
+def import_jsonl(args, _client):
+    db = Path(args.db)
+    if db.exists():
+        raise ValueError("JSONL import requires a new collection directory")
+    source = Path(args.input)
+    if source.stat().st_size > 512*MAX_FILE:
+        raise ValueError("JSONL input exceeds 512 MiB")
+    with source.open(encoding="utf-8") as stream:
+        header = json.loads(stream.readline(64*1024))
+        if header.get("type") != "vecnook_collection" or header.get("schema_version") != 1:
+            raise ValueError("unsupported JSONL collection header")
+        info, rows, seen, encoded = header["space"], [], set(), 56
+        dimension = info["dimensions"]
+        if type(dimension) is not int or not 1 <= dimension <= 4096:
+            raise ValueError("invalid JSONL dimensions")
+        metric = {"cosine": "cosine", "squared_l2": "l2", "negative_inner_product": "ip"}.get(info["metric"])
+        if metric is None:
+            raise ValueError("unsupported JSONL metric")
+        while True:
+            line = stream.readline(128*1024)
+            if not line:
+                break
+            if not line.endswith("\n") or len(line.encode()) > 128*1024:
+                raise ValueError("JSONL row too long or missing final newline")
+            d = json.loads(line)
+            if not isinstance(d, dict) or any(not isinstance(d.get(k), str) for k in ["id", "source", "text"]) or not isinstance(d.get("vector"), list) or not isinstance(d.get("tags"), list) or any(not isinstance(tag, str) for tag in d["tags"]):
+                raise ValueError("invalid JSONL document fields")
+            if not isinstance(d["id"], str) or not re.fullmatch(r"0|[1-9][0-9]*", d["id"]):
+                raise ValueError("JSONL IDs must be canonical decimal strings")
+            identifier, vector = int(d["id"]), d["vector"]
+            if identifier in seen or len(seen) >= MAX_CHUNKS:
+                raise ValueError("duplicate ID or too many JSONL chunks")
+            seen.add(identifier)
+            if len(vector) != dimension or any(type(v) not in {int, float} or not math.isfinite(v) or abs(v) > 3.4028234663852886e38 for v in vector) or (metric == "cosine" and not any(vector)):
+                raise ValueError("invalid JSONL vector")
+            if type(d["start_line"]) is not int or type(d["end_line"]) is not int or not 1 <= d["start_line"] <= d["end_line"] <= 2**32-1:
+                raise ValueError("invalid JSONL line range")
+            c = Chunk(d["source"], d["start_line"], d["end_line"], d["text"])
+            if not c.source or "\0" in c.source:
+                raise ValueError("invalid JSONL source")
+            payload = encode_document(identifier, c, d["tags"], d.get("numbers"), d.get("dates"))
+            encoded += 13+4*dimension+len(payload.encode())
+            if encoded > 256*MAX_FILE:
+                raise ValueError("JSONL snapshot capacity exceeded")
+            rows.append(f"put\t{identifier}\t{coordinates(vector)}\t{payload}\n")
+    # All rows validate before the destination is claimed. Use a staged native
+    # collection and a native logical archive for fully validated single-snapshot import.
+    with tempfile.TemporaryDirectory(prefix="vecnook-jsonl-") as temporary:
+        root = Path(temporary)
+        space = [root, "staged", dimension, info["model"], metric]
+        cli(args.binary, "docs-init", *space)
+        for offset in range(0, len(rows), 128):
+            batch = root / "batch.tsv"
+            batch.write_text("".join(rows[offset:offset+128]), encoding="utf-8")
+            cli(args.binary, "docs-batch", *space, batch)
+        archive = root / "transfer.bin"
+        cli(args.binary, "docs-export", *space, archive)
+        cli(args.binary, "docs-import", archive, db.parent, db.name)
+    print(f"Imported {len(rows)} documents")
+
+
+def reindex_documents(args, client):
+    old, destination = Path(args.db), Path(args.to)
+    if destination.exists() and not getattr(args, "resume", False):
+        raise ValueError("reindex needs a fresh --to path, or explicit --resume for a partial new collection")
+    original = inspected_state(args)
+    # Reindex regenerates from the selected folder, never mutates the old space.
+    args.db = destination
+    try:
+        result = sync_documents(args, client)
+        target = inspected_state(args)
+        manifest = json.loads(cli(args.binary, "docs-info", destination.parent, destination.name))
+        chunker = json.loads(manifest["model"]).get("chunker", "bytes-v1")
+        expected = [(c.source, c.start_line, c.end_line, c.text) for c in read_chunks(args.documents, chunker=chunker, formats=input_formats(args))]
+        actual = [(d["source"], d["start_line"], d["end_line"], d["text"]) for d in target["documents"]]
+        if sorted(expected) != sorted(actual):
+            raise ValueError("reindex verification failed: original chunks differ; old collection is preserved")
+        if int(inspected_state(type("Old", (), {"db": old, "binary": args.binary})())["sequence"]) != int(original["sequence"]):
+            raise ValueError("old collection changed concurrently; inspect before switching paths")
+        print(f"Reindex verified: {len(target['documents'])} chunks; old collection preserved at {old}. Switch your app path to {destination}; rollback uses {old}.", file=sys.stderr)
+        return result
+    finally:
+        args.db = old
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(prog="vecnook", description=__doc__)
     parser.add_argument("--binary", default="vecnook", help="path to the installed Vecnook CLI")
     parser.add_argument("--ollama-url", default="http://127.0.0.1:11434")
     commands = parser.add_subparsers(dest="command", required=True)
+    env = commands.add_parser("env-check", help="check Python, local model server and model identity")
+    env.add_argument("--model")
+    env.add_argument("--db")
+    env.add_argument("--json", action="store_true")
+    export = commands.add_parser("export-jsonl")
+    export.add_argument("--db", required=True)
+    export.add_argument("--output", required=True)
+    imported = commands.add_parser("import-jsonl")
+    imported.add_argument("input")
+    imported.add_argument("--db", required=True)
+    reindex = commands.add_parser("reindex")
+    reindex.add_argument("documents")
+    reindex.add_argument("--db", required=True)
+    reindex.add_argument("--to", required=True)
+    reindex.add_argument("--model", required=True)
+    reindex.add_argument("--resume", action="store_true")
+    reindex.add_argument("--namespace")
+    reindex.add_argument("--tag", dest="tags", action="append", default=[])
+    reindex.add_argument("--json", dest="sync_json", action="store_true")
     index = commands.add_parser("index")
     index.add_argument("documents")
     index.add_argument("--db", required=True)
@@ -492,6 +773,11 @@ def main():
     sync.add_argument("--prune", action="store_true", help="delete missing sources managed by this folder/namespace")
     search = commands.add_parser("search")
     search.add_argument("query")
+    search.add_argument("--explain", action="store_true")
+    search.add_argument("--analyzer", choices=["words", "korean-ngram"], default="words")
+    search.add_argument("--group-by-source", action="store_true")
+    search.add_argument("--max-distance", type=float)
+    search.add_argument("--context-chunks", type=int, choices=range(0, 4), default=0)
     search.add_argument("--db", required=True)
     search.add_argument("--k", type=int, choices=range(1, 101), default=3, metavar="1..100")
     search.add_argument("--json", action="store_true")
@@ -500,18 +786,32 @@ def main():
     search.add_argument("--where", help='Boolean expression, e.g. tag("rust") AND number("file_bytes") >= 100')
     search.add_argument("--mode", choices=["auto", "vector", "keyword", "hybrid"], default="vector",
                         help="auto uses hybrid for identifiers and vector for prose questions")
-    for command in [index, sync]:
+    sync.add_argument("--dry-run", action="store_true")
+    sync.add_argument("--json", dest="sync_json", action="store_true")
+    sync.add_argument("--progress", action=argparse.BooleanOptionalAction, default=True)
+    for command in [index, sync, reindex]:
+        command.add_argument("--chunker", choices=["bytes-v1", "markdown-v1"])
+        command.add_argument("--include-text", action="store_true", help="also read UTF-8 .txt files")
         command.add_argument("--record-metadata", action=argparse.BooleanOptionalAction, default=None,
                              help="record file_bytes and UTC modified date; sync infers the existing setting")
     # Native docs-sync/docs-find keep the origin next to the command's own flags.
-    for command in [index, sync, search]:
+    for command in [index, sync, search, env, export, imported, reindex]:
         command.add_argument("--ollama-url", default=argparse.SUPPRESS,
                              help="local Ollama HTTP origin")
+    native = os.environ.get("VECNOOK_COMMAND")
+    mapping = {"docs-sync":"sync", "docs-find":"search", "env-check":"env-check", "docs-export-jsonl":"export-jsonl", "docs-import-jsonl":"import-jsonl", "docs-reindex":"reindex"}
+    if native in mapping:
+        commands.choices[mapping[native]].prog = "vecnook "+native
     args = parser.parse_args()
     try:
         client = Ollama(args.ollama_url)
-        {"index": index_documents, "sync": sync_documents, "search": search_documents}[args.command](args, client)
-    except (ValueError, OSError, KeyError, TypeError, subprocess.SubprocessError) as error:
+        handler = {"index": index_documents, "sync": sync_documents, "search": search_documents,
+                   "env-check": environment_check, "export-jsonl": export_jsonl,
+                   "import-jsonl": import_jsonl, "reindex": reindex_documents}[args.command]
+        result = handler(args, client)
+        if args.command == "env-check":
+            return result
+    except (ValueError, OSError, KeyError, TypeError, OverflowError, struct.error, subprocess.SubprocessError) as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 1
     return 0

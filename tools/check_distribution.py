@@ -23,12 +23,19 @@ def digest(path):
 def fingerprint(source):
     """Bind runtime/source tests and build settings; allow release version/docs changes."""
     value = hashlib.sha256()
-    files = sorted(p for folder in ["src", "examples", "tests", "tools"]
+    files = sorted(p for folder in ["src", "examples", "tests", "tools", "clients"]
                    for p in (source / folder).rglob("*") if p.suffix in {".rs", ".py", ".txt"}
-                   and p.is_file())
+                   and p.is_file() and not any(part == "build" or part.endswith(".egg-info") for part in p.relative_to(source).parts))
     files += sorted((source / "examples/documents/sample").glob("*.md"))
     files += [source / "docs/demo-provenance.json"]
     for p in files:
+        value.update(p.relative_to(source).as_posix().encode()+b"\0"+p.read_bytes())
+    client_manifest = source / "clients/python/pyproject.toml"
+    if client_manifest.exists():
+        client_settings = tomllib.loads(client_manifest.read_text())
+        client_settings["project"]["version"] = "RELEASE"
+        value.update(json.dumps(client_settings, sort_keys=True, separators=(",", ":")).encode())
+    for p in sorted((source / "examples/javascript").glob("*.mjs")):
         value.update(p.relative_to(source).as_posix().encode()+b"\0"+p.read_bytes())
     # Cargo's original manifest is unaffected by automatic package normalization.
     manifest = source / "Cargo.toml.orig"
@@ -113,7 +120,7 @@ def main():
     command(sys.executable, source / "tools/check_contracts.py", env=env)
     command(sys.executable, "-m", "unittest", "discover", "-s", source / "examples/documents", "-p", "test_*.py", env=env)
     command(*cargo, "test", "--offline", "--locked", "--manifest-path", source / "Cargo.toml",
-            "--target-dir", root / "tests", "--test", "upgrade", "--test", "operations", "--test", "compound_filters")
+            "--target-dir", root / "tests", "--test", "upgrade", "--test", "operations", "--test", "compound_filters", "--test", "user_experience")
     consumer = root / "consumer"
     (consumer / "src").mkdir(parents=True)
     dependency = 'version='+json.dumps("="+args.registry) if args.registry else 'path='+json.dumps(str(source))
@@ -132,7 +139,7 @@ def main():
                 or resolved[0].get("checksum") != digest(archive)):
             raise ValueError("consumer did not resolve the exact checked crates.io library")
     checks = ["installed_cli", "json_contracts", "document_flow", "legacy_upgrade",
-              "doctor_export_import_backup", "external_app_restart", "offline_demo_restart", "compound_filters"]
+              "doctor_export_import_backup", "external_app_restart", "offline_demo_restart", "compound_filters", "user_experience"]
     if args.registry:
         checks += ["registry_cli_install", "registry_library_resolution"]
     receipt = dict(schema_version=1, passed=True, version=version, registry=bool(args.registry),

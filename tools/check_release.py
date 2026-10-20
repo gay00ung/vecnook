@@ -11,7 +11,7 @@ from check_package import check
 
 CHECKS = {"installed_cli", "json_contracts", "document_flow", "legacy_upgrade",
           "doctor_export_import_backup", "external_app_restart", "offline_demo_restart",
-          "registry_cli_install", "registry_library_resolution", "compound_filters"}
+          "registry_cli_install", "registry_library_resolution", "compound_filters", "user_experience"}
 
 
 def validate(crate_hash, source_hash, distributions, soak):
