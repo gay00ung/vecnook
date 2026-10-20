@@ -113,6 +113,9 @@ normalizer, spell checker or general substring search. Select it on each CLI
 keyword/hybrid request. Rust owners call `set_keyword_analyzer` once after open;
 queries and subsequent mutations use the same rebuilt in-memory policy. Reopen,
 import and backup start with the default; reapply the application preference.
+The [authored evaluation](validation-1.3.md) improved Korean matches while some
+English rankings declined in a mixed-language corpus. Evaluate your own language
+mix before selecting this policy.
 
 Human output names the retrieval mode and text-selection reason. `--explain`
 adds existing counts, vector execution reason and branch diagnostics. `auto`

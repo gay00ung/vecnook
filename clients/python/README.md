@@ -6,6 +6,11 @@ at runtime and executes the local binary; it is not an in-process Rust binding.
 Calls block and each opens the collection, so do not use them while another
 application owns that collection's exclusive handle.
 
+Versioned wheels are attached to the
+[GitHub release](https://github.com/gay00ung/vecnook/releases/tag/v1.3.0-rc.1).
+After downloading the wheel, install it with
+`python -m pip install ./vecnook-1.3.0rc1-py3-none-any.whl`.
+
 ```python
 from vecnook import Client
 
