@@ -6,6 +6,110 @@ use vecnook::{
 };
 
 #[test]
+fn non_hangul_keyword_scores_do_not_depend_on_korean_expansion() {
+    let t = TempDir::new();
+    let mut c = Collection::create(t.path(), "notes", Config::new(2), "fixture").unwrap();
+    for (id, text, tag) in [
+        (
+            1,
+            "backup restore ERR_IO_27 résumé café 백업을안전하게복원합니다",
+            "keep",
+        ),
+        (
+            2,
+            "backup restore restore ERR_IO_27 résumé café 백업",
+            "keep",
+        ),
+        (3, "backup restore storage notes", "hidden"),
+        (4, "--- ___ !", "keep"),
+    ] {
+        let mut doc = Document::new(id, text, "mixed.md");
+        doc.tags = vec![tag.into()];
+        c.put(&doc, &[id as f32, 0.0]).unwrap();
+    }
+    let assert_scores = |c: &mut Collection| {
+        for tags in [&[][..], &["keep"][..]] {
+            for query in [
+                "backup restore",
+                "ERR_IO_27",
+                "RÉSUMÉ café",
+                "storage",
+                "---",
+            ] {
+                let filter = DocumentFilter::default().with_tags(tags);
+                c.set_keyword_analyzer(KeywordAnalyzer::Words).unwrap();
+                let words = c.search_keywords(query, 10, filter).unwrap();
+                c.set_keyword_analyzer(KeywordAnalyzer::KoreanNgram)
+                    .unwrap();
+                let korean = c.search_keywords(query, 10, filter).unwrap();
+                assert_eq!(words.neighbors, korean.neighbors, "{query}");
+                assert_eq!(words.matching_count, korean.matching_count);
+                assert_eq!(words.postings_visited, korean.postings_visited);
+            }
+        }
+        c.check_invariants().unwrap();
+    };
+    assert_scores(&mut c);
+    // Mutate while the expanded analyzer owns the derived index, then rebuild
+    // both policies as an independent check of replacement/deletion accounting.
+    c.put(
+        &Document::new(2, "restore café 백업은안전합니다", "other.md"),
+        &[2.0, 0.0],
+    )
+    .unwrap();
+    c.delete(3).unwrap();
+    c.put(
+        &Document::new(5, "backup ERR_IO_27 백업을", "new.md"),
+        &[5.0, 0.0],
+    )
+    .unwrap();
+    c.check_invariants().unwrap();
+    assert_scores(&mut c);
+    c.checkpoint().unwrap();
+    let space = c.space().clone();
+    drop(c);
+    let mut c = Collection::open(t.path(), "notes", &space).unwrap();
+    assert_scores(&mut c);
+    assert!(
+        c.search_keywords("백업", 10, DocumentFilter::default())
+            .unwrap()
+            .neighbors
+            .iter()
+            .any(|n| n.document.id == 5)
+    );
+}
+
+#[test]
+fn korean_bm25_counts_original_positions_and_deduplicates_grams_within_a_word() {
+    let t = TempDir::new();
+    let mut c = Collection::create(t.path(), "notes", Config::new(1), "fixture").unwrap();
+    c.set_keyword_analyzer(KeywordAnalyzer::KoreanNgram)
+        .unwrap();
+    for (id, text) in [(1, "백업을 백업을"), (2, "백업"), (3, "else"), (4, "")] {
+        c.put(&Document::new(id, text, "fixture.md"), &[id as f32])
+            .unwrap();
+    }
+    let found = c
+        .search_keywords("백업 백업", 10, DocumentFilter::default())
+        .unwrap();
+    assert_eq!(
+        found
+            .neighbors
+            .iter()
+            .map(|n| n.document.id)
+            .collect::<Vec<_>>(),
+        [1, 2]
+    );
+    // Four original word positions, including two occurrences in document 1.
+    // The whole two-syllable word in document 2 is also a gram, counted once.
+    // N=4, df=2, average original length=1; repeated query terms count once.
+    let expected = 2f64.ln() * 2.0 * 2.2 / (2.0 + 1.2 * (0.25 + 0.75 * 2.0));
+    assert!((found.neighbors[0].score - expected).abs() < 1e-12);
+    assert!((found.neighbors[1].score - 2f64.ln()).abs() < 1e-12);
+    c.check_invariants().unwrap();
+}
+
+#[test]
 fn selected_analyzer_survives_mutations_and_context_cannot_bypass_eligibility() {
     let t = TempDir::new();
     let mut c = Collection::create(t.path(), "notes", Config::new(2), "fixture").unwrap();

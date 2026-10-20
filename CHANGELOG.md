@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0-rc.2 — 2026-10-20
+
+- Fix the optional Korean analyzer's BM25 length normalization: added grams no longer inflate original document lengths. Queries without Hangul syllables retain the default word scores and order in mixed-language collections.
+- Reduce keyword-index construction allocations and spare posting-tree capacity on reopen and analyzer changes. Invariant checks rebuild the selected analyzer once. Original text, f32 vectors, default results and persisted formats remain compatible; see [the measured comparison](docs/validation-1.3.md).
+- Supersede RC1 and require new registry consumers and a fresh candidate-bound 24-hour workload before stable promotion.
+
 ## 1.3.0-rc.1 — 2026-10-20
 
 - Added read-only document/vector inspection and sync dry-run plans without recovering or modifying database files. Unchanged embedding inputs reuse original stored vectors, including metadata-only edits.

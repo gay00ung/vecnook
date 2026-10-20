@@ -7,7 +7,7 @@ unchanged embedding inputs, explain retrieval and return bounded original contex
 ## Install a native CLI
 
 Download a ZIP and its matching `.zip.sha256` file from the
-[candidate release](https://github.com/gay00ung/vecnook/releases/tag/v1.3.0-rc.1).
+[candidate release](https://github.com/gay00ung/vecnook/releases/tag/v1.3.0-rc.2).
 Choose the suffix that matches your machine:
 
 | Host | Archive target suffix |
@@ -20,18 +20,18 @@ Choose the suffix that matches your machine:
 On macOS, verify the download before extraction:
 
 ```bash
-shasum -a256 -c vecnook-1.3.0-rc.1-aarch64-apple-darwin.zip.sha256
-unzip vecnook-1.3.0-rc.1-aarch64-apple-darwin.zip
+shasum -a256 -c vecnook-1.3.0-rc.2-aarch64-apple-darwin.zip.sha256
+unzip vecnook-1.3.0-rc.2-aarch64-apple-darwin.zip
 chmod +x vecnook
 ./vecnook demo data/first-demo
 ```
 
 Linux uses `sha256sum -c` with its corresponding filename. On Windows, run
-`Get-FileHash .\vecnook-1.3.0-rc.1-x86_64-pc-windows-msvc.zip -Algorithm SHA256`
+`Get-FileHash .\vecnook-1.3.0-rc.2-x86_64-pc-windows-msvc.zip -Algorithm SHA256`
 in PowerShell and compare the full hash with the downloaded checksum file, then
 extract the ZIP and run `./vecnook.exe demo data/first-demo`. Add the extracted
 directory to PATH to call `vecnook` from elsewhere. For another Rust host, build
-the source with `cargo install vecnook --version '=1.3.0-rc.1' --locked`.
+the source with `cargo install vecnook --version '=1.3.0-rc.2' --locked`.
 
 ## Prepare the local client
 
@@ -113,9 +113,11 @@ normalizer, spell checker or general substring search. Select it on each CLI
 keyword/hybrid request. Rust owners call `set_keyword_analyzer` once after open;
 queries and subsequent mutations use the same rebuilt in-memory policy. Reopen,
 import and backup start with the default; reapply the application preference.
-The [authored evaluation](validation-1.3.md) improved Korean matches while some
-English rankings declined in a mixed-language corpus. Evaluate your own language
-mix before selecting this policy.
+Document length remains the original word count. Queries without Hangul syllables
+retain the default word scores and order, including English and exact identifiers
+in a mixed-language corpus. Korean queries can change rank as partial matches are
+added; evaluate your language mix using the [authored results](validation-1.3.md)
+and your own judgments before selecting this policy.
 
 Human output names the retrieval mode and text-selection reason. `--explain`
 adds existing counts, vector execution reason and branch diagnostics. `auto`

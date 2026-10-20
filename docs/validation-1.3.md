@@ -6,7 +6,88 @@ Stable promotion requires the exact registered RC's completed 24-hour workload,
 100k acknowledged mutations and registry distribution receipts, including actual
 Windows 11 NTFS. These gates are pending until successful receipts are recorded.
 
-## Local correctness
+## RC2 ranking and memory corrections
+
+RC1 counted added Korean grams as extra document length. In a bilingual corpus,
+that changed BM25 normalization even when an English query's terms and document
+frequencies were unchanged. RC2 counts original lexical positions for both
+analyzers. A query without Hangul syllables therefore retains the Words score
+and order. Repeated grams within one word remain deduplicated. Regression tests
+cover hand-calculated Korean BM25 counts, English/Unicode/identifier scores,
+filters, replacements, deletion and reopen; the English-score test fails on RC1.
+
+The 230-case evaluation was repeated with the same model digest, judgments and
+identical f32 vector-set hash recorded below. All default vector/keyword/hybrid/
+auto parsed JSON still matched 1.2. Optional Korean keyword results changed as
+follows:
+
+| Cases | RC1 Hit@1 | RC2 Hit@1 | Default Words Hit@1 |
+| --- | --- | --- | --- |
+| Korean prose | 92/100 | 93/100 | 65/100 |
+| English prose | 32/50 | 35/50 | 35/50 |
+| Exact identifiers | 50/50 | 50/50 | 50/50 |
+
+Across 200 answerable cases, RC2 Korean keyword Hit@1 is 89%, MRR@10 0.9271,
+nDCG@10 0.9394 and Source Recall@10 97.5%. All 30 unrelated keyword queries
+remain empty. These reused cases now serve as regression evidence, not a blind
+holdout or independent user study. The analyzer remains opt-in and partial Korean
+matches can be unrelated. The evaluated RC2 CLI SHA-256 is
+`b488188aa977b3ec285ca9a2ba367106426267b3fa36a29dfeb0388c24786b8d`.
+
+Memory investigation separated live allocations from process RSS. At the same
+1,000-document cached-open point, 1.2 and RC1 each retained 12,718 allocations
+(9,640,864 and 9,640,848 bytes respectively). This snapshot does not show an extra
+retained copy of vectors or documents in RC1. RSS differences across repeated
+build/open/churn phases are consistent with allocator-region occupancy and
+retention, rather than a larger live payload set. This does not assign every
+observed RSS byte to one source change. Apple's [heap-analysis guidance](https://developer.apple.com/videos/play/wwdc2024/10173/)
+explains why allocation lifetime, fragmentation and process memory measures must
+be examined separately.
+
+RC2 bulk-constructs the disposable keyword trees on open and analyzer changes,
+borrows already-lowercase ASCII tokens, and avoids temporary frequency maps for
+incremental Words updates. Invariant checks construct only the selected analyzer.
+The [Rust 1.89 map constructor](https://github.com/rust-lang/rust/blob/1.89.0/library/alloc/src/collections/btree/map.rs#L2191-L2205)
+uses bulk construction for collected entries. A separate externally paused
+10,000-document cached-open snapshot retained 116,975 allocations / 92,312,240
+bytes in RC2 versus 123,770 / 93,802,352 in RC1: 6,795 fewer allocations and
+1,490,112 fewer live bytes. These snapshots are profiling observations, not
+completed soak runs.
+
+Three fresh sequential runs per version/count repeated the unchanged 768D
+operating-range runner, rotating the 1.2/RC1/RC2 order. No builds, model work or
+other QA overlapped timed processes. All input hashes, independent exact/recall,
+eligibility, deleted-ID, duplicate-ID and result-count assertions passed.
+
+| Documents | Version | Peak RSS median | Peak RSS range across all three runs |
+| --- | --- | --- | --- |
+| 1,000 | 1.2 | 20.56 MiB | 20.41–20.95 MiB |
+| 1,000 | RC1 | 22.94 MiB | 22.20–23.05 MiB |
+| 1,000 | RC2 | 20.95 MiB | 20.44–21.22 MiB |
+| 10,000 | 1.2 | 124.19 MiB | 115.52–126.17 MiB |
+| 10,000 | RC1 | 136.39 MiB | 135.67–141.00 MiB |
+| 10,000 | RC2 | 118.31 MiB | 113.75–150.58 MiB |
+
+RC2 reduced the sampled RSS median versus RC1 by 8.7% / 13.3% at 1k / 10k.
+The 150.58 MiB RC2 outlier exceeds RC1's observed maximum, so this is not a uniform
+peak reduction or a production memory bound. The consistent live-allocation
+reduction and all peak samples are retained alongside the median.
+
+The short 100-query post-churn p95 was 0.1965 / 0.2090 / 0.2293 ms for 1.2 /
+RC1 / RC2, triggering the 10% investigation threshold against 1.2. A separate
+sustained check used the same post-churn 9,000-record snapshot, 200 warmups and
+20,000 timed queries per process, with three rotated repeats. Median p95 was
+0.1936 / 0.1786 / 0.2046 ms respectively; RC2 was 5.7% above 1.2. Every run's
+result-ID checksum matched. These measurements include original-document decoding
+and exclude embeddings and queue wait; they establish neither a speedup nor an
+application SLA.
+
+RC1's interrupted long QA is preserved at 720 seconds and 51,230 ACK mutations.
+It does not approve RC2. Stable promotion requires the exact registered RC2's new
+platform receipts and completed 86,400-second / 100k-mutation / restart / backup
+workload. No partial or earlier run contributes elapsed time to that gate.
+
+## Shared correctness checks
 
 New checks cover read-only inspection of an incomplete WAL without byte changes,
 unchanged/metadata-only/chunk-level embedding reuse, empty and explained output,
@@ -27,7 +108,7 @@ original Korean text, vector/keyword search, reranker payload preservation and
 JSONL restore passed. The asynchronous Node bridge returned the original string
 IDs and text. The wheel includes the project's complete MIT notice.
 
-## Authored relevance cases
+## RC1 authored relevance cases
 
 `tools/evaluate_relevance.py` predeclares 70 authored documents and 230 questions:
 100 Korean prose, 50 English prose, 50 exact identifiers and 30 unrelated queries.
@@ -73,7 +154,7 @@ the f32 embedding input/output vector set SHA-256 is
 `7c94803af05be020950c0867a7da584fa028ee2071594afd7c636be9d773cb1d`.
 Raw authored results retain per-question source ranks and split labels.
 
-## Local operating-range comparison
+## RC1 operating-range comparison
 
 Both native benchmark binaries used Rust 1.89.0 on the same macOS ARM64 host.
 Three fresh sequential runs per version/count used identical hashed synthetic
@@ -86,9 +167,9 @@ overlap timed benchmark processes. The 1.2 baseline is commit `0c1dbe4`.
 | Documents | Version | Median engine p95, initial | Median engine p95, after churn | Full-process peak RSS, three runs |
 | --- | --- | --- | --- | --- |
 | 1,000 | 1.2 | 0.186 ms | 0.226 ms | 18.67–21.03 MiB |
-| 1,000 | 1.3 candidate | 0.185 ms | 0.225 ms | 22.47–25.22 MiB |
+| 1,000 | 1.3 RC1 | 0.185 ms | 0.225 ms | 22.47–25.22 MiB |
 | 10,000 | 1.2 | 0.171 ms | 0.184 ms | 122.80–128.17 MiB |
-| 10,000 | 1.3 candidate | 0.166 ms | 0.181 ms | 137.39–139.20 MiB |
+| 10,000 | 1.3 RC1 | 0.166 ms | 0.181 ms | 137.39–139.20 MiB |
 
 The median engine measurements did not exceed the 10% investigation threshold.
 Individual runs had latency outliers, so these results do not establish a speedup
