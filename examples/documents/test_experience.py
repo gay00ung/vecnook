@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import unittest
+from unittest.mock import patch
 import search
 import test_search as fixture
 
@@ -35,8 +36,10 @@ class ExperienceTests(unittest.TestCase):
         self.sync()
         self.assertEqual(len(self.server.inputs), before)
         source.write_text('c'*3000+'b'*3000, encoding='utf-8')
-        report = self.sync()
+        with contextlib.redirect_stderr(io.StringIO()) as progress:
+            report = self.sync()
         self.assertEqual((report['reembed'], report['reused_vectors']), (1, 1))
+        self.assertIn('Embedded 1/1 changed chunks: 한글 notes 🚀.md', progress.getvalue())
         self.assertEqual(len(self.server.inputs[-1]['input']), 1)
         rows = search.inspected_state(self.args)['documents']
         self.assertEqual(''.join(d['text'] for d in rows), 'c'*3000+'b'*3000)
@@ -65,6 +68,29 @@ class ExperienceTests(unittest.TestCase):
             report = search.sync_documents(self.args, NoModel())
         self.assertEqual(report['current_diagnostics']['pending_tail_bytes'], 3)
         self.assertEqual(files(), before)
+
+    def test_partial_source_sync_reports_failure_and_resumes_acknowledged_files(self):
+        first = self.documents/'first.md'
+        second = self.documents/'한글 notes 🚀.md'
+        first.write_text('first original', encoding='utf-8')
+        self.sync()
+        original = {d['source']: d for d in search.inspected_state(self.args)['documents']}
+        first.write_text('first updated', encoding='utf-8')
+        second.write_text('second updated', encoding='utf-8')
+        with contextlib.redirect_stderr(io.StringIO()) as failure:
+            with patch.object(self.client, 'embed', side_effect=[[[1.0, 0.0]], ValueError('injected model failure')]):
+                with self.assertRaisesRegex(ValueError, 'injected model failure'):
+                    self.sync()
+        self.assertIn("changed=1", failure.getvalue())
+        self.assertIn("failed_source='한글 notes 🚀.md'", failure.getvalue())
+        partial = {d['source']: d for d in search.inspected_state(self.args)['documents']}
+        self.assertEqual(partial['first.md']['text'], 'first updated')
+        self.assertEqual(partial['한글 notes 🚀.md'], original['한글 notes 🚀.md'])
+        report = self.sync()
+        self.assertEqual((report['changed'], report['unchanged'], report['reembed']), (1, 1, 1))
+        final = {d['source']: d for d in search.inspected_state(self.args)['documents']}
+        self.assertEqual({k:d['id'] for k,d in final.items()}, {k:d['id'] for k,d in original.items()})
+        self.assertEqual(final['한글 notes 🚀.md']['text'], 'second updated')
 
     def test_native_json_sync_explain_empty_results_and_model_environment(self):
         def native(*args, success=True):

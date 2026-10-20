@@ -66,7 +66,7 @@ The optional distance bound remains application-calibrated, and `complete` remai
 a count observation. Default retrieval and tokenization are unchanged.
 
 The evaluated CLI SHA-256 is
-`302d2c09ddeb79b3a980f3bf28f30e0286a4c1dbb2ebb7c10066de6ed99c3187`.
+`a4a4d960b2ef40a786af7bb5072b2da1ef7496d6b30b175882fba0b5786f437b`.
 Expanded judgments SHA-256 is
 `aec9e9bae4df926c8775ebd92486a05504454e2f8745560d662b10517917dd11`;
 the f32 embedding input/output vector set SHA-256 is

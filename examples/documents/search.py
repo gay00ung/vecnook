@@ -268,8 +268,13 @@ def index_documents(args, client):
     # Embed everything before creating storage, so model errors leave no partial database.
     vectors = []
     for offset in range(0, len(chunks), 16):
-        vectors.extend(client.embed(args.model, [document_input(args.model, c)
-                                                for c in chunks[offset:offset + 16]]))
+        current = chunks[offset:offset + 16]
+        try:
+            vectors.extend(client.embed(args.model, [document_input(args.model, c) for c in current]))
+        except (ValueError, OSError, subprocess.SubprocessError):
+            sources = sorted({c.source for c in current})
+            print(f"Embedding incomplete: chunks={offset+1}..{offset+len(current)} sources={sources!r}; no collection created", file=sys.stderr)
+            raise
         if getattr(args, "progress", True):
             print(f"Embedded {min(offset+16, len(chunks))}/{len(chunks)} chunks", file=sys.stderr)
     if any(len(v) != len(vectors[0]) for v in vectors):
@@ -299,7 +304,11 @@ def index_documents(args, client):
             prepared.append(batch)
         cli(args.binary, "docs-init", *space)
         for sequence, (source, batch) in enumerate(zip(grouped, prepared)):
-            cli(args.binary, "docs-batch", *space, batch, "--if-sequence", sequence)
+            try:
+                cli(args.binary, "docs-batch", *space, batch, "--if-sequence", sequence)
+            except (ValueError, OSError, subprocess.SubprocessError):
+                print(f"Sync incomplete: changed={sequence} failed_source={source!r}; inspect the failed source before retrying", file=sys.stderr)
+                raise
             if getattr(args, "progress", True):
                 print(f"Synced {sequence+1}/{len(prepared)}: {source}", file=sys.stderr)
     cli(args.binary, "docs-checkpoint", *space)
@@ -444,16 +453,20 @@ def sync_documents(args, client):
         raise ValueError("embedding model changed; rebuild into a new collection")
     space = [db.parent, db.name, dimensions, manifest["model"], "cosine"]
     changed = deleted = 0
+    active_source = None
     with tempfile.TemporaryDirectory(prefix="vecnook-sync-") as temporary:
         batch = Path(temporary) / "source.tsv"
         try:
             for p in plans:
+                active_source = p["source"]
                 missing = [i for i, v in enumerate(p["vectors"]) if v is None]
                 for offset in range(0, len(missing), 16):
                     indices = missing[offset:offset+16]
                     embedded = client.embed(model, [document_input(model, p["rows"][i][1]) for i in indices])
                     for i, vector in zip(indices, embedded):
                         p["vectors"][i] = vector
+                    if getattr(args, "progress", True):
+                        print(f"Embedded {min(offset+16, len(missing))}/{len(missing)} changed chunks: {p['source']}", file=sys.stderr)
                 if any(v is None or len(v) != dimensions for v in p["vectors"]):
                     raise ValueError("embedding dimensions changed")
                 if client.digest(model) != identity["digest"]:
@@ -476,12 +489,13 @@ def sync_documents(args, client):
                 if getattr(args, "progress", True):
                     print(f"Synced {changed}/{len(plans)}: {p['source']}", file=sys.stderr)
             for source in removed:
+                active_source = source
                 batch.write_text("".join(f"delete\t{d['id']}\n" for d in stored[source]), encoding="utf-8")
                 cli(args.binary, "docs-batch", *space, batch, "--if-sequence", sequence)
                 sequence += 1
                 deleted += 1
         except (ValueError, OSError, subprocess.SubprocessError):
-            print(f"Sync incomplete: changed={changed} unchanged={unchanged} deleted={deleted} failed=1; rerun sync", file=sys.stderr)
+            print(f"Sync incomplete: changed={changed} unchanged={unchanged} deleted={deleted} failed=1 failed_source={active_source!r}; inspect the failed source before retrying", file=sys.stderr)
             raise
     if getattr(args, "sync_json", False):
         print(json.dumps(report, ensure_ascii=False, indent=2))
