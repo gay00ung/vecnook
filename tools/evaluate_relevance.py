@@ -112,7 +112,7 @@ def main():
             response = json.loads(cli(args.binary,*command))
             elapsed = (time.perf_counter()-start)*1000
             if args.baseline_binary and mode != 'keyword-korean':
-                baseline = json.loads(cli(args.baseline_binary,*command))
+                baseline = json.loads(cli(args.baseline_binary,*command,vector_files=False))
                 if baseline != response:
                     raise ValueError('default response regression: '+q['query'])
             sources = [r['document']['source'] for r in response['matches']]

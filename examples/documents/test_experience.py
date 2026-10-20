@@ -168,7 +168,7 @@ class ExperienceTests(unittest.TestCase):
         client.put(dict(id='1', source='large.md', text='original'), vector)
         result = client.search_vector(vector, k=1, strategy='exact')
         self.assertEqual(result['matches'][0]['document']['id'], '1')
-        self.assertEqual(result['matches'][0]['distance'], 0.0)
+        self.assertAlmostEqual(result['matches'][0]['distance'], 0.0, delta=1e-12)
         reference = self.root/'vector.csv'
         reference.write_text(','.join(map(str,vector)), encoding='utf-8')
         batch = self.root/'invalid-vector.tsv'

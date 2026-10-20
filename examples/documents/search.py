@@ -174,8 +174,8 @@ def query_input(model, query):
     return f"task: search result | query: {query}" if model.split(":")[0] == "embeddinggemma" else query
 
 
-def cli(binary, *args):
-    if args and args[0] in {"docs-search", "docs-hybrid"} and len(args) > 6 and len(str(args[6])) > 8192:
+def cli(binary, *args, vector_files=True):
+    if vector_files and args and args[0] in {"docs-search", "docs-hybrid"} and len(args) > 6 and len(str(args[6])) > 8192:
         with tempfile.TemporaryDirectory(prefix="vecnook-query-") as temporary:
             vector = Path(temporary) / "query.csv"
             vector.write_text(str(args[6]), encoding="utf-8")
