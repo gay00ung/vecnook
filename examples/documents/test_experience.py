@@ -157,6 +157,9 @@ class ExperienceTests(unittest.TestCase):
         with self.assertRaises(module.VecnookError) as error:
             client.get('1')
         self.assertEqual(error.exception.kind, 'InvalidInput')
+        for k in [0, -1, 101, True]:
+            with self.assertRaisesRegex(ValueError, '1..100'):
+                client.search('query', k=k, mode='keyword', reranker=lambda _, rows: [])
 
     def test_large_vector_query_uses_a_bounded_file_without_enabling_batch_file_reads(self):
         package = Path(__file__).resolve().parents[2]/'clients/python/vecnook.py'

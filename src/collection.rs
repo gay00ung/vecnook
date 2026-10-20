@@ -445,6 +445,9 @@ impl Collection {
     /// Inserts and queries subsequently use this same policy. Reapply after open;
     /// backups/exports preserve original text rather than this runtime preference.
     pub fn set_keyword_analyzer(&mut self, analyzer: crate::KeywordAnalyzer) -> Result<()> {
+        if self.keywords.analyzer() == analyzer {
+            return Ok(());
+        }
         let mut keywords = KeywordIndex::with_analyzer(analyzer);
         for document in self.documents() {
             let document = document?;

@@ -13,7 +13,14 @@ A small embedded vector database for Rust applications, built with the standard 
 
 Install the database and run an [offline prepared-query demo](docs/quickstart.md) with original Markdown, source references and checkpoint/restart behavior:
 
-Requires Rust 1.89 or later. The package, library, and executable are all named `vecnook`.
+For the CLI, download a matching ZIP and its SHA-256 file from the
+[1.3 candidate release](https://github.com/gay00ung/vecnook/releases/tag/v1.3.0-rc.1).
+The [installation guide](docs/user-experience.md#install-a-native-cli) explains
+target selection, checksum verification and extraction. This route needs no Rust
+compiler; document commands additionally need Python and a local model as described below.
+
+To build or use the Rust library, install Rust 1.89 or later. The package,
+library, and executable are all named `vecnook`.
 
 ```bash
 cargo install vecnook --version '=1.3.0-rc.1' --locked

@@ -4,6 +4,35 @@ Vecnook 1.3 keeps the Rust core std-only and preserves default vector, keyword,
 hybrid and storage contracts. The document client can preview a sync, reuse
 unchanged embedding inputs, explain retrieval and return bounded original context.
 
+## Install a native CLI
+
+Download a ZIP and its matching `.zip.sha256` file from the
+[candidate release](https://github.com/gay00ung/vecnook/releases/tag/v1.3.0-rc.1).
+Choose the suffix that matches your machine:
+
+| Host | Archive target suffix |
+| --- | --- |
+| Linux x86_64 with glibc | `x86_64-unknown-linux-gnu` |
+| macOS Apple silicon | `aarch64-apple-darwin` |
+| Windows x86_64 | `x86_64-pc-windows-msvc` |
+| Windows ARM64 | `aarch64-pc-windows-msvc` |
+
+On macOS, verify the download before extraction:
+
+```bash
+shasum -a256 -c vecnook-1.3.0-rc.1-aarch64-apple-darwin.zip.sha256
+unzip vecnook-1.3.0-rc.1-aarch64-apple-darwin.zip
+chmod +x vecnook
+./vecnook demo data/first-demo
+```
+
+Linux uses `sha256sum -c` with its corresponding filename. On Windows, run
+`Get-FileHash .\vecnook-1.3.0-rc.1-x86_64-pc-windows-msvc.zip -Algorithm SHA256`
+in PowerShell and compare the full hash with the downloaded checksum file, then
+extract the ZIP and run `./vecnook.exe demo data/first-demo`. Add the extracted
+directory to PATH to call `vecnook` from elsewhere. For another Rust host, build
+the source with `cargo install vecnook --version '=1.3.0-rc.1' --locked`.
+
 ## Prepare the local client
 
 ```bash

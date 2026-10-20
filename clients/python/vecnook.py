@@ -94,6 +94,8 @@ class Client:
         A reranker receives (query, neighbors) and returns IDs in a new order.
         It cannot introduce rows or change stored payloads/scores.
         """
+        if type(k) is not int or not 1 <= k <= 100:
+            raise ValueError("k must be an integer in 1..100")
         flags = ["--mode", mode, "--analyzer", analyzer, "--context-chunks", context_chunks]
         if where is not None:
             flags += ["--where", where]
