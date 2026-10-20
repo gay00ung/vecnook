@@ -190,9 +190,9 @@ impl Postings {
         remove_ranges(&mut self.numbers, id, numbers);
         remove_ranges(&mut self.dates, id, dates);
     }
-    fn from_db(db: &Database) -> Result<(Self, KeywordIndex)> {
+    fn from_db(db: &Database, analyzer: crate::KeywordAnalyzer) -> Result<(Self, KeywordIndex)> {
         let mut result = Self::default();
-        let mut keywords = KeywordIndex::default();
+        let mut keywords = crate::keyword::KeywordBuilder::with_analyzer(analyzer);
         for record in db.iter() {
             let doc = Document::from_payload(&record.metadata)?;
             if doc.id != record.id {
@@ -201,7 +201,7 @@ impl Postings {
             result.add(&doc);
             keywords.add(doc.id, &doc.text);
         }
-        Ok((result, keywords))
+        Ok((result, keywords.finish()))
     }
     fn covers_all(&self, filter: DocumentFilter<'_>, active: usize) -> bool {
         filter.expression.is_none()
@@ -385,7 +385,7 @@ impl Collection {
         if db.config().dimensions != space.dimensions || db.config().metric != space.metric {
             return Err(corrupt("collection header/config mismatch"));
         }
-        let (postings, keywords) = Postings::from_db(&db)?;
+        let (postings, keywords) = Postings::from_db(&db, crate::KeywordAnalyzer::Words)?;
         Ok(Self {
             db,
             name: name.to_owned(),
@@ -448,12 +448,12 @@ impl Collection {
         if self.keywords.analyzer() == analyzer {
             return Ok(());
         }
-        let mut keywords = KeywordIndex::with_analyzer(analyzer);
+        let mut keywords = crate::keyword::KeywordBuilder::with_analyzer(analyzer);
         for document in self.documents() {
             let document = document?;
             keywords.add(document.id, &document.text);
         }
-        self.keywords = keywords;
+        self.keywords = keywords.finish();
         Ok(())
     }
     /// Export original documents/vectors and embedding identity to a new file.
@@ -473,7 +473,7 @@ impl Collection {
         crate::transfer::claim_directory(&path)?;
         let db = Database::create_from_index(&path, index)?;
         write_header(&path, name, &space)?;
-        let (postings, keywords) = Postings::from_db(&db)?;
+        let (postings, keywords) = Postings::from_db(&db, crate::KeywordAnalyzer::Words)?;
         Ok(Self {
             db,
             name: name.to_owned(),
@@ -756,14 +756,7 @@ impl Collection {
     /// Validate the graph and rebuild/compare filter and keyword postings.
     pub fn check_invariants(&self) -> Result<()> {
         self.db.check_invariants()?;
-        let (expected, mut keywords) = Postings::from_db(&self.db)?;
-        if self.keywords.analyzer() != crate::KeywordAnalyzer::Words {
-            keywords = KeywordIndex::with_analyzer(self.keywords.analyzer());
-            for document in self.documents() {
-                let document = document?;
-                keywords.add(document.id, &document.text);
-            }
-        }
+        let (expected, keywords) = Postings::from_db(&self.db, self.keywords.analyzer())?;
         if expected != self.postings {
             return Err(corrupt("document posting mismatch"));
         }

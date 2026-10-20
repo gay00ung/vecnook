@@ -1,5 +1,8 @@
 use crate::{Document, Error, Result, SearchOptions, SearchReport, config::MAX_EF};
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    borrow::Cow,
+    collections::{BTreeMap, BTreeSet},
+};
 
 /// Token policy for the disposable keyword index. Select it on every open;
 /// original documents, vectors and persisted formats are unchanged.
@@ -9,8 +12,9 @@ pub enum KeywordAnalyzer {
     /// Lowercased Unicode words, preserving underscores and hyphens.
     #[default]
     Words,
-    /// Words plus two/three-character Hangul syllable grams. This improves
-    /// partial Korean word matching but can introduce unrelated partial matches.
+    /// Words plus two/three-character Hangul syllable grams. Document length
+    /// remains the original word count, so queries without Hangul retain Words
+    /// scores. Partial Korean matching can introduce unrelated partial matches.
     KoreanNgram,
 }
 
@@ -135,34 +139,103 @@ pub(crate) struct KeywordIndex {
     total_tokens: usize,
 }
 
-// Preserve snake_case and hyphenated error/product identifiers. Unicode case
-// folding here is lowercase only: no stemming, morphology or normalization.
-fn frequencies(text: &str, analyzer: KeywordAnalyzer) -> BTreeMap<String, usize> {
-    let mut result = BTreeMap::new();
-    for token in text.split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-') {
-        if token.chars().any(char::is_alphanumeric) {
-            let word = token.to_lowercase();
-            if analyzer == KeywordAnalyzer::Words {
-                *result.entry(word).or_default() += 1;
-                continue;
-            }
-            let mut terms = BTreeSet::from([word.clone()]);
-            if analyzer == KeywordAnalyzer::KoreanNgram {
-                for run in word.split(|c: char| !('\u{ac00}'..='\u{d7a3}').contains(&c)) {
-                    let chars: Vec<_> = run.chars().collect();
-                    for width in [2, 3] {
-                        for part in chars.windows(width) {
-                            terms.insert(part.iter().collect());
-                        }
-                    }
-                }
-            }
-            for term in terms {
-                *result.entry(term).or_default() += 1;
+/// Build disposable postings in bulk on open. Collecting sorted ID/count rows
+/// fills B-tree nodes instead of leaving the spare nodes produced by repeated
+/// ascending insertions. Original records remain in the database throughout.
+#[derive(Default)]
+pub(crate) struct KeywordBuilder {
+    analyzer: KeywordAnalyzer,
+    terms: BTreeMap<String, Vec<(u64, usize)>>,
+    lengths: Vec<(u64, usize)>,
+    total_tokens: usize,
+}
+
+impl KeywordBuilder {
+    pub(crate) fn with_analyzer(analyzer: KeywordAnalyzer) -> Self {
+        Self {
+            analyzer,
+            ..Self::default()
+        }
+    }
+
+    pub(crate) fn add(&mut self, id: u64, text: &str) {
+        let (terms, length) = frequencies(text, self.analyzer);
+        self.lengths.push((id, length));
+        self.total_tokens += length;
+        for (term, count) in terms {
+            if let Some(postings) = self.terms.get_mut(term.as_ref()) {
+                postings.push((id, count));
+            } else {
+                self.terms.insert(term.into_owned(), vec![(id, count)]);
             }
         }
     }
+
+    pub(crate) fn finish(self) -> KeywordIndex {
+        KeywordIndex {
+            analyzer: self.analyzer,
+            terms: self
+                .terms
+                .into_iter()
+                .map(|(term, rows)| (term, rows.into_iter().collect()))
+                .collect(),
+            lengths: self.lengths.into_iter().collect(),
+            total_tokens: self.total_tokens,
+        }
+    }
+}
+
+// Preserve snake_case and hyphenated error/product identifiers. Unicode case
+// folding here is lowercase only: no stemming, morphology or normalization.
+fn words(text: &str) -> impl Iterator<Item = Cow<'_, str>> {
+    text.split(|c: char| !c.is_alphanumeric() && c != '_' && c != '-')
+        .filter(|token| token.chars().any(char::is_alphanumeric))
+        .map(|token| {
+            if token.is_ascii() && !token.bytes().any(|b| b.is_ascii_uppercase()) {
+                Cow::Borrowed(token)
+            } else {
+                Cow::Owned(token.to_lowercase())
+            }
+        })
+}
+
+fn word_frequencies(text: &str) -> BTreeMap<Cow<'_, str>, usize> {
+    let mut result = BTreeMap::new();
+    for word in words(text) {
+        *result.entry(word).or_default() += 1;
+    }
     result
+}
+
+fn frequencies(text: &str, analyzer: KeywordAnalyzer) -> (BTreeMap<Cow<'_, str>, usize>, usize) {
+    let words = word_frequencies(text);
+    // Grams are alternate features of the same lexical positions. Counting
+    // them as extra length penalizes Korean-heavy documents even for English
+    // queries whose term frequencies and document frequencies never changed.
+    let length = words.values().sum();
+    if analyzer == KeywordAnalyzer::Words {
+        return (words, length);
+    }
+    let mut result = BTreeMap::new();
+    for (word, count) in words {
+        let mut grams = BTreeSet::new();
+        for run in word.split(|c: char| !('\u{ac00}'..='\u{d7a3}').contains(&c)) {
+            let chars: Vec<_> = run.chars().collect();
+            for width in [2, 3] {
+                for part in chars.windows(width) {
+                    let gram: String = part.iter().collect();
+                    if gram != word {
+                        grams.insert(gram);
+                    }
+                }
+            }
+        }
+        for gram in grams {
+            *result.entry(Cow::Owned(gram)).or_default() += count;
+        }
+        *result.entry(word).or_default() += count;
+    }
+    (result, length)
 }
 
 pub(crate) fn validate_query(text: &str) -> Result<()> {
@@ -175,35 +248,50 @@ pub(crate) fn validate_query(text: &str) -> Result<()> {
 }
 
 impl KeywordIndex {
-    pub(crate) fn with_analyzer(analyzer: KeywordAnalyzer) -> Self {
-        Self {
-            analyzer,
-            ..Self::default()
-        }
-    }
-
     pub(crate) fn analyzer(&self) -> KeywordAnalyzer {
         self.analyzer
     }
 
     pub(crate) fn add(&mut self, id: u64, text: &str) {
-        let terms = frequencies(text, self.analyzer);
-        let length = terms.values().sum();
+        if self.analyzer == KeywordAnalyzer::Words {
+            // Incremental word updates avoid temporary frequency maps. Borrow
+            // already-lowercase ASCII until the vocabulary needs an owned term,
+            // rather than allocating another String for every occurrence.
+            let mut length = 0;
+            for word in words(text) {
+                length += 1;
+                if let Some(postings) = self.terms.get_mut(word.as_ref()) {
+                    *postings.entry(id).or_default() += 1;
+                } else {
+                    self.terms
+                        .insert(word.into_owned(), BTreeMap::from([(id, 1)]));
+                }
+            }
+            self.lengths.insert(id, length);
+            self.total_tokens += length;
+            return;
+        }
+        let (terms, length) = frequencies(text, self.analyzer);
         self.lengths.insert(id, length);
         self.total_tokens += length;
         for (term, count) in terms {
-            self.terms.entry(term).or_default().insert(id, count);
+            if let Some(postings) = self.terms.get_mut(term.as_ref()) {
+                postings.insert(id, count);
+            } else {
+                self.terms
+                    .insert(term.into_owned(), BTreeMap::from([(id, count)]));
+            }
         }
     }
 
     pub(crate) fn remove(&mut self, id: u64, text: &str) {
         if let Some(length) = self.lengths.remove(&id) {
             self.total_tokens -= length;
-            for term in frequencies(text, self.analyzer).keys() {
-                if let Some(postings) = self.terms.get_mut(term) {
+            for term in frequencies(text, self.analyzer).0.keys() {
+                if let Some(postings) = self.terms.get_mut(term.as_ref()) {
                     postings.remove(&id);
                     if postings.is_empty() {
-                        self.terms.remove(term);
+                        self.terms.remove(term.as_ref());
                     }
                 }
             }
@@ -223,8 +311,8 @@ impl KeywordIndex {
         }
         let n = self.lengths.len() as f64;
         let average = self.total_tokens as f64 / n;
-        for term in frequencies(text, self.analyzer).keys() {
-            let Some(postings) = self.terms.get(term) else {
+        for term in frequencies(text, self.analyzer).0.keys() {
+            let Some(postings) = self.terms.get(term.as_ref()) else {
                 continue;
             };
             let df = postings.len() as f64;
