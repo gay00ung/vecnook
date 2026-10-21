@@ -2,19 +2,19 @@
 
 A small embedded vector database for Rust applications, built with the standard library. Vecnook implements its own HNSW graph, exact search, and persistent storage. It has no external crates or vector search library dependencies.
 
-**1.3.0-rc.2** adds read-only sync previews, reuse of unchanged embeddings, search explanations, opt-in Korean keyword matching, source grouping/context, JSONL exchange and queued application operations. See [the 1.3 guide](docs/user-experience.md). This is a release candidate; registry, platform and 24-hour validation are pending until recorded in [1.3 validation](docs/validation-1.3.md). The previous stable 1.2 memory/filter results remain in [1.2 validation](docs/validation-1.2.md).
+**1.3.0** adds read-only sync previews, reuse of unchanged embeddings, search explanations, opt-in Korean keyword matching, source grouping/context, JSONL exchange and queued application operations. See [the 1.3 guide](docs/user-experience.md). The registered RC2 completed the full 24-hour workload and exact-registry platform checks described in [1.3 validation](docs/validation-1.3.md). The previous stable 1.2 memory/filter results remain in [1.2 validation](docs/validation-1.2.md).
 
 [![CI](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml/badge.svg)](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml)
-[crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/1.3.0-rc.2/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
+[crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/1.3.0/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
 
-**Vecnook targets local Rust applications.** Use one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS, Linux and Windows. The index stays in RAM. [Release validation](docs/validation-1.2.md) includes a full 24-hour workload and Windows 11 NTFS verification. See [compatibility](docs/compatibility.md) before upgrading from 0.3.
+**Vecnook targets local Rust applications.** Use one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS, Linux and Windows. The index stays in RAM. [Release validation](docs/validation-1.3.md) includes a full 24-hour workload and Windows 11 NTFS verification. See [compatibility](docs/compatibility.md) before upgrading from 0.3.
 
 ## Get started
 
 Install the database and run an [offline prepared-query demo](docs/quickstart.md) with original Markdown, source references and checkpoint/restart behavior:
 
 For the CLI, download a matching ZIP and its SHA-256 file from the
-[1.3 candidate release](https://github.com/gay00ung/vecnook/releases/tag/v1.3.0-rc.2).
+[1.3 release](https://github.com/gay00ung/vecnook/releases/tag/v1.3.0).
 The [installation guide](docs/user-experience.md#install-a-native-cli) explains
 target selection, checksum verification and extraction. This route needs no Rust
 compiler; document commands additionally need Python and a local model as described below.
@@ -23,7 +23,7 @@ To build or use the Rust library, install Rust 1.89 or later. The package,
 library, and executable are all named `vecnook`.
 
 ```bash
-cargo install vecnook --version '=1.3.0-rc.2' --locked
+cargo install vecnook --version '=1.3.0' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -31,20 +31,20 @@ vecnook demo data/first-demo 1
 For a Rust application, add the registry dependency:
 
 ```bash
-cargo add vecnook@=1.3.0-rc.2
+cargo add vecnook@=1.3.0
 ```
 
 Or edit `Cargo.toml`:
 
 ```toml
 [dependencies]
-vecnook = "=1.3.0-rc.2"
+vecnook = "=1.3.0"
 ```
 
-The exact version pins this release; commit your application lockfile as well. The [API reference](https://docs.rs/vecnook/1.3.0-rc.2/vecnook/) documents exported types and methods. See the [API guide](docs/api.md), [compatibility contracts](docs/compatibility.md) and [release procedure](docs/releasing.md). Versioned source is also available through the Git tag:
+The exact version pins this release; commit your application lockfile as well. The [API reference](https://docs.rs/vecnook/1.3.0/vecnook/) documents exported types and methods. See the [API guide](docs/api.md), [compatibility contracts](docs/compatibility.md) and [release procedure](docs/releasing.md). Versioned source is also available through the Git tag:
 
 ```bash
-cargo install --git https://github.com/gay00ung/vecnook --tag v1.3.0-rc.2 --locked
+cargo install --git https://github.com/gay00ung/vecnook --tag v1.3.0 --locked
 ```
 
 To build a checkout:

@@ -1,10 +1,47 @@
-# 1.3 candidate validation
+# 1.3 validation
 
-The 1.3 candidate adds document-client and owning-worker features while retaining
+The 1.3 release adds document-client and owning-worker features while retaining
 the default tokenization, vector math and persisted snapshot/WAL/cache formats.
-Stable promotion requires the exact registered RC's completed 24-hour workload,
-100k acknowledged mutations and registry distribution receipts, including actual
-Windows 11 NTFS. These gates are pending until successful receipts are recorded.
+The exact registered RC2 completed its 24-hour workload on 2026-10-21. Eight CI
+registry consumers plus a local Mac consumer passed, including actual Windows 11
+ARM64 on NTFS. Stable promotion changes only the version and documentation;
+normalized runtime, tests, tools and build settings match RC2.
+
+## Completed registered-candidate QA
+
+The checked `1.3.0-rc.2` archive SHA-256 is
+`c3a82222911ccd5c867c081e8f2e253811b42253498e2d9a09c7bb0b7ef6018b`.
+Its normalized runtime/test/tool/build fingerprint is
+`0163ef50087d32b05f1669dcc4eb8e53eef9bf58a7f3452ec33c12024a3243ff`.
+The [candidate release](https://github.com/gay00ung/vecnook/releases/tag/v1.3.0-rc.2)
+contains the exact archive, distribution receipts, native archives, Python wheel
+and measurement reports.
+
+The independently timed mixed workload completed 86,400.650580 actual workload
+seconds, 189,268 acknowledged mutations, 89 restarts and 17 independent backup
+verifications. Vector, BM25, RRF, selective Auto, compound ranges and streamed
+compaction checks passed; acknowledged writes were replayed independently. The
+[completed receipt](https://github.com/gay00ung/vecnook/releases/download/v1.3.0-rc.2/soak-receipt.json)
+and progress agree, with exit code 0 and both duration/mutation gates true.
+`tools/check_release.py` passed with the registered archive and all nine receipts.
+This covers the recorded environment and workload, not arbitrary power loss or
+all applications.
+
+Tag CI tested Rust 1.89 and stable on Linux, macOS, Windows Server and Windows 11
+Enterprise ARM64. Both Windows 11 receipts record desktop product type 1 and NTFS;
+Server receipts are separate. Each registry consumer used a fresh Cargo cache,
+compared CLI/library archive checksums with an independent download, and exercised
+application restart, legacy upgrade, JSON/document/filter contracts and backups.
+Native ZIP extraction/demo/restart, the remote Git tag installation, isolated wheel
+and Node client, and versioned docs.rs also passed for RC2. Public asset digests
+were checked against GitHub's recorded SHA-256 values.
+
+The first RC2 workload stopped making progress during a host file-open stall and
+was interrupted. Its cause remains unresolved; it is not attributed to a runtime
+defect. The replacement used a separate accessible directory and the identical
+registry archive, with no source changes. Only the replacement's complete duration
+counts above. RC1 and the interrupted RC2 data/logs are preserved and contribute
+no elapsed time to approval.
 
 ## RC2 ranking and memory corrections
 
@@ -75,17 +112,27 @@ reduction and all peak samples are retained alongside the median.
 
 The short 100-query post-churn p95 was 0.1965 / 0.2090 / 0.2293 ms for 1.2 /
 RC1 / RC2, triggering the 10% investigation threshold against 1.2. A separate
-sustained check used the same post-churn 9,000-record snapshot, 200 warmups and
+sustained check used a post-churn snapshot AFTER compaction, with 9,000 physical
+nodes and 9,000 active records, 200 warmups and
 20,000 timed queries per process, with three rotated repeats. Median p95 was
 0.1936 / 0.1786 / 0.2046 ms respectively; RC2 was 5.7% above 1.2. Every run's
 result-ID checksum matched. These measurements include original-document decoding
 and exclude embeddings and queue wait; they establish neither a speedup nor an
 application SLA.
 
+A second sustained probe captured the snapshot/WAL/graph BEFORE compaction,
+with 11,000 physical nodes and 9,000 active records. It used the same 200 warmups,
+20,000 timed queries per process and three rotated repeats without overlapping
+builds, model work or other QA. Median p95 was 0.198375 / 0.195500 / 0.201375 ms
+for 1.2 / RC1 / RC2, respectively (RC2 1.5% above 1.2). Every run had the same
+result-ID checksum and 274.97 mean distance computations. See the
+[full pre-compaction measurements](https://github.com/gay00ung/vecnook/releases/download/v1.3.0-rc.2/qa-warm-precompact.json).
+The different physical graph and sample count matter when comparing this probe
+with the short churn sample; neither sustained probe establishes an application SLA.
+
 RC1's interrupted long QA is preserved at 720 seconds and 51,230 ACK mutations.
-It does not approve RC2. Stable promotion requires the exact registered RC2's new
-platform receipts and completed 86,400-second / 100k-mutation / restart / backup
-workload. No partial or earlier run contributes elapsed time to that gate.
+It does not approve RC2. Only the separate completed RC2 workload described above
+satisfies the duration gate; no partial or earlier run contributes elapsed time.
 
 ## Shared correctness checks
 

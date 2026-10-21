@@ -66,5 +66,5 @@ Repository examples do not count as external users. Record that evidence separat
 through the [feedback forms](feedback.md). These observations are not a release
 approval requirement. The 1.2 [memory/filter measurements and completed registry QA](validation-1.2.md)
 are recorded separately from the completed 1.1 run.
-The [1.3 candidate record](validation-1.3.md) separates current technical checks,
-pending publication gates and unmeasured external-user observations.
+The [1.3 validation record](validation-1.3.md) includes the completed RC2 registry
+workload and distribution checks, separate from unmeasured external-user observations.
