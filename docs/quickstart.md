@@ -6,7 +6,7 @@ Install the exact release version with Rust 1.89 or later, then run the prepared
 queries. The demo needs no embedding server or network connection after installation.
 
 ```bash
-cargo install vecnook --version '=1.3.0-rc.2' --locked
+cargo install vecnook --version '=1.3.0' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -21,12 +21,12 @@ To query your own documents with free text, continue with [the Markdown client](
 
 ## Search your own folder
 
-Install Vecnook 1.3.0-rc.2 with Rust 1.89+. Python 3.10+ and
+Install Vecnook 1.3.0 with Rust 1.89+. Python 3.10+ and
 [Ollama](https://ollama.com/download) supply the Markdown/embedding client. Start
 Ollama locally (`ollama serve` if its desktop app is not already running), then:
 
 ```bash
-cargo install vecnook --version '=1.3.0-rc.2' --locked
+cargo install vecnook --version '=1.3.0' --locked
 ollama pull embeddinggemma
 vecnook docs-sync ./my-markdown --db data/notes
 vecnook docs-find "How do I recover my documents?" --db data/notes

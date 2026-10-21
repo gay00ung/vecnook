@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.3.0 — 2026-10-21
+
+- Promote RC2's document previews, embedding reuse, explanations, optional Korean matching, bounded context/grouping, JSONL exchange and application-worker operations. Include its English BM25 ranking correction and reduced keyword-index construction allocations.
+- Complete the exact registered RC2's 86,400.650580-second mixed workload with 189,268 acknowledged mutations, 89 restarts and 17 independent backup verifications. Eight CI registry consumers and a local Mac consumer passed, including Windows 11 ARM64/NTFS with Rust 1.89 and stable.
+- Preserve the candidate's normalized runtime, tests, tools and build settings. Update exact 1.3.0 installation instructions and [validation results](docs/validation-1.3.md), including all RSS samples and the additional sustained search measurements. External first-use observations remain unmeasured.
+
 ## 1.3.0-rc.2 — 2026-10-20
 
 - Fix the optional Korean analyzer's BM25 length normalization: added grams no longer inflate original document lengths. Queries without Hangul syllables retain the default word scores and order in mixed-language collections.

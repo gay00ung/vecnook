@@ -7,7 +7,7 @@ unchanged embedding inputs, explain retrieval and return bounded original contex
 ## Install a native CLI
 
 Download a ZIP and its matching `.zip.sha256` file from the
-[candidate release](https://github.com/gay00ung/vecnook/releases/tag/v1.3.0-rc.2).
+[1.3 release](https://github.com/gay00ung/vecnook/releases/tag/v1.3.0).
 Choose the suffix that matches your machine:
 
 | Host | Archive target suffix |
@@ -20,18 +20,18 @@ Choose the suffix that matches your machine:
 On macOS, verify the download before extraction:
 
 ```bash
-shasum -a256 -c vecnook-1.3.0-rc.2-aarch64-apple-darwin.zip.sha256
-unzip vecnook-1.3.0-rc.2-aarch64-apple-darwin.zip
+shasum -a256 -c vecnook-1.3.0-aarch64-apple-darwin.zip.sha256
+unzip vecnook-1.3.0-aarch64-apple-darwin.zip
 chmod +x vecnook
 ./vecnook demo data/first-demo
 ```
 
 Linux uses `sha256sum -c` with its corresponding filename. On Windows, run
-`Get-FileHash .\vecnook-1.3.0-rc.2-x86_64-pc-windows-msvc.zip -Algorithm SHA256`
+`Get-FileHash .\vecnook-1.3.0-x86_64-pc-windows-msvc.zip -Algorithm SHA256`
 in PowerShell and compare the full hash with the downloaded checksum file, then
 extract the ZIP and run `./vecnook.exe demo data/first-demo`. Add the extracted
 directory to PATH to call `vecnook` from elsewhere. For another Rust host, build
-the source with `cargo install vecnook --version '=1.3.0-rc.2' --locked`.
+the source with `cargo install vecnook --version '=1.3.0' --locked`.
 
 ## Prepare the local client
 
