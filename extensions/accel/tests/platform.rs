@@ -15,6 +15,11 @@ use vecnook::{
 };
 use vecnook_accel::{AutoKernel, mapped_snapshot};
 
+// Command's Unix fork/exec window can temporarily inherit other test threads'
+// file descriptions. Keep the actual process test separate from unrelated pin
+// drop/GC assertions; the mapped worker still runs concurrently with its writer.
+static PROCESS_GATE: std::sync::RwLock<()> = std::sync::RwLock::new(());
+
 struct Temp(PathBuf);
 impl Temp {
     fn new() -> Self {
@@ -114,6 +119,7 @@ fn write(writer: &mut Publisher, sequence: u64, label: &str) -> Snapshot {
 
 #[test]
 fn mapped_originals_sq8_simd_and_thread_reads_match_positional_io() {
+    let _gate = PROCESS_GATE.read().unwrap();
     let temp = Temp::new();
     for (n, metric) in [Metric::SquaredL2, Metric::Cosine, Metric::InnerProduct]
         .into_iter()
@@ -195,6 +201,7 @@ fn mapped_reader_worker() {
 }
 #[test]
 fn process_mmap_pin_survives_new_publication_and_is_reclaimed_after_kill() {
+    let _gate = PROCESS_GATE.write().unwrap();
     let temp = Temp::new();
     let path = temp.0.join("store");
     let mut writer = Publisher::create(

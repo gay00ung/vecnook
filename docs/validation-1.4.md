@@ -27,6 +27,8 @@ activity were uncontrolled. Documentation/tool edits overlapped,
 and a 14 ms Python release-gate unit-test run overlapped the capacity collection.
 Latency varied substantially in some runs; all samples below remain reported.
 These results support workload-specific choices, not universal speed or RSS claims.
+An equivalent fvecs decoder refactor after collection was checked against both
+fixtures: query result checksums stayed identical; the timed query path did not change.
 
 Each fixture uses 120 independent queries: the first 20 calibrate budgets and
 the remaining 100 measure held-out ANN recall@10 and latency. The preparation

@@ -53,8 +53,10 @@ fn vector(reader: &mut impl Read) -> AnyResult<Option<Vec<f32>>> {
     let mut bytes = vec![0; dimension * 4];
     reader.read_exact(&mut bytes)?;
     let result: Vec<_> = bytes
-        .chunks_exact(4)
-        .map(|v| f32::from_le_bytes(v.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|v| f32::from_le_bytes(*v))
         .collect();
     if result.iter().any(|v| !v.is_finite()) || result.iter().all(|v| *v == 0.) {
         return Err("invalid cosine fvecs input".into());

@@ -11,6 +11,13 @@ use vecnook::{
     generation::{PublishOptions, Publisher, ScalarKernel, Snapshot},
 };
 
+// A fork used by Command can briefly inherit another test thread's locked file
+// description until exec closes CLOEXEC descriptors. Exclude process-spawning
+// tests from unrelated drop/reopen/GC assertions, rather than retrying Locked or
+// weakening the actual writer/reader lock assertions. Worker processes retain
+// independent real OS locks and still run concurrently with their controller.
+static PROCESS_GATE: std::sync::RwLock<()> = std::sync::RwLock::new(());
+
 fn create(path: &std::path::Path, metric: Metric, dimensions: usize) -> Publisher {
     Publisher::create(
         path,
@@ -63,6 +70,7 @@ fn distance(metric: Metric, a: &[f32], b: &[f32]) -> f64 {
 }
 #[test]
 fn originals_exact_oracle_quantized_rerank_filters_and_backup() {
+    let _gate = PROCESS_GATE.read().unwrap();
     let temp = TempDir::new();
     for (number, metric) in [Metric::SquaredL2, Metric::Cosine, Metric::InnerProduct]
         .into_iter()
@@ -177,6 +185,7 @@ fn originals_exact_oracle_quantized_rerank_filters_and_backup() {
 
 #[test]
 fn high_dimension_replacements_deletions_reopen_pins_and_backup_preserve_originals() {
+    let _gate = PROCESS_GATE.read().unwrap();
     let temp = TempDir::new();
     for dimensions in [768, 1536] {
         let path = temp.path().join(dimensions.to_string());
@@ -284,6 +293,7 @@ fn high_dimension_replacements_deletions_reopen_pins_and_backup_preserve_origina
 
 #[test]
 fn immutable_readers_survive_publication_and_gc_only_collects_unpinned_generations() {
+    let _gate = PROCESS_GATE.read().unwrap();
     let temp = TempDir::new();
     let path = temp.path().join("store");
     let mut writer = create(&path, Metric::SquaredL2, 2);
@@ -307,6 +317,7 @@ fn immutable_readers_survive_publication_and_gc_only_collects_unpinned_generatio
 
 #[test]
 fn invalid_duplicate_partial_input_cannot_publish_and_old_database_remains_compatible() {
+    let _gate = PROCESS_GATE.read().unwrap();
     let temp = TempDir::new();
     let path = temp.path().join("store");
     let mut writer = create(&path, Metric::SquaredL2, 2);
@@ -357,6 +368,7 @@ fn invalid_duplicate_partial_input_cannot_publish_and_old_database_remains_compa
 
 #[test]
 fn corrupted_pointer_manifest_and_segment_fail_closed() {
+    let _gate = PROCESS_GATE.read().unwrap();
     for file in ["CURRENT", "MANIFEST", "segment-0000.bin"] {
         let temp = TempDir::new();
         let path = temp.path().join("store");
@@ -398,6 +410,7 @@ fn reader_worker() {
 
 #[test]
 fn separate_process_pin_is_released_by_process_exit() {
+    let _gate = PROCESS_GATE.write().unwrap();
     let temp = TempDir::new();
     let path = temp.path().join("store");
     let mut writer = create(&path, Metric::SquaredL2, 2);
@@ -469,6 +482,7 @@ fn publisher_worker() {
 
 #[test]
 fn killed_publisher_never_exposes_partial_segments_or_loses_a_publication_ack() {
+    let _gate = PROCESS_GATE.write().unwrap();
     let temp = TempDir::new();
     let path = temp.path().join("store");
     let mut writer = create(&path, Metric::SquaredL2, 2);
@@ -547,6 +561,7 @@ fn killed_publisher_never_exposes_partial_segments_or_loses_a_publication_ack() 
 
 #[test]
 fn native_snapshot_cli_roundtrips_originals_and_rejects_identity_changes() {
+    let _gate = PROCESS_GATE.write().unwrap();
     let temp = TempDir::new();
     let source = temp.path().join("db");
     let store = temp.path().join("store");
@@ -594,6 +609,7 @@ fn native_snapshot_cli_roundtrips_originals_and_rejects_identity_changes() {
 
 #[test]
 fn collection_publication_binds_model_and_original_document_payload() {
+    let _gate = PROCESS_GATE.read().unwrap();
     let temp = TempDir::new();
     let mut collection =
         vecnook::Collection::create(temp.path(), "documents", Config::new(2), "model-v1").unwrap();
