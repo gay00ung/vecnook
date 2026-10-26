@@ -4,6 +4,14 @@ A small embedded vector database for Rust applications, built with the standard 
 
 **1.3.0** adds read-only sync previews, reuse of unchanged embeddings, search explanations, opt-in Korean keyword matching, source grouping/context, JSONL exchange and queued application operations. See [the 1.3 guide](docs/user-experience.md). The registered RC2 completed the full 24-hour workload and exact-registry platform checks described in [1.3 validation](docs/validation-1.3.md). The previous stable 1.2 memory/filter results remain in [1.2 validation](docs/validation-1.2.md).
 
+**1.4 candidate:** [segmented immutable generations](docs/engine-generations.md),
+separate-process pinned readers, SQ8 candidates with original-f32 reranking, and
+an optional SIMD/mmap companion. Existing mutable stores and default searches
+keep their contracts. See [1.4 measurements and pending release gates](docs/validation-1.4.md).
+After registry publication, install the candidate with
+`cargo install vecnook --version '=1.4.0-rc.1' --locked` and the optional companion
+with `cargo install vecnook-accel --version '=0.1.0-rc.1' --locked`.
+
 [![CI](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml/badge.svg)](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml)
 [crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/1.3.0/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
 

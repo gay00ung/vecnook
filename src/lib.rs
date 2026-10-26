@@ -74,6 +74,7 @@ mod diagnostics;
 mod document;
 mod error;
 mod filter;
+pub mod generation;
 mod graph;
 mod index;
 mod keyword;

@@ -1,8 +1,11 @@
-# Engine growth decisions after 1.3
+# Engine growth decisions and 1.4 implementation
 
-The 1.3 user workflow keeps current storage limits and original f32 coordinates.
-This design records the next experiments required before increasing supported
-capacity or changing concurrency. It does not announce those capabilities.
+The 1.3 user workflow kept its storage limits and original f32 coordinates.
+The 1.4 candidate now implements the segmented snapshot, SQ8 candidate scan,
+optional SIMD/mmap and multiple-process reader work described below. See the
+[implemented API and boundaries](engine-generations.md) and
+[measurements/release status](validation-1.4.md). The wider data-model ideas at the
+end remain future scope. Candidate implementation is separate from stable approval.
 
 ## Capacity and the current storage boundary
 
@@ -11,44 +14,45 @@ records and 1,536 dimensions, coordinates alone occupy 307,200,000 bytes, about
 293 MiB, before original text or graph data. Raising only the node constant cannot
 make this workload fit. Updates also retain physical graph nodes until compaction.
 
-The next storage experiment should segment authoritative records and graph
-allocations, bound per-segment parsing and retain checksums/versioning. A manifest
-would identify a complete committed segment set; publication must order synced
-segments, synced manifest replacement and WAL truncation so interrupted maintenance
-can select one consistent generation. Legacy readers must fail closed on the new
-format; migration should create a separate verified directory rather than edit the
-only copy in place. Gates include every interruption boundary, ACK replay, byte
-budget enforcement, independent export/restore and 768/1536-dimensional churn.
+The implemented store streams authoritative originals into bounded immutable
+segments and publishes a checksum-bound manifest through CURRENT. It creates a
+separate directory and leaves the legacy WAL/graph intact. A full bulk publication
+has one source sequence; it has no generation WAL to truncate. Legacy readers
+fail closed on this format. The new API does not provide a segmented HNSW graph
+or incremental update log. Those need their own design and validation before
+becoming product claims. Fault points, process interruption, original backups
+and a real 50k/1536-dimensional capacity fixture exercise this implementation.
 
 ## Quantization with an exact reference
 
-Evaluate an optional derived quantized candidate index while retaining original
-f32 vectors for exact search and reranking. Report recall at the same target,
-build/reopen time, full peak RSS and the bytes for originals plus derived data.
-An int8 coordinate representation uses one quarter of raw f32 coordinate bytes,
-but retaining both adds storage and does not imply a 75% process-memory saving.
-Reject a default change unless a same-machine measured workload benefits after
-including reranking and model-specific recall loss.
+`Snapshot::quantize` implements an optional symmetric per-vector SQ8 candidate
+scan while retaining original f32 records for exact search/reranking. It exposes
+code/parameter bytes; the comparison reports calibration and held-out recall,
+code construction/open time, full peak RSS and original segment sizes. Int8
+coordinate bytes are one quarter of raw f32 bytes, but retained originals add
+storage and mmap residency can raise full RSS. Defaults remain unchanged. This
+is not an on-disk compressed graph or an automatic capacity/performance policy.
 
 ## Scalar kernels and optional acceleration
 
-The core currently accumulates scalar f64 distances from original f32 coordinates.
-First profile those kernels and copies at matched recall before selecting an
-optimization. Compiler auto-vectorization can be evaluated without changing the
-public distance contract. Explicit intrinsics and mmap APIs can require unsafe
-code/platform libraries, so they belong in a separately reviewed optional layer
-if adopted; the std-only safe core remains the portable reference. Preserve finite
-extreme-coordinate checks, deterministic ties and independent exact oracles.
+The core retains scalar ordered f64 distances from original f32 coordinates.
+The optional `vecnook-accel` companion implements runtime AVX2/NEON, scalar fallback
+and read-only mapping, with unsafe code isolated from the core. Its SIMD kernels
+retain left-to-right f64 additions and avoid FMA/reassociation. Extreme finite
+coordinates, dimension tails, signed zero and independent exact oracles are
+tested. The mmap constructor explicitly requires lifetime-long file immutability;
+cooperative pins cannot stop unrelated writers. Measurements do not justify a
+universal speedup or changing the default reader/kernel.
 
 ## Readers and maintenance
 
-The single persistent owner prevents readers from observing partial replacement
-of snapshot/WAL/cache files. Multiple process readers need immutable generations,
-reader pinning, lifetime/reclamation rules and restart-safe stale-reader handling.
-A reader must never mix a new snapshot with an old graph/identity. Prototype
-read-only snapshot copies before weakening the existing lock. Read/write snapshot
-isolation and concurrent compaction would need additional memory and a documented
-consistency contract; adding a thread alone does not supply either.
+The single persistent owner still protects legacy snapshot/WAL/cache replacement.
+Generation readers now pin an immutable file set and identity under a short
+publication gate. New publications do not mutate old files. Reclamation checks OS
+leases; process exit releases abandoned pins. Existing views retain their sequence
+while refresh opens CURRENT. Multiple readers and one bulk publisher can coexist.
+This does not add multiple mutable writers or weaken legacy directory ownership.
+An incremental mutable MVCC API/concurrent graph compaction remains future scope.
 
 ## Data model and integration decisions
 

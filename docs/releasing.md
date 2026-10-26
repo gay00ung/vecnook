@@ -53,6 +53,14 @@ for diagnosis; a running receipt is not release approval.
 
 ## Maintain 1.x compatibility
 
+For the 1.4 engine pair, also follow the
+[paired core/companion gates](release-readiness.md#paired-14-engine-gates).
+The core Publish workflow accepts `adapter_candidate_version` and validates its
+registry consumers/full mapped-reader workload before stable core publication.
+Publish the actual Cargo-packaged companion only after verifying its exact
+stable core dependency and rerunning `check_engine_release.py` with both actual
+prepared archives. The staged companion is review input, never a release asset.
+
 Use patch releases for compatible fixes and minor releases for compatible new
 features. Preserve the [Rust/JSON/storage contracts](compatibility.md), including
 Rust 1.89 support. A required breaking API/JSON or MSRV change needs a new major

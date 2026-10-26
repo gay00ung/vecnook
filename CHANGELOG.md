@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.4.0-rc.1 — 2026-10-26
+
+- Add a separate segmented immutable store with streamed original-f32 publication, checksummed manifests/CURRENT, process-reader pins, explicit generation refresh and safe garbage collection. Database/Collection can publish acknowledged views; existing formats, exclusive legacy ownership and default search remain compatible.
+- Add reusable symmetric SQ8 candidate scans with bounded pools, original-vector exact reranking, ID eligibility, original backup and `snapshot-*` CLI commands. Keep originals and distinguish result-count completeness from ANN recall.
+- Add the optional `vecnook-accel 0.1.0-rc.1` companion: runtime AVX2/NEON with scalar-equivalent ordered f64 arithmetic, explicit immutable-file mmap safety boundary, native demo/search CLI and process-reader tests. Unsafe code stays outside the dependency-free core.
+- Add actual publisher interruption/I/O/corruption coverage, paired original-oracle/recall/latency/full-RSS/capacity measurements, dual-package registry consumers and fresh generation/SQ8/mapped-reader soak gates. [1.4 validation](docs/validation-1.4.md) records actual results and still-pending full release QA; 1.3 receipts do not approve this candidate.
+
 ## 1.3.0 — 2026-10-21
 
 - Promote RC2's document previews, embedding reuse, explanations, optional Korean matching, bounded context/grouping, JSONL exchange and application-worker operations. Include its English BM25 ranking correction and reduced keyword-index construction allocations.

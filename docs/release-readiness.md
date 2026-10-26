@@ -68,3 +68,50 @@ approval requirement. The 1.2 [memory/filter measurements and completed registry
 are recorded separately from the completed 1.1 run.
 The [1.3 validation record](validation-1.3.md) includes the completed RC2 registry
 workload and distribution checks, separate from unmeasured external-user observations.
+
+## Paired 1.4 engine gates
+
+The 1.4 core and optional platform companion require **new** registry archives,
+source fingerprints and receipts. Older release evidence never supplies their
+approval. All eight core receipts must exercise segmented generations. Eight
+additional companion registry receipts must prove both exact archives on Linux,
+macOS, Windows Server NTFS and actual Windows 11 ARM64 NTFS, with MSRV and stable
+on each. `check_acceleration.py --registry ADAPTER --core-registry CORE` uses
+independent downloads, fresh Cargo caches, installed CLI/platform tests and an
+external library consumer run twice.
+
+Run the checked core archive with `run_soak.py --seconds 86400 --mutations 100000`.
+Its new workload checks generation publication, retained old views, SQ8 reranking
+and independent generation backup alongside the existing mixed mutation/ACK
+checks. Once its running receipt exists, start `run_acceleration_soak.py` with
+`--core-crate`, `--adapter-crate`, `--publisher-receipt`, `--output`, `--seconds
+86400 --records 100000`. This separate process maps the live publisher's immutable
+generations, compares originals/SIMD/SQ8 and records observed generation changes.
+Its own elapsed duration must reach 24 hours. It binds the final successful core
+publisher receipt, rather than a running snapshot. Short or interrupted runs are
+diagnostic evidence only and remain preserved.
+
+Attach `acceleration-distribution-*.json` and a completed
+`acceleration-soak-receipt.json` alongside the core distributions/soak on the core
+candidate's GitHub release. `check_engine_release.py` requires both candidate
+archives, both sets of repeated distribution paths and both soak receipts. It
+rejects mismatched package/source hashes, missing OS/toolchain hosts, short runs,
+missing generation checks and a different publisher receipt. Promotion additionally
+compares `--release-crate` and `--adapter-release-crate`: only package/docs versions
+and the narrowly verified exact paired core dependency/checksum may differ.
+
+The stable companion's exact stable core dependency is unavailable until core
+publication. `prepare_adapter_release.py` therefore prepares a **review-only**
+version-adjusted companion archive from the checked candidate and prepared stable
+core, verifies both runtime fingerprints, and permits the paired prepublication
+gate. Never upload that staged archive as an actual Cargo package. After publishing
+the gated stable core, run Cargo packaging/verification for the real stable
+companion and rerun the paired gate with that actual archive before its publication.
+Recheck both public registry downloads, installed consumers and tag CI afterward.
+
+Native CLI CI produces four core ZIPs and four companion ZIPs, each with its own
+SHA-256 and extracted-executable receipt. Publish these, both exact `.crate`
+archives/checksums, the Python wheel/checksum and the paired QA receipts. Verify
+public asset download hashes/server digests. A green binary build alone does not
+approve the registered source or full-duration workload. See
+[1.4 validation](validation-1.4.md) for the current measured status.
