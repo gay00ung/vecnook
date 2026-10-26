@@ -1,5 +1,6 @@
 # Build output and local runtime data
 /target/
+/extensions/accel/target/
 /work/
 /data/
 .DS_Store

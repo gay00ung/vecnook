@@ -1,0 +1,13 @@
+[package]
+name = "vecnook-accel"
+version = "0.1.0-rc.1"
+edition = "2024"
+rust-version = "1.89"
+license = "MIT"
+repository = "https://github.com/gay00ung/vecnook"
+description = "Optional SIMD and immutable-generation mmap adapters for Vecnook"
+readme = "README.md"
+include = ["/src/**", "/tests/**", "/examples/**", "/Cargo.toml", "/Cargo.lock", "/README.md", "/LICENSE"]
+
+[dependencies]
+vecnook = { path = "../..", version = "=1.4.0-rc.1" }

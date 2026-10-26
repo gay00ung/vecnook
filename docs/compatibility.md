@@ -118,3 +118,20 @@ snapshot/WAL layout.
 ## Migrating from 1.2 to 1.3
 
 Default tokenization, retrieval selection, original coordinates, VDOC1/VDOC2 and snapshot/WAL/cache formats remain unchanged. Optional Korean tokenization rebuilds only the runtime keyword index and must be reselected after open. Structural Markdown chunking creates a new collection identity with input schema 2; older convenience clients reject it. Native readers retain the opaque identity and original payloads. Existing CLI JSON v1 fields and positional commands remain supported. New optional context/group/distance selection is explicit and documents candidate versus final count completeness in the [1.3 guide](user-experience.md). The Python client is a separate standard-library subprocess package; it does not add core Cargo dependencies.
+
+## Migrating from 1.3 to 1.4
+
+Existing Database/Collection files, Rust methods, default HNSW/Auto search,
+f32 originals and JSON v1 fields remain compatible. The added `generation` API
+creates a **separate new directory** with STORE/MANIFEST/CURRENT format 1. It
+does not enlarge or migrate the legacy snapshot/WAL or its 100k-node/256 MiB caps.
+Publish a verified original view, keep the source/backup for older readers, and
+use `Snapshot` readers for the new store. Older binaries fail to open the new
+store rather than rewriting it. See [generation semantics](engine-generations.md).
+
+SQ8 is explicit derived state; it retains original coordinates and reranks with
+them. The optional `vecnook-accel` package has its own version and exact paired
+core dependency. Explicit SIMD preserves ordered scalar f64 bits. Its unsafe
+mapping constructor requires immutable files for the mapped reader's lifetime;
+it is never selected by existing safe/default APIs. Rust 1.89 and the standard-
+library-only core contract remain unchanged.

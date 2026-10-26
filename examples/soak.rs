@@ -12,6 +12,135 @@ use vecnook::{
     HybridSearchOptions, Mutation, SearchOptions, SearchReason, SearchStrategy, VectorIndex,
 };
 type Model = BTreeMap<u64, ([f32; 4], String)>;
+struct GenerationChecks {
+    raw: Option<vecnook::generation::Publisher>,
+    documents: Option<vecnook::generation::Publisher>,
+    old_raw: vecnook::generation::Snapshot,
+    old_documents: vecnook::generation::Snapshot,
+    old_model: Model,
+    root: PathBuf,
+    publications: u64,
+    quantized_checks: u64,
+    backups: u64,
+}
+impl GenerationChecks {
+    fn new(root: &Path, collection: &Collection) -> vecnook::Result<Self> {
+        use vecnook::{
+            EmbeddingSpace, Metric,
+            generation::{Publisher, Snapshot},
+        };
+        let raw = Publisher::create(
+            root.join("generations"),
+            Config::new(4),
+            EmbeddingSpace::new("soak-raw-v1", 4, Metric::SquaredL2),
+        )?;
+        let documents = Publisher::create(
+            root.join("document-generations"),
+            Config::new(4),
+            collection.space().clone(),
+        )?;
+        Ok(Self {
+            raw: Some(raw),
+            documents: Some(documents),
+            old_raw: Snapshot::open(root.join("generations"))?,
+            old_documents: Snapshot::open(root.join("document-generations"))?,
+            old_model: Model::new(),
+            root: root.to_path_buf(),
+            publications: 0,
+            quantized_checks: 0,
+            backups: 0,
+        })
+    }
+    fn verify_original(snapshot: &vecnook::generation::Snapshot, model: &Model, documents: bool) {
+        assert_eq!(snapshot.len(), model.len());
+        for (&id, (vector, text)) in model {
+            let record = snapshot.get(id).unwrap().unwrap();
+            assert_eq!(
+                record
+                    .vector
+                    .iter()
+                    .map(|v| v.to_bits())
+                    .collect::<Vec<_>>(),
+                vector.iter().map(|v| v.to_bits()).collect::<Vec<_>>()
+            );
+            if documents {
+                assert_eq!(
+                    Document::from_payload(&record.metadata).unwrap(),
+                    document(id, text)
+                );
+            } else {
+                assert_eq!(&record.metadata, text);
+            }
+        }
+    }
+    fn step(
+        &mut self,
+        db: &Database,
+        collection: &Collection,
+        model: &Model,
+    ) -> vecnook::Result<()> {
+        use vecnook::generation::PublishOptions;
+        let raw = db.publish_generation(self.raw.as_mut().unwrap(), PublishOptions::default())?;
+        let documents = collection
+            .publish_generation(self.documents.as_mut().unwrap(), PublishOptions::default())?;
+        self.raw.as_mut().unwrap().collect_garbage()?;
+        self.documents.as_mut().unwrap().collect_garbage()?;
+        Self::verify_original(&self.old_raw, &self.old_model, false);
+        Self::verify_original(&self.old_documents, &self.old_model, true);
+        Self::verify_original(&raw, model, false);
+        Self::verify_original(&documents, model, true);
+        assert_eq!(raw.sequence(), db.sequence());
+        assert_eq!(documents.sequence(), collection.sequence());
+        let query = [0.1, 0.2, 0.3, 0.4];
+        let exact = db.search_exact(&query, 10)?;
+        assert_eq!(raw.search_exact(&query, 10)?.neighbors, exact.neighbors);
+        let codes = raw.quantize()?;
+        assert_eq!(
+            codes.search(&query, 10, raw.len().max(10))?.neighbors,
+            exact.neighbors
+        );
+        let partial = codes.search(&query, 10, 64)?;
+        for neighbor in partial.neighbors {
+            let original = db.get(neighbor.id).unwrap();
+            let expected: f64 = original
+                .vector
+                .iter()
+                .zip(query)
+                .map(|(&a, b)| (f64::from(a) - f64::from(b)).powi(2))
+                .sum();
+            assert_eq!(neighbor.distance.to_bits(), expected.to_bits());
+            assert_eq!(neighbor.metadata, original.metadata);
+        }
+        self.quantized_checks += 1;
+        self.publications += 2;
+        if self.publications.is_multiple_of(40) {
+            let target = self.root.join("generation-backup");
+            let copy = raw.backup(&target, PublishOptions::default())?;
+            Self::verify_original(&copy, model, false);
+            drop(copy);
+            fs::remove_dir_all(target)?;
+            self.backups += 1;
+        }
+        drop(codes);
+        self.old_raw = raw;
+        self.old_documents = documents;
+        self.old_model = model.clone();
+        self.raw.as_mut().unwrap().collect_garbage()?;
+        self.documents.as_mut().unwrap().collect_garbage()?;
+        Ok(())
+    }
+    fn reopen_publishers(&mut self) -> vecnook::Result<()> {
+        drop(self.raw.take());
+        drop(self.documents.take());
+        self.raw = Some(vecnook::generation::Publisher::open(
+            self.root.join("generations"),
+        )?);
+        self.documents = Some(vecnook::generation::Publisher::open(
+            self.root.join("document-generations"),
+        )?);
+        Ok(())
+    }
+}
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -309,11 +438,15 @@ fn progress(
     mutations: u64,
     restarts: u64,
     backups: u64,
+    generation: &GenerationChecks,
     complete: bool,
 ) -> std::io::Result<()> {
     let elapsed = start.elapsed().as_secs_f64();
     let text = format!(
-        "{{\"workload\":\"vectors+bm25+rrf+selective-auto+compound-ranges+streamed-compaction\",\"completed\":{complete},\"elapsed_seconds\":{elapsed},\"ack_mutations\":{mutations},\"restarts\":{restarts},\"backups_verified\":{backups},\"duration_gate_24h\":{},\"mutation_gate_100k\":{}}}\n",
+        "{{\"workload\":\"vectors+bm25+rrf+selective-auto+compound-ranges+streamed-compaction+segmented-generations+sq8-rerank\",\"completed\":{complete},\"elapsed_seconds\":{elapsed},\"ack_mutations\":{mutations},\"restarts\":{restarts},\"backups_verified\":{backups},\"generation_publications\":{},\"quantized_checks\":{},\"generation_backups_verified\":{},\"duration_gate_24h\":{},\"mutation_gate_100k\":{}}}\n",
+        generation.publications,
+        generation.quantized_checks,
+        generation.backups,
         elapsed >= 86400.0,
         mutations >= 100000
     );
@@ -350,6 +483,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut db = Database::create(&db_path, Config::new(4))?;
     let mut collection = Collection::create(&root, "documents", Config::new(4), "soak-fixture-v1")?;
     let space = collection.space().clone();
+    let mut generation_checks = GenerationChecks::new(&root, &collection)?;
     let mut policy = VectorIndex::new(Config::new(1))?;
     for id in 0..4000 {
         policy.put(
@@ -366,7 +500,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut restarts = 0;
     let mut backups = 0;
     let mut last_progress = Instant::now();
-    progress(&root, start, 0, 0, 0, false)?;
+    progress(&root, start, 0, 0, 0, &generation_checks, false)?;
     while mutations < target || start.elapsed() < Duration::from_secs(seconds) {
         seed = seed.wrapping_mul(6364136223846793005).wrapping_add(1);
         let id = seed % 257;
@@ -436,6 +570,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             verify(&db, &model);
             verify_documents(&collection, &model);
             verify_policy(&policy);
+            generation_checks.step(&db, &collection, &model)?;
         }
         if iterations.is_multiple_of(2000) {
             drop(db);
@@ -453,7 +588,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             verify(&db, &model);
             verify_documents(&collection, &model);
             restarts += 1;
-            progress(&root, start, mutations, restarts, backups, false)?;
+            generation_checks.reopen_publishers()?;
+            progress(
+                &root,
+                start,
+                mutations,
+                restarts,
+                backups,
+                &generation_checks,
+                false,
+            )?;
         }
         if iterations.is_multiple_of(10000) {
             let path = root.join(format!("backup-{backups}"));
@@ -478,7 +622,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             backups += 1;
         }
         if last_progress.elapsed() >= Duration::from_secs(60) {
-            progress(&root, start, mutations, restarts, backups, false)?;
+            progress(
+                &root,
+                start,
+                mutations,
+                restarts,
+                backups,
+                &generation_checks,
+                false,
+            )?;
             last_progress = Instant::now();
         }
         if mutations >= target {
@@ -499,7 +651,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let collection = Collection::open(&root, "documents", &space)?;
     verify_documents(&collection, &model);
     verify_policy(&policy);
+    generation_checks.step(&db, &collection, &model)?;
     drop(db);
-    progress(&root, start, mutations, restarts + 1, backups, true)?;
+    progress(
+        &root,
+        start,
+        mutations,
+        restarts + 1,
+        backups,
+        &generation_checks,
+        true,
+    )?;
     Ok(())
 }

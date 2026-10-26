@@ -32,6 +32,10 @@ jobs:
         run: cargo build --locked --offline --release
       - name: Verify extracted archive
         run: python tools/package_binary.py --binary target/release/vecnook${{ runner.os == 'Windows' && '.exe' || '' }} --output work/native-cli
+      - name: Build optional platform companion
+        run: cargo build --locked --offline --release --manifest-path extensions/accel/Cargo.toml
+      - name: Verify extracted platform companion
+        run: python tools/package_binary.py --manifest extensions/accel/Cargo.toml --binary extensions/accel/target/release/vecnook-accel${{ runner.os == 'Windows' && '.exe' || '' }} --output work/native-cli
       - name: Preserve archive and independent receipt
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
         with:

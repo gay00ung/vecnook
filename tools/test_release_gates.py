@@ -14,16 +14,23 @@ class ReleaseGateTests(unittest.TestCase):
         self.rows = [dict(schema_version=1, passed=True, registry=True, crate_sha256="crate", source_sha256="source",
                           platform=dict(system=os), toolchain=rust, checks=list(CHECKS), windows=None)
                      for os in ["Linux", "Darwin", "Windows"] for rust in ["1.89.0", "stable"]]
-        self.rows[-1]["windows"] = dict(caption="Microsoft Windows 11 Pro", product_type=1, filesystem="NTFS")
+        for row in self.rows[-2:]:
+            row["windows"] = dict(caption="Microsoft Windows Server 2025", product_type=3, filesystem="NTFS")
+        for rust in ["1.89.0", "stable"]:
+            self.rows.append(dict(schema_version=1, passed=True, registry=True, crate_sha256="crate", source_sha256="source",
+                                  platform=dict(system="Windows", machine="ARM64"), toolchain=rust, checks=list(CHECKS),
+                                  windows=dict(caption="Microsoft Windows 11 Pro", product_type=1, filesystem="NTFS")))
         self.soak = dict(schema_version=1, completed=True, exit_code=0, crate_sha256="crate", source_sha256="source",
                          progress=dict(completed=True, elapsed_seconds=86400, ack_mutations=100000, duration_gate_24h=True,
-                                       mutation_gate_100k=True, restarts=3, backups_verified=1))
+                                       mutation_gate_100k=True, restarts=3, backups_verified=1,
+                                       generation_publications=4, quantized_checks=2, generation_backups_verified=1))
 
     def test_required_evidence_boundaries(self):
         self.assertEqual(validate("crate", "source", self.rows, self.soak), [])
         for field, value in [("elapsed_seconds", 86399.99), ("elapsed_seconds", float("nan")),
                              ("ack_mutations", 99999), ("ack_mutations", True), ("completed", False),
-                             ("backups_verified", 0), ("restarts", 2)]:
+                             ("backups_verified", 0), ("restarts", 2), ("generation_publications", 3),
+                             ("quantized_checks", 1), ("generation_backups_verified", 0), ("quantized_checks", True)]:
             soak = copy.deepcopy(self.soak)
             soak["progress"][field] = value
             self.assertTrue(validate("crate", "source", self.rows, soak), field)
@@ -87,6 +94,20 @@ class ReleaseGateTests(unittest.TestCase):
                     patch.object(check_publication, "download") as download:
                 for candidate in ["", "1.0.0", "1.0.1-rc.1", "1.0.0-rc.x"]:
                     with patch("sys.argv", ["check_publication.py", "--candidate-version", candidate]):
+                        with self.assertRaises(ValueError):
+                            check_publication.main()
+                download.assert_not_called()
+
+    def test_stable_engine_workflow_requires_paired_candidate_before_registry_access(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            (root / "Cargo.toml").write_text('[package]\nname="vecnook"\nversion="1.4.0"\n')
+            (root / "extensions/accel").mkdir(parents=True)
+            (root / "extensions/accel/Cargo.toml").write_text('[package]\nname="vecnook-accel"\nversion="0.1.0"\n')
+            with patch.object(check_publication, "__file__", str(root / "tools/check_publication.py")), \
+                    patch.object(check_publication, "download") as download:
+                for candidate in ["", "0.1.0", "0.1.1-rc.1", "0.1.0-rc.x"]:
+                    with patch("sys.argv", ["check_publication.py", "--candidate-version", "1.4.0-rc.1", "--adapter-candidate-version", candidate]):
                         with self.assertRaises(ValueError):
                             check_publication.main()
                 download.assert_not_called()

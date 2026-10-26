@@ -252,6 +252,23 @@ impl Database {
     pub fn sequence(&self) -> u64 {
         self.sequence
     }
+    /// Stream this acknowledged view into a separate segmented generation store.
+    /// The original database, WAL and active handle remain unchanged.
+    pub fn publish_generation(
+        &self,
+        publisher: &mut crate::generation::Publisher,
+        options: crate::generation::PublishOptions,
+    ) -> Result<crate::generation::Snapshot> {
+        self.ensure_writable()?;
+        if publisher.config() != self.config() {
+            return Err(Error::EmbeddingMismatch);
+        }
+        let mut generation = publisher.begin(self.sequence(), options)?;
+        for record in self.iter() {
+            generation.add(record.id, &record.vector, &record.metadata)?;
+        }
+        generation.commit()
+    }
     /// Recovery and graph cache observations from the most recent open.
     pub fn recovery_info(&self) -> &RecoveryInfo {
         &self.recovery

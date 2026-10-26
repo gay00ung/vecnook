@@ -407,6 +407,18 @@ impl Collection {
     pub fn space(&self) -> &EmbeddingSpace {
         &self.space
     }
+    /// Publish this acknowledged collection view into a separate, model-bound
+    /// segmented store. Original typed payloads and f32 coordinate bits are kept.
+    pub fn publish_generation(
+        &self,
+        publisher: &mut crate::generation::Publisher,
+        options: crate::generation::PublishOptions,
+    ) -> Result<crate::generation::Snapshot> {
+        if publisher.space() != self.space() {
+            return Err(Error::EmbeddingMismatch);
+        }
+        self.db.publish_generation(publisher, options)
+    }
     /// Number of active document chunks.
     pub fn len(&self) -> usize {
         self.db.len()

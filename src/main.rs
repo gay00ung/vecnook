@@ -35,6 +35,12 @@ Usage:\n\
   vecnook backup <db-dir> <new-backup-dir>\n\
   vecnook maintain <db-dir>\n\
   vecnook doctor <db-or-collection-dir>\n\
+  vecnook snapshot-publish <source-db> <new-or-existing-store> <model-identity>\n\
+  vecnook snapshot-info <store>\n\
+  vecnook snapshot-get <store> <id>\n\
+  vecnook snapshot-search <store> <vector-or-@file> [k=10] [--sq8 candidates]\n\
+  vecnook snapshot-backup <store> <new-store>\n\
+  vecnook snapshot-gc <store>\n\
   vecnook export <db-dir> <new-export-file>\n\
   vecnook import <export-file> <new-db-dir>\n\
   vecnook docs-import <export-file> <root> <new-name>\n\
@@ -151,6 +157,9 @@ fn run(args: &[String], json_errors: bool) -> Result<()> {
         let report = vecnook::doctor(&args[1])?;
         println!("{}", diagnostic_json(&report));
         return Ok(());
+    }
+    if command.starts_with("snapshot-") {
+        return snapshot_command(args);
     }
     if command == "import" {
         require_count(args, 3, 3, "import <export-file> <new-db-directory>")?;
@@ -518,6 +527,139 @@ fn execute(db: &mut Database, command: &str, args: &[String]) -> Result<String> 
             "unknown shell command {command}"
         ))),
     }
+}
+
+fn snapshot_command(args: &[String]) -> Result<()> {
+    use vecnook::generation::{PublishOptions, Publisher, Snapshot};
+    let info = |snapshot: &Snapshot| {
+        format!(
+            "{{\"schema_version\":1,\"generation\":\"{}\",\"sequence\":\"{}\",\"records\":{},\"segments\":{},\"original_bytes\":{},\"dimensions\":{},\"metric\":{},\"model\":{}}}",
+            snapshot.generation(),
+            snapshot.sequence(),
+            snapshot.len(),
+            snapshot.segment_count(),
+            snapshot.original_bytes(),
+            snapshot.space().dimensions,
+            json_string(snapshot.space().metric.name()),
+            json_string(&snapshot.space().model)
+        )
+    };
+    match args[0].as_str() {
+        "snapshot-publish" => {
+            require_count(
+                args,
+                4,
+                4,
+                "snapshot-publish <source-db> <new-or-existing-store> <model-identity>",
+            )?;
+            let db = Database::open(&args[1])?;
+            let space = EmbeddingSpace::new(&args[3], db.config().dimensions, db.config().metric);
+            let mut publisher = if std::path::Path::new(&args[2]).exists() {
+                Publisher::open(&args[2])?
+            } else {
+                Publisher::create(&args[2], db.config().clone(), space.clone())?
+            };
+            if publisher.space() != &space {
+                return Err(Error::EmbeddingMismatch);
+            }
+            println!(
+                "{}",
+                info(&db.publish_generation(&mut publisher, PublishOptions::default())?)
+            );
+        }
+        "snapshot-info" => {
+            require_count(args, 2, 2, "snapshot-info <store>")?;
+            println!("{}", info(&Snapshot::open(&args[1])?));
+        }
+        "snapshot-get" => {
+            require_count(args, 3, 3, "snapshot-get <store> <id>")?;
+            let snapshot = Snapshot::open(&args[1])?;
+            let record = snapshot.get(parse(&args[2], "ID")?)?;
+            let record = record.map_or_else(
+                || "null".to_owned(),
+                |r| {
+                    format!(
+                        "{{\"id\":\"{}\",\"metadata\":{},\"vector\":[{}]}}",
+                        r.id,
+                        json_string(&r.metadata),
+                        r.vector
+                            .iter()
+                            .map(|v| format!("{v:?}"))
+                            .collect::<Vec<_>>()
+                            .join(",")
+                    )
+                },
+            );
+            println!(
+                "{{\"schema_version\":1,\"generation\":\"{}\",\"sequence\":\"{}\",\"record\":{record}}}",
+                snapshot.generation(),
+                snapshot.sequence()
+            );
+        }
+        "snapshot-search" => {
+            require_count(
+                args,
+                3,
+                6,
+                "snapshot-search <store> <vector-or-@file> [k=10] [--sq8 candidates]",
+            )?;
+            let snapshot = Snapshot::open(&args[1])?;
+            let query = cli_vector(&args[2])?;
+            let mut position = 3;
+            let mut k = 10;
+            if args.get(position).is_some_and(|s| s != "--sq8") {
+                k = parse(&args[position], "K")?;
+                position += 1;
+            }
+            let report = if position == args.len() {
+                snapshot.search_exact(&query, k)?
+            } else if args.len() == position + 2 && args[position] == "--sq8" {
+                snapshot.quantize()?.search(
+                    &query,
+                    k,
+                    parse(&args[position + 1], "SQ8 candidates")?,
+                )?
+            } else {
+                return Err(Error::InvalidInput("expected --sq8 candidates".into()));
+            };
+            let neighbors = report
+                .neighbors
+                .iter()
+                .map(|r| {
+                    format!(
+                        "{{\"id\":\"{}\",\"distance\":{},\"metadata\":{}}}",
+                        r.id,
+                        r.distance,
+                        json_string(&r.metadata)
+                    )
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            println!(
+                "{{\"schema_version\":1,\"generation\":\"{}\",\"sequence\":\"{}\",\"approximate\":{},\"complete\":{},\"eligible_count\":{},\"original_distance_computations\":{},\"neighbors\":[{neighbors}]}}",
+                report.generation,
+                report.sequence,
+                report.approximate,
+                report.complete,
+                report.eligible_count,
+                report.original_distance_computations
+            );
+        }
+        "snapshot-backup" => {
+            require_count(args, 3, 3, "snapshot-backup <store> <new-store>")?;
+            println!(
+                "{}",
+                info(&Snapshot::open(&args[1])?.backup(&args[2], PublishOptions::default())?)
+            );
+        }
+        "snapshot-gc" => {
+            require_count(args, 2, 2, "snapshot-gc <store>")?;
+            let removed = Publisher::open(&args[1])?.collect_garbage()?;
+            println!("{{\"schema_version\":1,\"removed_generations\":{removed}}}");
+        }
+        _ => return Err(Error::InvalidInput("unknown snapshot command".into())),
+    }
+    Ok(())
 }
 
 fn json_string(value: &str) -> String {

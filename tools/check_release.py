@@ -11,27 +11,42 @@ from check_package import check
 
 CHECKS = {"installed_cli", "json_contracts", "document_flow", "legacy_upgrade",
           "doctor_export_import_backup", "external_app_restart", "offline_demo_restart",
-          "registry_cli_install", "registry_library_resolution", "compound_filters", "user_experience"}
+          "registry_cli_install", "registry_library_resolution", "compound_filters", "user_experience", "segmented_generations"}
+
+
+def platform_errors(rows):
+    """Require all eight actual OS/toolchain receipts, including both Windows hosts."""
+    pairs = set()
+    for row in rows:
+        system = row.get("platform", {}).get("system")
+        rust = row.get("toolchain")
+        if system in {"Linux", "Darwin"}:
+            pairs.add((system, rust))
+        elif system == "Windows":
+            windows = row.get("windows") or {}
+            product = windows.get("product_type")
+            if type(product) is not int or windows.get("filesystem") != "NTFS":
+                continue
+            if product == 3 and "Server" in windows.get("caption", ""):
+                pairs.add(("Windows Server", rust))
+            if (product == 1 and "Windows 11" in windows.get("caption", "")
+                    and row.get("platform", {}).get("machine", "").lower() in {"arm64", "aarch64"}):
+                pairs.add(("Windows 11 ARM64", rust))
+    expected = {(system, rust) for system in ["Linux", "Darwin", "Windows Server", "Windows 11 ARM64"]
+                for rust in ["1.89.0", "stable"]}
+    return ["missing actual registry consumer: "+system+" / "+rust for system, rust in sorted(expected - pairs)]
 
 
 def validate(crate_hash, source_hash, distributions, soak):
-    errors, pairs, windows11 = [], set(), False
+    errors, accepted = [], []
     for row in distributions:
         if (type(row.get("schema_version")) is not int or row["schema_version"] != 1 or row.get("passed") is not True
                 or row.get("registry") is not True or row.get("crate_sha256") != crate_hash
                 or row.get("source_sha256") != source_hash or not CHECKS.issubset(row.get("checks", []))):
             errors.append("distribution receipt does not prove the candidate registry package")
             continue
-        system = row.get("platform", {}).get("system")
-        pairs.add((system, row.get("toolchain")))
-        windows = row.get("windows") or {}
-        windows11 |= (system == "Windows" and type(windows.get("product_type")) is int and windows["product_type"] == 1
-                      and "Windows 11" in windows.get("caption", "") and windows.get("filesystem") == "NTFS")
-    expected = {(system, rust) for system in ["Linux", "Darwin", "Windows"] for rust in ["1.89.0", "stable"]}
-    if not expected.issubset(pairs):
-        errors.append("registry package requires successful MSRV/stable distribution checks on all three systems")
-    if not windows11:
-        errors.append("actual Windows 11 NTFS application/restore receipt is missing (Server CI does not substitute)")
+        accepted.append(row)
+    errors += platform_errors(accepted)
     progress = soak.get("progress") or {}
     elapsed = progress.get("elapsed_seconds")
     mutations = progress.get("ack_mutations")
@@ -42,7 +57,10 @@ def validate(crate_hash, source_hash, distributions, soak):
             or type(mutations) is not int or mutations < 100000
             or progress.get("duration_gate_24h") is not True or progress.get("mutation_gate_100k") is not True
             or type(progress.get("restarts")) is not int or progress["restarts"] < 3
-            or type(progress.get("backups_verified")) is not int or progress["backups_verified"] < 1):
+            or type(progress.get("backups_verified")) is not int or progress["backups_verified"] < 1
+            or type(progress.get("generation_publications")) is not int or progress["generation_publications"] < 4
+            or type(progress.get("quantized_checks")) is not int or progress["quantized_checks"] < 2
+            or type(progress.get("generation_backups_verified")) is not int or progress["generation_backups_verified"] < 1):
         errors.append("completed candidate-bound 24-hour/100k-mutation/restart/backup ACK verification is missing")
     return errors
 
