@@ -1,11 +1,12 @@
 # Engine growth decisions and 1.4 implementation
 
 The 1.3 user workflow kept its storage limits and original f32 coordinates.
-The 1.4 candidate now implements the segmented snapshot, SQ8 candidate scan,
+The 1.4 release implements the segmented snapshot, SQ8 candidate scan,
 optional SIMD/mmap and multiple-process reader work described below. See the
 [implemented API and boundaries](engine-generations.md) and
 [measurements/release status](validation-1.4.md). The wider data-model ideas at the
-end remain future scope. Candidate implementation is separate from stable approval.
+end remain future scope. The validation record binds the completed registry QA
+to the source-equivalent stable promotion.
 
 ## Capacity and the current storage boundary
 

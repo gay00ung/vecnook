@@ -1,6 +1,6 @@
 # Segmented generations, SQ8 and optional platform readers
 
-The 1.4 candidate adds a separate immutable bulk snapshot store. Applications can
+The 1.4 release adds a separate immutable bulk snapshot store. Applications can
 publish an acknowledged database or collection view, then let several processes
 read it while the publisher prepares another generation. Existing mutable
 `Database`/`Collection` directories, WALs, exclusive ownership and default HNSW
@@ -147,3 +147,8 @@ IDs, generation and sequence. `snapshot-publish` reads a raw Database; use the
 Rust `Collection::publish_generation` API for collection identity/payloads.
 The optional `vecnook-accel search STORE VECTOR K --sq8 N --mmap` selects the
 platform kernel and explicitly opts into the mapping immutability contract.
+
+Each CLI invocation opens and validates the full store, and `--sq8` builds its
+codes again for that invocation. The latency tables in [1.4 validation](validation-1.4.md)
+measure queries on a retained Rust view after open/build; use the library to reuse
+that view across queries. The tables do not describe one-shot CLI latency.

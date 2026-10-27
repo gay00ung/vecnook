@@ -7,9 +7,9 @@ Calls block and each opens the collection, so do not use them while another
 application owns that collection's exclusive handle.
 
 Versioned wheels are attached to the
-[GitHub release](https://github.com/gay00ung/vecnook/releases/tag/v1.3.0).
+[GitHub release](https://github.com/gay00ung/vecnook/releases/tag/v1.4.0).
 After downloading the wheel, install it with
-`python -m pip install ./vecnook-1.3.0-py3-none-any.whl`.
+`python -m pip install ./vecnook-1.4.0-py3-none-any.whl`.
 
 ```python
 from vecnook import Client

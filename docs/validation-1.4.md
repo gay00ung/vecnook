@@ -1,10 +1,13 @@
-# 1.4 engine candidate validation
+# 1.4 engine validation
 
-Local implementation and measurement date: 2026-10-26. Core `1.4.0-rc.1` and
-optional companion `0.1.0-rc.1` are prepared from the same branch. Registry
-publication, exact-registry cross-platform receipts and fresh full-duration
-workloads are still pending. These local results do not approve stable release.
-The completed 1.3 workload is historical evidence for 1.3 only.
+Local implementation and measurement date: 2026-10-26; registered-candidate QA
+completed on 2026-10-27. Core `1.4.0` and optional companion `0.1.0` promote the
+checked `1.4.0-rc.1` / `0.1.0-rc.1` pair through version/docs-only changes.
+Both independent full 24-hour workloads and eight registry consumers per package
+passed. The exact receipts and archives are attached to the
+[RC release](https://github.com/gay00ung/vecnook/releases/tag/v1.4.0-rc.1).
+Actual stable publication and installation checks remain a separate step in the
+[release procedure](releasing.md). The completed 1.3 workload is evidence for 1.3 only.
 
 The [generation guide](engine-generations.md) describes the opt-in APIs. Existing
 mutable stores, HNSW/Auto defaults, original f32 coordinates and Rust 1.89 remain
@@ -19,7 +22,13 @@ and calibration. `/usr/bin/time -l` records the full process peak RSS, including
 open-time validation, resident mmap pages and SQ8 construction. This is process
 RSS, not total system memory: the OS file page cache is not charged in the same
 way as mapped resident pages. Open and code-build times are separate from query
-latency; code construction is paid once per reusable quantized view.
+latency; code construction is paid once per reusable quantized view. These tables
+measure retained Rust readers. Each CLI invocation validates/opens the full store
+and builds SQ8 again when requested, so its end-to-end latency includes those costs.
+
+The measurements used Rust 1.89.0. Local prepublication checks also used the
+installed stable alias 1.96; the hosted candidate CI's stable compiler was 1.99.1.
+Registry receipts record the actual rustc version and host for each job.
 
 The user workstation was not isolated. This measurement launched no overlapping
 Vecnook builds, model inference or soak workloads; other projects and system
@@ -109,14 +118,14 @@ fixture completed beyond the legacy snapshot cap, without raising that cap.
 Its file-backed SQ8 view used 79.42 MiB median full RSS and 16.270 ms p95.
 
 Mapping made original pages resident: the large mmap+SQ8 runs reached
-372.98 MiB median and 373.73 MiB in the highest run. File-backed originals plus
+372.984375 MiB median and 373.734375 MiB in the highest run. File-backed originals plus
 SQ8 can suit a lower process-RSS budget; mmap is an explicit latency/access
 choice with a larger resident footprint. Full-RSS and system-cache accounting
 prevent interpreting the one-byte codes as a 75% total-memory reduction. SIMD
 kept scalar results but supplied little stable benefit over mapped scalar in
 the large scan. No new default is selected from these measurements.
 
-## Correctness and remaining gates
+## Correctness and release evidence
 
 Local MSRV tests cover original signed-zero/full-u64/UTF-8 values; all three
 metrics against independent exact oracles; SQ8 full-candidate equality and
@@ -125,17 +134,22 @@ collection; independent backups; actual writer/reader process interruption;
 CRC/logical corruption; and nine injected publication I/O failure boundaries.
 The optional adapter's macOS ARM64 release tests cover NEON/scalar bit equality,
 dimension tails/extreme finite values, threaded mapped reads and killed process
-pin release. The CI matrix must additionally exercise AVX2 and Windows mapping.
+pin release. The completed registry CI also exercised AVX2 on Linux/Windows x64
+and NEON on macOS/Windows ARM64, including Windows mapping.
 Hardware power loss and network filesystems remain unvalidated.
 
-Required stable gates remain separate: all eight exact core registry consumers,
-all eight exact paired companion consumers, a new completed 24-hour/100k-mutation
-core generation/SQ8 workload and a separate completed 24-hour/100k-record mapped
-reader observing the same live publisher. Both candidate source fingerprints and
-archives must match the promotion. See [paired release gates](release-readiness.md#paired-14-engine-gates).
-A short smoke, partial/interrupted run, source-only test or older release receipt
-is never a substitute. External five-person observation and actual app adoption
-remain unmeasured because no participants/apps were available.
+Eight exact core and eight exact paired companion registry consumers passed on
+Linux x64, macOS ARM64, Windows Server 2025 x64 NTFS and Windows 11 Enterprise
+ARM64 NTFS, each with Rust 1.89.0 and stable 1.99.1. Windows 11 receipts record
+ProductType 1 and Windows Server receipts ProductType 3. Both packages' local
+MSRV consumers, fresh remote annotated-tag installs and docs.rs API builds passed.
+This validates the hosted desktop image, rather than every physical Windows PC.
+
+The [paired release gate](release-readiness.md#paired-14-engine-gates) requires
+both final workloads and source equivalence before stable publication. A short
+smoke, partial/interrupted run, source-only test or older release receipt is never
+a substitute. External five-person observation and actual app adoption remain
+unmeasured because no participants/apps were available.
 
 Local prepublication checks completed: Rust stable core 161 passed (three subprocess
 helpers ignored when invoked alone), companion three passed (one subprocess helper),
@@ -151,3 +165,35 @@ generation backup. Its separate mapped reader completed 223 checks of 36,797
 original records over 30.020 seconds and observed three generations. Both ran
 against the local implementation, not registered candidate archives. These short
 runs verify the harness and concurrency path; their 24-hour/100k gates are false.
+
+## Completed registered-candidate workloads
+
+The core workload ran from 2026-10-26 01:35:18 UTC to 2026-10-27 01:35:20 UTC.
+Its measured workload time was 86,401.129295292 seconds, with 189,174 acknowledged
+mutations, 89 restarts, 17 verified backups, 710 generation publications, 355 SQ8
+checks and 17 verified generation backups. The independent mapped reader ran
+from 2026-10-26 01:47:31 UTC to 2026-10-27 01:47:32 UTC, measuring
+86,400.107458791 seconds, 138,567,541 checked records, 806,369 mapped checks and
+248 observed generations. Its actual backend was NEON.
+
+Both final receipts and progress files report `completed=true`, exit code 0 and
+true duration/count gates. Archives, normalized sources and actual binary hashes
+match their receipts. The reader binds the final successful publisher receipt;
+no earlier, partial or 1.3 workload time/counters were combined.
+
+| Exact RC evidence | SHA-256 |
+| --- | --- |
+| core archive | `35b344cbb8bf14f832ccc9f7c83ce312cc0624497267b340d214867c74497a4f` |
+| core normalized source | `b532e32f69623013082cf04008a7ed0393f8a453730ff5d42dbf550551a72e72` |
+| companion archive | `b4d15a691e4a1f7de98db63d57e5f6e9098b81ae36408d1418b462fe1ec51ae6` |
+| companion normalized source | `f9024bf37fb16a02bc532444d880629914d47915c2f17575d6fe724bae064096` |
+| final core receipt, also bound by reader | `504451f99a73fd3d0bb1fb44a33be69ff1edbf30dc4a20a3efcabf58357fae58` |
+| final mapped-reader receipt | `bce8613bde55773e18236a188c817fb80f58bd32fcc89127f66955a74e2d294b` |
+
+The RC release includes both final receipts, all registry consumers, eight native
+ZIPs with executable/checksum receipts, the Python wheel and diagnostic summaries.
+All 57 asset server digests/sizes and independent public-download hashes passed;
+`SHA256SUMS` covers the other 56 files. `check_engine_release.py` passed with all
+eight-plus-eight CI and both local registry receipts. Stable promotion must also
+pass this gate with the prepared stable core and companion archives; the temporary
+version-adjusted companion is review input and is never published.
