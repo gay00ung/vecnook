@@ -2,27 +2,29 @@
 
 A small embedded vector database for Rust applications, built with the standard library. Vecnook implements its own HNSW graph, exact search, and persistent storage. It has no external crates or vector search library dependencies.
 
-**1.3.0** adds read-only sync previews, reuse of unchanged embeddings, search explanations, opt-in Korean keyword matching, source grouping/context, JSONL exchange and queued application operations. See [the 1.3 guide](docs/user-experience.md). The registered RC2 completed the full 24-hour workload and exact-registry platform checks described in [1.3 validation](docs/validation-1.3.md). The previous stable 1.2 memory/filter results remain in [1.2 validation](docs/validation-1.2.md).
+**1.4.0** adds [segmented immutable generations](docs/engine-generations.md),
+separate-process pinned readers and SQ8 candidates with original-f32 reranking.
+The optional `vecnook-accel 0.1.0` companion supplies SIMD and read-only mmap.
+Existing mutable stores and default searches keep their contracts. Both registered
+candidates completed independent 24-hour workloads, alongside eight core and eight
+paired companion registry checks. See [1.4 results and measured limits](docs/validation-1.4.md).
+Install the companion only when its explicit platform APIs are needed:
+`cargo install vecnook-accel --version '=0.1.0' --locked`.
 
-**1.4 candidate:** [segmented immutable generations](docs/engine-generations.md),
-separate-process pinned readers, SQ8 candidates with original-f32 reranking, and
-an optional SIMD/mmap companion. Existing mutable stores and default searches
-keep their contracts. See [1.4 measurements and pending release gates](docs/validation-1.4.md).
-After registry publication, install the candidate with
-`cargo install vecnook --version '=1.4.0-rc.1' --locked` and the optional companion
-with `cargo install vecnook-accel --version '=0.1.0-rc.1' --locked`.
+The [1.3 document workflow](docs/user-experience.md) and its [validation](docs/validation-1.3.md)
+remain available. Earlier memory/filter results are recorded in [1.2 validation](docs/validation-1.2.md).
 
 [![CI](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml/badge.svg)](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml)
-[crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/1.3.0/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
+[crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/1.4.0/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
 
-**Vecnook targets local Rust applications.** Use one database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS, Linux and Windows. The index stays in RAM. [Release validation](docs/validation-1.3.md) includes a full 24-hour workload and Windows 11 NTFS verification. See [compatibility](docs/compatibility.md) before upgrading from 0.3.
+**Vecnook targets local Rust applications.** Use one mutable database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS, Linux and Windows. The mutable HNSW index stays in RAM; the opt-in generation API reads separate immutable segments. [Release validation](docs/validation-1.4.md) includes both full 24-hour workloads and Windows 11 ARM64 NTFS verification. See [compatibility](docs/compatibility.md) before upgrading.
 
 ## Get started
 
 Install the database and run an [offline prepared-query demo](docs/quickstart.md) with original Markdown, source references and checkpoint/restart behavior:
 
 For the CLI, download a matching ZIP and its SHA-256 file from the
-[1.3 release](https://github.com/gay00ung/vecnook/releases/tag/v1.3.0).
+[1.4 release](https://github.com/gay00ung/vecnook/releases/tag/v1.4.0).
 The [installation guide](docs/user-experience.md#install-a-native-cli) explains
 target selection, checksum verification and extraction. This route needs no Rust
 compiler; document commands additionally need Python and a local model as described below.
@@ -31,7 +33,7 @@ To build or use the Rust library, install Rust 1.89 or later. The package,
 library, and executable are all named `vecnook`.
 
 ```bash
-cargo install vecnook --version '=1.3.0' --locked
+cargo install vecnook --version '=1.4.0' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -39,20 +41,20 @@ vecnook demo data/first-demo 1
 For a Rust application, add the registry dependency:
 
 ```bash
-cargo add vecnook@=1.3.0
+cargo add vecnook@=1.4.0
 ```
 
 Or edit `Cargo.toml`:
 
 ```toml
 [dependencies]
-vecnook = "=1.3.0"
+vecnook = "=1.4.0"
 ```
 
-The exact version pins this release; commit your application lockfile as well. The [API reference](https://docs.rs/vecnook/1.3.0/vecnook/) documents exported types and methods. See the [API guide](docs/api.md), [compatibility contracts](docs/compatibility.md) and [release procedure](docs/releasing.md). Versioned source is also available through the Git tag:
+The exact version pins this release; commit your application lockfile as well. The [API reference](https://docs.rs/vecnook/1.4.0/vecnook/) documents exported types and methods. See the [API guide](docs/api.md), [compatibility contracts](docs/compatibility.md) and [release procedure](docs/releasing.md). Versioned source is also available through the Git tag:
 
 ```bash
-cargo install --git https://github.com/gay00ung/vecnook --tag v1.3.0 --locked
+cargo install --git https://github.com/gay00ung/vecnook --tag v1.4.0 --locked
 ```
 
 To build a checkout:
@@ -158,7 +160,7 @@ Use `Collection` to keep original text, source paths, line ranges, tags and opti
 
 The [Markdown search demo](examples/documents/README.md) uses a local Ollama embedding model, stores source paths and line ranges, and prints original chunks for natural-language queries. Python uses only its standard library; the Rust database keeps zero external dependencies.
 
-With the 1.2 CLI, Python 3.10+ and a local Ollama model:
+With the 1.4 CLI, Python 3.10+ and a local Ollama model:
 
 ```bash
 ollama pull embeddinggemma
@@ -227,6 +229,10 @@ Tests cover all three metrics against independent distance oracles, filtered Top
 
 The [0.3 text benchmark](docs/text-benchmarks.md) uses 5,183 SciFact document embeddings, 768 dimensions and 300 independent test claims. At efSearch=64, Vecnook measured 99.7667% Recall@10 and 0.534209 ms median p95 across three runs on an Apple M4 Pro. An independent f64 oracle agreed with every exact Top-10 ID/distance. A same-machine USearch Python comparison met the same ≥99% target and was faster; runtime and memory scopes differ. See the full method and limits, plus [historical SIFT measurements](docs/benchmarks.md), before drawing broader conclusions.
 
-Vecnook currently has no SIMD kernels, quantization, mmap storage, embedding model, network API, replication, or multi-process readers. See [CONTRIBUTING.md](CONTRIBUTING.md) to report reproducible problems or contribute.
+The opt-in generation API supports SQ8 and separate-process readers; SIMD/mmap
+requires the optional companion and its file-immutability contract. Embeddings
+remain application-provided. Network APIs, replication and multiple mutable
+writers remain outside this release. See [CONTRIBUTING.md](CONTRIBUTING.md) to
+report reproducible problems or contribute.
 
 Application guides: [API compatibility](docs/compatibility.md), [complete Markdown app](examples/documents/README.md#complete-application-flow), [incremental sync](examples/documents/README.md#incremental-updates), [diagnostics and restore](docs/operations.md), and [choosing an engine](docs/choosing.md).

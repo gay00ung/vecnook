@@ -23,15 +23,19 @@ read-only storage state; plan memory and maintenance with the [operations guide]
 | Application need | Choice to evaluate |
 | --- | --- |
 | Original documents, identity, filters and recovery inside a small Rust app | Vecnook and its two runnable application flows |
+| Immutable bulk snapshots, separate-process readers and SQ8 with original reranking | [Vecnook generations](engine-generations.md), with the optional SIMD/mmap companion when its safety contract fits |
 | SIMD, quantization, memory-mapped index views or index-only performance | [USearch's Rust API](https://github.com/unum-cloud/usearch/blob/main/rust/README.md) |
 | Vector queries integrated with an existing SQLite schema and SQL | [sqlite-vec](https://alexgarcia.xyz/sqlite-vec/) |
 | Network service, richer payload querying or multi-vector search | [Qdrant](https://github.com/qdrant/qdrant) |
 
 These are differences in supported interfaces and workloads, rather than a
 universal ranking. The [real-text comparison](text-benchmarks.md) found USearch
-faster on the measured SciFact workload. Vecnook currently keeps its index in
-RAM and has one persistent owner; it has no quantization, mmap, replication,
-embedding model or server protocol. BM25 and RRF hybrid document search are built in.
+faster on the measured SciFact workload. Vecnook's mutable HNSW index stays in
+RAM with one persistent owner. Its separate immutable-generation API supports
+multiple reader processes and SQ8; SIMD/mmap is explicit through the optional
+companion. The [1.4 measurements](validation-1.4.md) include the extra code-build
+cost and increased mmap RSS. BM25 and RRF hybrid document search are built in;
+embeddings remain application-provided, without replication or a server protocol.
 
 Try [the first search](quickstart.md), then the [Markdown app](../examples/documents/README.md#complete-application-flow)
 or [Rust backend](app-integration.md). The repository demonstrates those flows;

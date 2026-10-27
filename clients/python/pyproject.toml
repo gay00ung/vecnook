@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vecnook"
-version = "1.4.0rc1"
+version = "1.4.0"
 description = "Standard-library Python client for the local Vecnook executable"
 requires-python = ">=3.10"
 license = {file = "LICENSE.md"}
