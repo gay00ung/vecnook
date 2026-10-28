@@ -21,6 +21,8 @@ struct GenerationChecks {
     root: PathBuf,
     publications: u64,
     quantized_checks: u64,
+    prepared_cache_checks: u64,
+    cache_lease_checks: u64,
     backups: u64,
 }
 impl GenerationChecks {
@@ -48,6 +50,8 @@ impl GenerationChecks {
             root: root.to_path_buf(),
             publications: 0,
             quantized_checks: 0,
+            prepared_cache_checks: 0,
+            cache_lease_checks: 0,
             backups: 0,
         })
     }
@@ -100,6 +104,36 @@ impl GenerationChecks {
             exact.neighbors
         );
         let partial = codes.search(&query, 10, 64)?;
+        let cache_dir = self.root.join("prepared-sq8");
+        raw.prepare_quantized_cache(&cache_dir, Default::default())?;
+        let cached = raw.quantize_cached(&cache_dir, Default::default())?;
+        for limit in [64, raw.len().max(10)] {
+            let resident = codes.search(&query, 10, limit)?;
+            let actual = cached.search(&query, 10, limit)?;
+            assert_eq!(resident.neighbors.len(), actual.neighbors.len());
+            for (expected, actual) in resident.neighbors.iter().zip(&actual.neighbors) {
+                assert_eq!(expected.id, actual.id);
+                assert_eq!(expected.metadata, actual.metadata);
+                assert_eq!(expected.distance.to_bits(), actual.distance.to_bits());
+            }
+            assert_eq!(
+                resident.original_distance_computations,
+                actual.original_distance_computations
+            );
+            assert_eq!(resident.eligible_count, actual.eligible_count);
+            assert_eq!(resident.approximate, actual.approximate);
+            assert_eq!(resident.complete, actual.complete);
+        }
+        assert_eq!(
+            vecnook::generation::remove_quantized_cache(&cache_dir)
+                .unwrap_err()
+                .kind(),
+            vecnook::ErrorKind::Locked
+        );
+        self.cache_lease_checks += 1;
+        self.prepared_cache_checks += 1;
+        drop(cached);
+        vecnook::generation::remove_quantized_cache(&cache_dir)?;
         for neighbor in partial.neighbors {
             let original = db.get(neighbor.id).unwrap();
             let expected: f64 = original
@@ -443,9 +477,11 @@ fn progress(
 ) -> std::io::Result<()> {
     let elapsed = start.elapsed().as_secs_f64();
     let text = format!(
-        "{{\"workload\":\"vectors+bm25+rrf+selective-auto+compound-ranges+streamed-compaction+segmented-generations+sq8-rerank\",\"completed\":{complete},\"elapsed_seconds\":{elapsed},\"ack_mutations\":{mutations},\"restarts\":{restarts},\"backups_verified\":{backups},\"generation_publications\":{},\"quantized_checks\":{},\"generation_backups_verified\":{},\"duration_gate_24h\":{},\"mutation_gate_100k\":{}}}\n",
+        "{{\"workload\":\"vectors+bm25+rrf+selective-auto+compound-ranges+streamed-compaction+segmented-generations+sq8-rerank+prepared-cache\",\"completed\":{complete},\"elapsed_seconds\":{elapsed},\"ack_mutations\":{mutations},\"restarts\":{restarts},\"backups_verified\":{backups},\"generation_publications\":{},\"quantized_checks\":{},\"prepared_cache_checks\":{},\"cache_lease_checks\":{},\"generation_backups_verified\":{},\"duration_gate_24h\":{},\"mutation_gate_100k\":{}}}\n",
         generation.publications,
         generation.quantized_checks,
+        generation.prepared_cache_checks,
+        generation.cache_lease_checks,
         generation.backups,
         elapsed >= 86400.0,
         mutations >= 100000

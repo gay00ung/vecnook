@@ -2,8 +2,9 @@
 
 P0 session/batch CLI and P1 prepared-cache/block scans are implemented on the
 development branch. P2 bounded mmap remains an experiment and is excluded.
-These are local worktree builds; manifest versions stay at 1.4.0/0.1.0 until a new
-candidate is prepared. This report does not approve a new registry release.
+These measurements used worktree builds with 1.4.0/0.1.0 metadata. The later PR
+prepares core 1.5.0-rc.1/companion 0.1.1-rc.1 metadata and new QA workloads;
+the measured search runtime is unchanged. This report does not approve a registry release.
 
 ## Conditions and evidence identity
 

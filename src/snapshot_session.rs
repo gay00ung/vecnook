@@ -387,7 +387,7 @@ impl<'a> Parser<'a> {
             }
             _ => return Err(invalid("expected JSON number")),
         }
-        for marker in [b'.', b'e'] {
+        for marker in *b".e" {
             let found = self.bytes.get(self.position).copied();
             if found == Some(marker) || (marker == b'e' && found == Some(b'E')) {
                 self.position += 1;
