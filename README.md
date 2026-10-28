@@ -14,6 +14,11 @@ Install the companion only when its explicit platform APIs are needed:
 The [1.3 document workflow](docs/user-experience.md) and its [validation](docs/validation-1.3.md)
 remain available. Earlier memory/filter results are recorded in [1.2 validation](docs/validation-1.2.md).
 
+Unreleased development adds opt-in [JSONL sessions, prepared SQ8 caches and bounded
+code buffers](docs/engine-generations.md#batch-and-session-cli-unreleased).
+[Development measurements](docs/validation-1.5.md) separate startup, repeated
+requests, whole-process RSS and the decision to defer bounded mmap.
+
 [![CI](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml/badge.svg)](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml)
 [crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/1.4.0/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
 

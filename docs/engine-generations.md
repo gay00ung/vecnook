@@ -148,7 +148,99 @@ Rust `Collection::publish_generation` API for collection identity/payloads.
 The optional `vecnook-accel search STORE VECTOR K --sq8 N --mmap` selects the
 platform kernel and explicitly opts into the mapping immutability contract.
 
-Each CLI invocation opens and validates the full store, and `--sq8` builds its
-codes again for that invocation. The latency tables in [1.4 validation](validation-1.4.md)
+The one-shot CLI validates the full store each time. With --sq8 and no prepared
+cache, it builds codes again for that invocation. The latency tables in [1.4 validation](validation-1.4.md)
 measure queries on a retained Rust view after open/build; use the library to reuse
 that view across queries. The tables do not describe one-shot CLI latency.
+
+## Batch and session CLI (unreleased)
+
+snapshot-session accepts UTF-8 JSONL on stdin. snapshot-batch reads the same
+protocol from a file. Both open one Snapshot, optionally build one resident SQ8
+view, and retain that generation until exit:
+
+    vecnook snapshot-session data/new-generations --sq8 64 --idle-ms 60000
+    vecnook snapshot-batch data/new-generations requests.jsonl --sq8 64
+
+Each line contains one request with an already prepared embedding. These commands
+do not run an embedding model:
+
+    {"request_id":"q1","vector":[1,0,0],"k":10}
+    {"request_id":"q2","vector":[0,1,0],"k":1,"ids":["1","18446744073709551615"]}
+    {"request_id":"done","op":"close"}
+
+The initial ready event reports generation/sequence, completed snapshot_opens,
+sq8_builds, cache_hits, code_read_buffer_bytes and separate open_ms,
+code_build_ms and cache_validation_load_ms. Search responses contain request_id,
+search_ms, unchanged cumulative constructor counts and result, using the existing
+generation-search JSON v1 shape. Search time includes scanning, original reranking
+and constructing results; it excludes JSON transport. A parsed request's search
+error retains its ID; malformed frames report a null request ID and leave the next
+request usable.
+
+One request executes at a time. A rendezvous channel permits one bounded waiting
+frame, without an accumulating queue. Each line is at most 1 MiB; oversized lines
+are drained before accepting the next line. Request IDs have at most 128 UTF-8
+bytes, vectors at most 4,096 coordinates, and ID lists at most 65,536 entries.
+K retains the existing 10,000 bound; SQ8 candidates must cover K. Duplicate/unknown
+fields, non-finite numbers and malformed Unicode are rejected.
+
+EOF, an explicit close or idle timeout releases the view and pin. --idle-ms
+defaults to 60,000 and accepts 1..=86,400,000; it measures waiting for a frame,
+not query execution. Fatal input/output failures exit with an error. Process
+termination releases OS leases. A new CURRENT leaves active sessions unchanged:
+open another session to choose it. There is no network listener or generation pool.
+
+## Prepared SQ8 and bounded buffers (unreleased)
+
+Prepare codes explicitly in a dedicated directory outside the source store.
+Its parent must exist:
+
+    mkdir -p data/sq8-caches
+    vecnook snapshot-prepare-sq8 data/new-generations data/sq8-caches/gen-2
+    vecnook snapshot-session data/new-generations --sq8 64 --sq8-cache data/sq8-caches/gen-2
+    vecnook snapshot-search data/new-generations 1,0,0 10 --sq8 64 --sq8-cache data/sq8-caches/gen-2
+
+Rust callers use Snapshot::prepare_quantized_cache and Snapshot::quantize_cached
+with QuantizedCacheOptions. CachedQuantizedSnapshot borrows its validated Snapshot.
+Its search, search_with_kernel and search_ids methods share the resident candidate
+ranking, exact original reranking and result ordering. The existing quantize()
+API keeps its resident allocation.
+
+Preparation encodes one original record at a time, syncs a private pending file,
+renames it to DATA, then syncs the directory. A crash before rename announces no
+cache. An error after rename can leave a complete file: reopen and validate before
+retrying. Existing DATA is never overwritten. Original files remain untouched.
+
+Identity binds canonical source path, OS, generation, sequence, full config/model/
+metric, manifest entries, segment lengths/checksums and encoding version. A moved
+store or different generation needs another cache. Every reader validates the
+original Snapshot, then the full cache identity, CRC, code range and scale/norm
+invariants. Cache hits perform no re-encoding. Validation and reads still cost time.
+Missing/incomplete caches fail with preparation guidance; reads never create them
+or silently switch to a resident allocation.
+
+Search reads row-aligned blocks of at most 1 MiB by default and retains one bounded
+global candidate heap. --buffer-bytes N with --sq8-cache (or with_buffer_bytes)
+must fit one dimension+16-byte row and cannot exceed 16 MiB. The actual aligned
+size is reported. Original f32 records are read for final candidates. The N×D code
+heap is avoided; manifest indexes, requests/results and concurrent searches still
+consume memory. Code bytes and buffer bounds are not process RSS limits.
+
+Each managed directory has a hard 1 GiB logical-byte limit, including its 8-byte
+LEASE and pending files, and at most 1,024 entries. --max-cache-bytes N sets a
+smaller preparation limit; Rust readers can select it too. Quotas apply per
+directory. Applications must explicitly retire old directories; there is no
+cross-directory eviction. Logical codes retain the existing 512 MiB bound.
+
+    vecnook snapshot-prune-sq8 data/sq8-caches/gen-2
+
+Pruning takes the exclusive cache lease, refuses active readers and removes only
+managed DATA/pending files. Foreign files and symlinks are rejected. The directory
+and LEASE remain to prevent lock-inode replacement. Close readers, prune, then
+explicitly prepare again, or use another directory. A damaged/missing LEASE needs
+a fresh directory. Keep DATA/LEASE immutable outside these APIs and apply the
+source store's access controls.
+
+See [development measurements](validation-1.5.md) for startup, latency, whole-process
+peak RSS, simultaneous readers and the bounded-mmap inclusion decision.

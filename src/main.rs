@@ -16,6 +16,7 @@ use vecnook::{
 
 mod demo;
 mod demo_data;
+mod snapshot_session;
 
 const HELP: &str = "vecnook: dependency-free vector database\n\
 Usage:\n\
@@ -38,7 +39,11 @@ Usage:\n\
   vecnook snapshot-publish <source-db> <new-or-existing-store> <model-identity>\n\
   vecnook snapshot-info <store>\n\
   vecnook snapshot-get <store> <id>\n\
-  vecnook snapshot-search <store> <vector-or-@file> [k=10] [--sq8 candidates]\n\
+  vecnook snapshot-search <store> <vector-or-@file> [k=10] [--sq8 candidates] [--sq8-cache dir] [--buffer-bytes N]\n\
+  vecnook snapshot-session <store> [--sq8 candidates] [--sq8-cache dir] [--buffer-bytes N] [--idle-ms 60000]\n\
+  vecnook snapshot-batch <store> <requests.jsonl> [--sq8 candidates] [--sq8-cache dir] [--buffer-bytes N] [--idle-ms 60000]\n\
+  vecnook snapshot-prepare-sq8 <store> <cache-dir> [--max-cache-bytes N]\n\
+  vecnook snapshot-prune-sq8 <cache-dir>\n\
   vecnook snapshot-backup <store> <new-store>\n\
   vecnook snapshot-gc <store>\n\
   vecnook export <db-dir> <new-export-file>\n\
@@ -545,6 +550,36 @@ fn snapshot_command(args: &[String]) -> Result<()> {
         )
     };
     match args[0].as_str() {
+        "snapshot-session" | "snapshot-batch" => snapshot_session::run(args)?,
+        "snapshot-prepare-sq8" => {
+            require_count(
+                args,
+                3,
+                5,
+                "snapshot-prepare-sq8 <store> <cache-dir> [--max-cache-bytes N]",
+            )?;
+            let mut options = vecnook::generation::QuantizedCacheOptions::default();
+            if args.len() != 3 {
+                if args.len() != 5 || args[3] != "--max-cache-bytes" {
+                    return Err(Error::InvalidInput("expected --max-cache-bytes N".into()));
+                }
+                options = options.with_max_cache_bytes(parse(&args[4], "cache bytes")?);
+            }
+            let result = Snapshot::open(&args[1])?.prepare_quantized_cache(&args[2], options)?;
+            println!(
+                "{{\"schema_version\":1,\"generation\":\"{}\",\"sequence\":\"{}\",\"cache_bytes\":{},\"code_bytes\":{},\"parameter_bytes\":{}}}",
+                result.generation,
+                result.sequence,
+                result.cache_bytes,
+                result.code_bytes,
+                result.parameter_bytes
+            );
+        }
+        "snapshot-prune-sq8" => {
+            require_count(args, 2, 2, "snapshot-prune-sq8 <cache-dir>")?;
+            let removed = vecnook::generation::remove_quantized_cache(&args[1])?;
+            println!("{{\"schema_version\":1,\"removed_files\":{removed}}}");
+        }
         "snapshot-publish" => {
             require_count(
                 args,
@@ -600,50 +635,54 @@ fn snapshot_command(args: &[String]) -> Result<()> {
             require_count(
                 args,
                 3,
-                6,
-                "snapshot-search <store> <vector-or-@file> [k=10] [--sq8 candidates]",
+                10,
+                "snapshot-search <store> <vector-or-@file> [k] [--sq8 N] [--sq8-cache dir] [--buffer-bytes N]",
             )?;
-            let snapshot = Snapshot::open(&args[1])?;
-            let query = cli_vector(&args[2])?;
             let mut position = 3;
             let mut k = 10;
-            if args.get(position).is_some_and(|s| s != "--sq8") {
+            if args.get(position).is_some_and(|s| !s.starts_with("--")) {
                 k = parse(&args[position], "K")?;
                 position += 1;
             }
-            let report = if position == args.len() {
-                snapshot.search_exact(&query, k)?
-            } else if args.len() == position + 2 && args[position] == "--sq8" {
-                snapshot.quantize()?.search(
-                    &query,
-                    k,
-                    parse(&args[position + 1], "SQ8 candidates")?,
-                )?
-            } else {
-                return Err(Error::InvalidInput("expected --sq8 candidates".into()));
+            let mut limit = None;
+            let mut cache = None;
+            let mut options = vecnook::generation::QuantizedCacheOptions::default();
+            let mut seen = std::collections::BTreeSet::new();
+            while position < args.len() {
+                let name = args[position].as_str();
+                if position + 1 == args.len() || !seen.insert(name) {
+                    return Err(Error::InvalidInput(
+                        "duplicate or incomplete snapshot option".into(),
+                    ));
+                }
+                match name {
+                    "--sq8" => limit = Some(parse(&args[position + 1], "SQ8 candidates")?),
+                    "--sq8-cache" => cache = Some(&args[position + 1]),
+                    "--buffer-bytes" => {
+                        options = options
+                            .with_buffer_bytes(parse(&args[position + 1], "SQ8 buffer bytes")?)
+                    }
+                    _ => return Err(Error::InvalidInput("unknown snapshot search option".into())),
+                }
+                position += 2;
+            }
+            if (cache.is_some() && limit.is_none())
+                || (cache.is_none() && seen.contains("--buffer-bytes"))
+            {
+                return Err(Error::InvalidInput(
+                    "cache requires --sq8; buffer requires --sq8-cache".into(),
+                ));
+            }
+            let snapshot = Snapshot::open(&args[1])?;
+            let query = cli_vector(&args[2])?;
+            let report = match (limit, cache) {
+                (Some(n), Some(path)) => snapshot
+                    .quantize_cached(path, options)?
+                    .search(&query, k, n)?,
+                (Some(n), None) => snapshot.quantize()?.search(&query, k, n)?,
+                _ => snapshot.search_exact(&query, k)?,
             };
-            let neighbors = report
-                .neighbors
-                .iter()
-                .map(|r| {
-                    format!(
-                        "{{\"id\":\"{}\",\"distance\":{},\"metadata\":{}}}",
-                        r.id,
-                        r.distance,
-                        json_string(&r.metadata)
-                    )
-                })
-                .collect::<Vec<_>>()
-                .join(",");
-            println!(
-                "{{\"schema_version\":1,\"generation\":\"{}\",\"sequence\":\"{}\",\"approximate\":{},\"complete\":{},\"eligible_count\":{},\"original_distance_computations\":{},\"neighbors\":[{neighbors}]}}",
-                report.generation,
-                report.sequence,
-                report.approximate,
-                report.complete,
-                report.eligible_count,
-                report.original_distance_computations
-            );
+            println!("{}", generation_json(&report));
         }
         "snapshot-backup" => {
             require_count(args, 3, 3, "snapshot-backup <store> <new-store>")?;
@@ -1530,6 +1569,31 @@ fn print_benchmark(result: bench::BenchReport) {
         result.index_stats.directed_edges,
         result.index_stats.vector_bytes
     );
+}
+
+fn generation_json(report: &vecnook::generation::GenerationSearchReport) -> String {
+    let neighbors = report
+        .neighbors
+        .iter()
+        .map(|r| {
+            format!(
+                "{{\"id\":\"{}\",\"distance\":{},\"metadata\":{}}}",
+                r.id,
+                r.distance,
+                json_string(&r.metadata)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    format!(
+        "{{\"schema_version\":1,\"generation\":\"{}\",\"sequence\":\"{}\",\"approximate\":{},\"complete\":{},\"eligible_count\":{},\"original_distance_computations\":{},\"neighbors\":[{neighbors}]}}",
+        report.generation,
+        report.sequence,
+        report.approximate,
+        report.complete,
+        report.eligible_count,
+        report.original_distance_computations
+    )
 }
 
 #[cfg(test)]

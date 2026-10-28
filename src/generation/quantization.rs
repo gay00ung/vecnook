@@ -1,7 +1,7 @@
 use super::*;
 
-const MAX_CODE_BYTES: usize = 512 * 1024 * 1024;
-const MAX_CANDIDATES: usize = 65_536;
+pub(super) const MAX_CODE_BYTES: usize = 512 * 1024 * 1024;
+pub(super) const MAX_CANDIDATES: usize = 65_536;
 
 /// Derived per-vector symmetric int8 codes with bounded candidate selection.
 ///
@@ -140,16 +140,14 @@ impl<'a> QuantizedSnapshot<'a> {
                 .sum();
             let scale = self.scales[number];
             let norm = self.squared_norms[number];
-            let distance = match self.snapshot.space().metric {
-                Metric::SquaredL2 => (scale * scale * norm as f64
-                    + query_scale * query_scale * query_norm as f64
-                    - 2.0 * scale * query_scale * dot as f64)
-                    .max(0.0),
-                Metric::InnerProduct => -scale * query_scale * dot as f64,
-                Metric::Cosine => (1.0
-                    - dot as f64 / ((norm as f64).sqrt() * (query_norm as f64).sqrt()))
-                .clamp(0.0, 2.0),
-            };
+            let distance = approximate_distance(
+                self.snapshot.space().metric,
+                scale,
+                norm,
+                query_scale,
+                query_norm,
+                dot,
+            );
             keep_best(
                 &mut candidates,
                 Ranked {
@@ -160,26 +158,62 @@ impl<'a> QuantizedSnapshot<'a> {
                 candidate_limit,
             );
         }
-        let work = candidates.len();
-        let mut exact = BinaryHeap::new();
-        for candidate in candidates {
-            let record = self.snapshot.read_record(candidate.number)?;
-            let distance =
-                original_distance(self.snapshot.space().metric, query, &record.vector, kernel)?;
-            keep_best(
-                &mut exact,
-                Ranked {
-                    distance,
-                    ..candidate
-                },
-                k,
-            );
-        }
-        self.snapshot
-            .finish_search(exact, eligible, work, candidate_limit < eligible, k)
+        rerank(
+            self.snapshot,
+            query,
+            k,
+            candidates,
+            eligible,
+            kernel,
+            candidate_limit < eligible,
+        )
     }
 }
-fn encode(vector: &[f32]) -> (Vec<i8>, f64, i64) {
+pub(super) fn approximate_distance(
+    metric: Metric,
+    scale: f64,
+    norm: i64,
+    query_scale: f64,
+    query_norm: i64,
+    dot: i64,
+) -> f64 {
+    match metric {
+        Metric::SquaredL2 => (scale * scale * norm as f64
+            + query_scale * query_scale * query_norm as f64
+            - 2.0 * scale * query_scale * dot as f64)
+            .max(0.0),
+        Metric::InnerProduct => -scale * query_scale * dot as f64,
+        Metric::Cosine => {
+            (1.0 - dot as f64 / ((norm as f64).sqrt() * (query_norm as f64).sqrt())).clamp(0.0, 2.0)
+        }
+    }
+}
+pub(super) fn rerank(
+    snapshot: &Snapshot,
+    query: &[f32],
+    k: usize,
+    candidates: BinaryHeap<Ranked>,
+    eligible: usize,
+    kernel: &dyn DistanceKernel,
+    approximate: bool,
+) -> Result<GenerationSearchReport> {
+    let work = candidates.len();
+    let mut exact = BinaryHeap::new();
+    for candidate in candidates {
+        let record = snapshot.read_record(candidate.number)?;
+        let distance = original_distance(snapshot.space().metric, query, &record.vector, kernel)?;
+        keep_best(
+            &mut exact,
+            Ranked {
+                distance,
+                ..candidate
+            },
+            k,
+        );
+    }
+    snapshot.finish_search(exact, eligible, work, approximate, k)
+}
+pub(super) fn encode(vector: &[f32]) -> (Vec<i8>, f64, i64) {
     let maximum = vector
         .iter()
         .map(|&value| f64::from(value).abs())
