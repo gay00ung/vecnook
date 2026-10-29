@@ -23,7 +23,7 @@ HNSW search, exact search, and durable storage. Built with the standard library,
 
 <p align="center">
   <em>Three prepared queries. Local Markdown sources. Data that survives a restart.</em><br>
-  Recorded CLI output, cropped and paced for this preview. Uses precomputed embeddings.<br>
+  Recorded CLI results, with faster transitions and highlighted search steps. Uses precomputed embeddings.<br>
   <a href="docs/media/offline-demo.mp4">Watch the full recording</a> · <a href="docs/quickstart.md">Run it yourself</a>
 </p>
 
@@ -114,6 +114,14 @@ Unchanged files are skipped on later syncs. Results include original chunks, sou
 | Back up, restore, or upgrade | [Operations](docs/operations.md) · [Compatibility](docs/compatibility.md) |
 | Use immutable readers or SQ8 | [Generation API and optional acceleration](docs/engine-generations.md) |
 | Evaluate performance and fit | [Benchmarks](docs/benchmarks.md) · [Operating range](docs/operating-range.md) · [Engine choices](docs/choosing.md) |
+
+## Measured search performance
+
+[![Measured Vecnook search performance: efSearch 16–512 trades p95 latency of 0.227–1.949 ms for Recall@10 of 96.50–100% on SciFact.](https://raw.githubusercontent.com/gay00ung/vecnook/main/docs/media/search-benchmark.png)](docs/text-benchmarks.md#measured-results)
+
+Increasing the search candidate pool improves nearest-neighbor agreement at the cost of latency. These are **historical Vecnook 0.3 single-run measurements**, using 5,183 SciFact vectors and 300 queries on an Apple M4 Pro. They measure agreement with exact cosine Top-10, rather than human-rated relevance. Embedding generation, file loading, and index construction are excluded.
+
+[Full measurements, environment, and reproduction](docs/text-benchmarks.md) · [Current operating-range measurements](docs/operating-range.md)
 
 ## Releases
 
