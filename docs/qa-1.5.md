@@ -2,9 +2,9 @@
 
 The active preparation candidate is core 1.5.0-rc.2, Python 1.5.0rc2 and companion
 0.1.1-rc.2 with an exact core dependency. P2 bounded-window mmap is excluded.
-The P0/P1 runtime is unchanged. Additional README benchmark/comparison/demo tools and optional benchmark
-requirements are now part of the source package, so its frozen tool fingerprint differs
-from RC1 and requires new candidate evidence.
+The candidate includes the accepted HNSW distance-scoring change from main
+`b71cf70`, alongside additional packaged benchmark/comparison/demo tools. Its runtime
+and frozen source fingerprint differ from RC1 and require fresh source/archive evidence.
 
 ## RC1 history and scope
 
@@ -19,7 +19,7 @@ passed clean-main/tag CI, actual registry consumers on all required OS/toolchain
 remote tag installs, docs.rs and public asset checks. Its separately started
 actual-registry core/mapped/session full24h runs remain preserved. Source-only and
 registered-archive identities are different; neither may be silently relabeled.
-RC1 evidence cannot approve the added RC2 tool sources. Existing 1.4 registry
+RC1 evidence cannot approve the changed RC2 runtime or added tool sources. Existing 1.4 registry
 packages and receipts remain separate as well.
 
 Before RC2 publication, merge its metadata/documentation PR normally and pass clean
@@ -38,7 +38,10 @@ claiming the required desktop/server coverage.
 
 ## Independent 24-hour workloads
 
-Use one immutable, clean-commit core archive for both runs. Record its SHA256,
+Before publication, these runners may check one immutable, clean feature-source
+archive. Those receipts remain source-only evidence. Formal registry approval uses
+the exact downloaded registry archives; a different archive requires fresh full-duration
+runs and retains its own identity. Record each archive's SHA256,
 normalized source fingerprint, compiled binaries, commands, actual start times
 and process IDs. Preserve failed/short runs; never accumulate their durations.
 

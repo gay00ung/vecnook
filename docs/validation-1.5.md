@@ -3,8 +3,10 @@
 P0 session/batch CLI and P1 prepared-cache/block scans are implemented on the
 development branch. P2 bounded mmap remains an experiment and is excluded.
 These measurements used worktree builds with 1.4.0/0.1.0 metadata. The later PR
-prepares core 1.5.0-rc.1/companion 0.1.1-rc.1 metadata and new QA workloads;
-the measured search runtime is unchanged. This report does not approve a registry release.
+prepared core 1.5.0-rc.1/companion 0.1.1-rc.1 metadata and new QA workloads
+without changing that historical P0/P1 measured runtime. Subsequent HNSW scoring
+changes and their separate measurements are in [the engine comparison](engine-comparison.md).
+This report does not approve a registry release.
 
 ## Conditions and evidence identity
 
@@ -226,7 +228,8 @@ is made by these local development checks. The published 1.4 artifacts are intac
 
 The completed PR #9 source24h checks and published RC1 distribution are recorded
 in [candidate QA](qa-1.5.md). Their exact original identities remain separate
-from the controlled development measurements above. RC2 includes additional
-packaged README benchmark/demo tools and therefore requires a new frozen
+from the controlled development measurements above. RC2 includes the accepted
+HNSW scoring change and additional packaged benchmark/comparison/demo tools,
+and therefore requires a new frozen
 source fingerprint and exact-registry full24h core/mapped/session evidence before
 stable promotion. No RC2 duration approval is supplied by this document.

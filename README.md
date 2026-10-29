@@ -117,24 +117,29 @@ Unchanged files are skipped on later syncs. Results include original chunks, sou
 
 ## Measured search performance
 
-[![Same-data local engine comparison: Vecnook Rust index API, USearch Python index API, and Chroma Python local DB API; p95 latency and Recall@10 with three fresh processes per target.](https://raw.githubusercontent.com/gay00ung/vecnook/main/docs/media/engine-comparison.png)](docs/engine-comparison.md)
+<a href="docs/engine-comparison.md">
+  <picture>
+    <source media="(max-width: 640px)" srcset="https://raw.githubusercontent.com/gay00ung/vecnook/main/docs/media/engine-comparison-mobile.png">
+    <img src="https://raw.githubusercontent.com/gay00ung/vecnook/main/docs/media/engine-comparison.png" alt="Same-data before/after comparison: Vecnook p95 median 1.007 to 0.523 ms, Recall@10 unchanged at 99.9333%; USearch 0.850 ms and Chroma 1.760 ms. Eight fresh processes per target; all 32 results and observed ranges retained.">
+  </picture>
+</a>
 
-Measured on **2026-10-29** with identical SciFact vectors and queries: 5,183 × 768 dimensions, 300 queries, cosine, Top-10, M=16, efConstruction=200, and efSearch=128. Each target ran in three fresh processes; all exceeded 99% Recall@10 in every run.
+Vecnook's development HNSW distance-scoring change reduced median p95 from **1.007 to 0.523 ms (48.1%)**, with **99.9333% Recall@10** before and after. A separate 12,264-search comparison preserved result IDs, distance bits, and traversal counts.
 
-**The APIs have different scopes.** Chroma includes local DB validation and query handling; Vecnook and USearch measure index calls. The chart reports query-call latency with observed min–max ranges, using a logarithmic latency axis. USearch had the lowest median p95 in this session.
+Measured **2026-10-29** on the same 5,183 SciFact vectors × 768 dimensions and 300 queries: cosine, Top-10, M=16, efConstruction=200, efSearch=128. Before/after, USearch 2.26.6, and Chroma 1.5.9 each ran in **eight fresh processes**; all 32 scheduled results contribute to the chart.
 
-[Full comparison, raw results, and reproduction](docs/engine-comparison.md)
+**API scopes and host load affect this comparison.** Chroma includes local DB validation/query handling; Vecnook and USearch measure index calls. Three ongoing QA workloads and other host activity remained active, producing wide ranges. Whiskers retain every outlier; the latency axis is logarithmic. The after build is unpublished development code.
+
+[Analysis, every raw result, and reproduction](docs/engine-comparison.md)
 
 <details>
-<summary>Vecnook candidate-pool sweep: six settings on the latest source</summary>
+<summary>Historical RC1 candidate-pool sweep: six settings before this optimization</summary>
 
-[![Vecnook 1.5.0-rc.1 SciFact benchmark: measured p95 search latency and Recall@10 across six candidate-pool sizes, with three fresh processes per setting.](https://raw.githubusercontent.com/gay00ung/vecnook/main/docs/media/search-benchmark.png)](docs/current-benchmarks.md)
+[![Historical Vecnook RC1 SciFact sweep across six candidate-pool sizes.](https://raw.githubusercontent.com/gay00ung/vecnook/main/docs/media/search-benchmark.png)](docs/current-benchmarks.md)
 
-Measured on **2026-10-29 with Vecnook 1.5.0-rc.1**, built from `main`. The chart shows the median of three fresh processes per setting; latency whiskers show the observed minimum and maximum. The workload uses 5,183 SciFact vectors, 768 dimensions, and 300 queries on an Apple M4 Pro.
+This earlier session used the original RC1-code binary and three fresh processes per setting. It covers the in-memory HNSW path; [results and reproduction](docs/current-benchmarks.md) retain its original conditions and values.
 
-This measures in-memory HNSW agreement with exact cosine Top-10, rather than human-rated relevance. Embedding generation, file loading, and index construction are excluded; it does not measure the optional SQ8 or SIMD/mmap paths.
-
-[Results, raw data, and reproduction](docs/current-benchmarks.md) · [Other workload measurements](docs/operating-range.md) · [Historical 0.3 comparison](docs/text-benchmarks.md)
+[Other workload measurements](docs/operating-range.md) · [Historical 0.3 comparison](docs/text-benchmarks.md)
 
 </details>
 
@@ -151,9 +156,9 @@ Both registered candidates completed independent 24-hour workloads, alongside ei
 <details>
 <summary>Candidate preparation: 1.5.0-rc.2</summary>
 
-This checkout prepares core `1.5.0-rc.2`, exact-core companion `0.1.1-rc.2` and Python `1.5.0rc2`. It adds opt-in [JSONL sessions, prepared SQ8 caches, and bounded code buffers](docs/engine-generations.md#batch-and-session-cli-unreleased). P2 bounded-window mmap is excluded.
+This checkout prepares core `1.5.0-rc.2`, exact-core companion `0.1.1-rc.2` and Python `1.5.0rc2`. It includes the [accepted HNSW distance-scoring improvement](docs/engine-comparison.md), plus opt-in [JSONL sessions, prepared SQ8 caches, and bounded code buffers](docs/engine-generations.md#batch-and-session-cli-unreleased). P2 bounded-window mmap is excluded.
 
-[RC1 is published](https://github.com/gay00ung/vecnook/releases/tag/v1.5.0-rc.1). Its completed source QA and distribution retain their original identities. The additional packaged README benchmark/comparison/demo tools and optional requirements require a new candidate fingerprint and RC2's own registry validation; RC1 receipts do not approve those additions.
+[RC1 is published](https://github.com/gay00ung/vecnook/releases/tag/v1.5.0-rc.1). Its completed source QA and distribution retain their original identities. The changed HNSW runtime and additional packaged benchmark/comparison/demo tools require a new candidate fingerprint and RC2's own full QA and registry validation; RC1 receipts cannot approve this source.
 
 Build this checkout with `cargo build --locked --release`. Once the exact RC2 registry versions are public, candidate installations use:
 

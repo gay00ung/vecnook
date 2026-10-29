@@ -2,10 +2,10 @@
 
 ## 1.5.0-rc.2 — candidate preparation
 
-- Freeze the additional README benchmark/comparison/demo tools and optional requirements now included by the source package. Runtime, tests, client behavior and companion implementation are unchanged from RC1, but the package-bound tool fingerprint differs and requires a new candidate.
-- Prepare core 1.5.0-rc.2, exact-core companion 0.1.1-rc.2 and Python 1.5.0rc2. Preserve the published RC1 archives, receipts and healthy workloads; their hashes do not approve RC2.
-- Record completed RC1 source QA and distribution separately in [1.5 candidate QA](docs/qa-1.5.md). Require new exact-registry core/mapped/session full-duration gates before stable promotion.
-- Mark short SciFact group-memory samples without live engine PIDs as unavailable, preserving raw zero sums and separate native process high-water measurements. Keep P2 bounded-window mmap excluded.
+- Include the accepted HNSW four-candidate distance-scoring improvement while preserving f64 coordinate order, distance bits, graph candidate order and search settings. Keep the original path below 32 dimensions.
+- Preserve the [32-process before/after measurements](docs/engine-comparison.md) and 12,264-search equivalence checks under their actual development-binary identities, including shared-host variation and all outliers.
+- Freeze the changed runtime and additional packaged benchmark/comparison/demo tools in a fresh candidate. Prepare core 1.5.0-rc.2, exact-core companion 0.1.1-rc.2 and Python 1.5.0rc2; preserve RC1 archives, receipts and healthy workloads without reusing their approval for RC2.
+- Require fresh source checks and exact-registry core/mapped/session full-duration gates before stable promotion. Mark SciFact group-memory samples without live engine PIDs as unavailable, preserving original samples and separate native high-water measurements. P2 bounded-window mmap remains excluded.
 
 ## 1.5.0-rc.1 — 2026-10-29 (prerelease)
 
