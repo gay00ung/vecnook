@@ -136,11 +136,21 @@ cargo install vecnook-accel --version '=0.1.0' --locked
 Both registered candidates completed independent 24-hour workloads, alongside eight core and eight paired companion registry checks. See [1.4 validation and limits](docs/validation-1.4.md).
 
 <details>
-<summary>In development: 1.5.0-rc.1</summary>
+<summary>Candidate preparation: 1.5.0-rc.2</summary>
 
-The source candidate adds opt-in [JSONL sessions, prepared SQ8 caches, and bounded code buffers](docs/engine-generations.md#batch-and-session-cli-unreleased). The paired companion source is `0.1.1-rc.1`, with an exact core dependency. These candidate versions have not been published.
+This checkout prepares core `1.5.0-rc.2`, exact-core companion `0.1.1-rc.2` and Python `1.5.0rc2`. It adds opt-in [JSONL sessions, prepared SQ8 caches, and bounded code buffers](docs/engine-generations.md#batch-and-session-cli-unreleased). P2 bounded-window mmap is excluded.
 
-Build this checkout with `cargo build --locked --release`. [Development measurements](docs/validation-1.5.md) cover startup, repeated requests, whole-process RSS, and the decision to defer bounded mmap. [Candidate QA](docs/qa-1.5.md) separates source checks from registry release approval.
+[RC1 is published](https://github.com/gay00ung/vecnook/releases/tag/v1.5.0-rc.1). Its completed source QA and distribution retain their original identities. The additional packaged README benchmark/demo tools require a new candidate fingerprint and RC2's own registry validation; RC1 receipts do not approve those additions.
+
+Build this checkout with `cargo build --locked --release`. Once the exact RC2 registry versions are public, candidate installations use:
+
+```bash
+cargo add vecnook@=1.5.0-rc.2
+cargo install vecnook --version '=1.5.0-rc.2' --locked
+cargo install vecnook-accel --version '=0.1.1-rc.2' --locked
+```
+
+The optional companion and the separately downloadable `vecnook-1.5.0rc2-py3-none-any.whl` are candidate artifacts. The Python wheel needs the native CLI. [Development measurements](docs/validation-1.5.md) cover startup, repeated requests, whole-process RSS and the bounded-mmap decision; [candidate QA](docs/qa-1.5.md) records the independent registry/platform/full24h gates required before stable 1.5 promotion.
 
 </details>
 
