@@ -15,6 +15,18 @@ HNSW search, exact search, and durable storage. Built with the standard library,
 
 </div>
 
+<p align="center">
+  <a href="docs/media/offline-demo.mp4">
+    <img src="https://raw.githubusercontent.com/gay00ung/vecnook/main/docs/media/offline-demo.gif" alt="Vecnook CLI demo: three prepared queries return Markdown source paths and line ranges; later queries reopen the saved collection." width="960">
+  </a>
+</p>
+
+<p align="center">
+  <em>Three prepared queries. Local Markdown sources. Data that survives a restart.</em><br>
+  Recorded CLI output, cropped and paced for this preview. Uses precomputed embeddings.<br>
+  <a href="docs/media/offline-demo.mp4">Watch the full recording</a> · <a href="docs/quickstart.md">Run it yourself</a>
+</p>
+
 ## Why Vecnook?
 
 - **Embed it in your app.** Use a Rust library or a local CLI on macOS, Linux, and Windows.
