@@ -24,6 +24,7 @@ These candidate versions have not been published. Build this PR with
 [Current candidate QA](docs/qa-1.5.md) separates PR/source checks from registry release approval.
 
 [![CI](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml/badge.svg)](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml)
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/gay00ung/badge.svg)](https://hub.xerj.org/contributors/gay00ung)
 [crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/1.4.0/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
 
 **Vecnook targets local Rust applications.** Use one mutable database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS, Linux and Windows. The mutable HNSW index stays in RAM; the opt-in generation API reads separate immutable segments. [Release validation](docs/validation-1.4.md) includes both full 24-hour workloads and Windows 11 ARM64 NTFS verification. See [compatibility](docs/compatibility.md) before upgrading.
