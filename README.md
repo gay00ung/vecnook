@@ -11,7 +11,7 @@ HNSW search, exact search, and durable storage. Built with the standard library,
 [![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/gay00ung/badge.svg)](https://hub.xerj.org/contributors/gay00ung)
 
-[Quick start](#quick-start) · [API reference](https://docs.rs/vecnook/1.4.0/vecnook/) · [Documentation](#documentation) · [Benchmarks](docs/benchmarks.md)
+[Quick start](#quick-start) · [API reference](https://docs.rs/vecnook/1.4.0/vecnook/) · [Documentation](#documentation) · [Benchmarks](docs/current-benchmarks.md)
 
 </div>
 
@@ -113,15 +113,17 @@ Unchanged files are skipped on later syncs. Results include original chunks, sou
 | Filter and rank results | [Compound filters](docs/compound-filters.md) · [Hybrid search](docs/hybrid-search.md) |
 | Back up, restore, or upgrade | [Operations](docs/operations.md) · [Compatibility](docs/compatibility.md) |
 | Use immutable readers or SQ8 | [Generation API and optional acceleration](docs/engine-generations.md) |
-| Evaluate performance and fit | [Benchmarks](docs/benchmarks.md) · [Operating range](docs/operating-range.md) · [Engine choices](docs/choosing.md) |
+| Evaluate performance and fit | [Benchmarks](docs/current-benchmarks.md) · [Operating range](docs/operating-range.md) · [Engine choices](docs/choosing.md) |
 
 ## Measured search performance
 
-[![Measured Vecnook search performance: efSearch 16–512 trades p95 latency of 0.227–1.949 ms for Recall@10 of 96.50–100% on SciFact.](https://raw.githubusercontent.com/gay00ung/vecnook/main/docs/media/search-benchmark.png)](docs/text-benchmarks.md#measured-results)
+[![Vecnook 1.5.0-rc.1 SciFact benchmark: measured p95 search latency and Recall@10 across six candidate-pool sizes, with three fresh processes per setting.](https://raw.githubusercontent.com/gay00ung/vecnook/main/docs/media/search-benchmark.png)](docs/current-benchmarks.md)
 
-Increasing the search candidate pool improves nearest-neighbor agreement at the cost of latency. These are **historical Vecnook 0.3 single-run measurements**, using 5,183 SciFact vectors and 300 queries on an Apple M4 Pro. They measure agreement with exact cosine Top-10, rather than human-rated relevance. Embedding generation, file loading, and index construction are excluded.
+Measured on **2026-10-29 with Vecnook 1.5.0-rc.1**, built from `main`. The chart shows the median of three fresh processes per setting; latency whiskers show the observed minimum and maximum. The workload uses 5,183 SciFact vectors, 768 dimensions, and 300 queries on an Apple M4 Pro.
 
-[Full measurements, environment, and reproduction](docs/text-benchmarks.md) · [Current operating-range measurements](docs/operating-range.md)
+This measures in-memory HNSW agreement with exact cosine Top-10, rather than human-rated relevance. Embedding generation, file loading, and index construction are excluded; it does not measure the optional SQ8 or SIMD/mmap paths.
+
+[Results, raw data, and reproduction](docs/current-benchmarks.md) · [Other workload measurements](docs/operating-range.md) · [Historical 0.3 comparison](docs/text-benchmarks.md)
 
 ## Releases
 
