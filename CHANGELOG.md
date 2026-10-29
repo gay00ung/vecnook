@@ -1,6 +1,13 @@
 # Changelog
 
-## 1.5.0-rc.1 — source candidate, not published
+## 1.5.0-rc.2 — candidate preparation
+
+- Freeze the additional README benchmark/demo Python tools now included by the source package. Runtime, tests, client behavior and companion implementation are unchanged from RC1, but the package-bound tool fingerprint differs and requires a new candidate.
+- Prepare core 1.5.0-rc.2, exact-core companion 0.1.1-rc.2 and Python 1.5.0rc2. Preserve the published RC1 archives, receipts and healthy workloads; their hashes do not approve RC2.
+- Record completed RC1 source QA and distribution separately in [1.5 candidate QA](docs/qa-1.5.md). Require new exact-registry core/mapped/session full-duration gates before stable promotion.
+- Mark short SciFact group-memory samples without live engine PIDs as unavailable, preserving raw zero sums and separate native process high-water measurements. Keep P2 bounded-window mmap excluded.
+
+## 1.5.0-rc.1 — 2026-10-29 (prerelease)
 
 - Add bounded JSONL generation sessions and batches with one pinned view, explicit close, EOF/idle cleanup and recoverable request errors.
 - Add explicitly prepared, checksummed SQ8 caches with source identity, atomic completion, directory quotas and reader leases. Scan codes through a default 1 MiB workspace, preserving original reranking and resident SQ8 results.

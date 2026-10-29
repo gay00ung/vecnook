@@ -2,7 +2,7 @@
 
 Measured on **2026-10-29** with **Vecnook 1.5.0-rc.1**, built from `main`
 at [5eab06d](https://github.com/gay00ung/vecnook/commit/5eab06db209ec04b1c597a36514a46484a98ba16).
-This is the current source candidate; the README's stable installation instructions select 1.4.0.
+This measurement records that exact source candidate; it does not approve a stable release.
 
 The sweep measures native in-memory HNSW search against exact cosine Top-10 on
 5,183 SciFact vectors, 768 dimensions, and 300 independent test queries. It uses
