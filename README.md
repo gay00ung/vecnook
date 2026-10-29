@@ -153,7 +153,7 @@ Both registered candidates completed independent 24-hour workloads, alongside ei
 
 This checkout prepares core `1.5.0-rc.2`, exact-core companion `0.1.1-rc.2` and Python `1.5.0rc2`. It adds opt-in [JSONL sessions, prepared SQ8 caches, and bounded code buffers](docs/engine-generations.md#batch-and-session-cli-unreleased). P2 bounded-window mmap is excluded.
 
-[RC1 is published](https://github.com/gay00ung/vecnook/releases/tag/v1.5.0-rc.1). Its completed source QA and distribution retain their original identities. The additional packaged README benchmark/demo tools require a new candidate fingerprint and RC2's own registry validation; RC1 receipts do not approve those additions.
+[RC1 is published](https://github.com/gay00ung/vecnook/releases/tag/v1.5.0-rc.1). Its completed source QA and distribution retain their original identities. The additional packaged README benchmark/comparison/demo tools and optional requirements require a new candidate fingerprint and RC2's own registry validation; RC1 receipts do not approve those additions.
 
 Build this checkout with `cargo build --locked --release`. Once the exact RC2 registry versions are public, candidate installations use:
 

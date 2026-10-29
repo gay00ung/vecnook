@@ -2,8 +2,8 @@
 
 The active preparation candidate is core 1.5.0-rc.2, Python 1.5.0rc2 and companion
 0.1.1-rc.2 with an exact core dependency. P2 bounded-window mmap is excluded.
-The P0/P1 runtime is unchanged. Three additional README benchmark/demo Python
-tools are now part of the source package, so its frozen tool fingerprint differs
+The P0/P1 runtime is unchanged. Additional README benchmark/comparison/demo tools and optional benchmark
+requirements are now part of the source package, so its frozen tool fingerprint differs
 from RC1 and requires new candidate evidence.
 
 ## RC1 history and scope
