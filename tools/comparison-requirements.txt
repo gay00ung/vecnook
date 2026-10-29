@@ -1,0 +1,5 @@
+# Optional local engine comparison only; never Vecnook runtime dependencies.
+chromadb==1.5.9
+usearch==2.26.6
+numpy==2.5.4
+numkong==7.8.6
