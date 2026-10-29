@@ -76,10 +76,13 @@ def run(args):
     for query in queries[:10]:
         index.search(query, count=k, threads=1)
     samples, hits, incomplete = [], 0, 0
+    distance_counts, visited_counts = [], []
     for query, expected in zip(queries, truth):
         start = time.perf_counter()
         matched = index.search(query, count=k, threads=1)
         samples.append(time.perf_counter() - start)
+        distance_counts.append(int(matched.computed_distances))
+        visited_counts.append(int(matched.visited_members))
         keys = set(map(int, matched.keys))
         hits += len(keys & {n["id"] for n in expected})
         incomplete += int(len(keys) != k)
@@ -92,7 +95,10 @@ def run(args):
     print(json.dumps({"engine": "USearch Python", "version": usearch.__version__, "count": len(corpus),
                       "queries": len(queries), "dimensions": corpus.shape[1], "k": k, "ef": args.ef,
                       "metric": "cosine", "dtype": "f32", "connectivity": 16, "expansion_add": 200,
-                      "threads": 1, "build_seconds": build_seconds, "recall": hits/(len(queries)*k),
+                      "threads": 1, "hardware_acceleration": index.hardware_acceleration,
+                      "mean_distance_computations": sum(distance_counts)/len(queries),
+                      "mean_visited_members": sum(visited_counts)/len(queries),
+                      "build_seconds": build_seconds, "recall": hits/(len(queries)*k),
                       "incomplete_queries": incomplete, "p50_ms": percentile(.5), "p95_ms": percentile(.95),
                       "sequential_qps": len(queries)/sum(samples), "peak_process_rss_bytes": peak_bytes,
                       "rss_scope": "Python+NumPy+binding+input arrays+native index; oracle generated separately"}))

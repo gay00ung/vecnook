@@ -1,0 +1,91 @@
+Baseline search-only diagnostic, 5 seconds / 1 ms sample interval. Initialization excluded.
+Call graph:
+    4105 Thread_62034694   DispatchQueue_1: com.apple.main-thread  (serial)
+      4104 start  (in dyld) + 6992  [0x1894344e4]
+      + 4104 main  (in vecnook-search-profile) + 52  [0x1009cc4c0]
+      +   4104 _RNvNtCsaLOjE9VYtxK_3std2rt19lang_start_internal  (in vecnook-search-profile) + 932  [0x1009b69b4]  rt.rs:171
+      +     4104 std::rt::lang_start::_$u7b$$u7b$closure$u7d$$u7d$::h09d50a8d82b9261d  (in vecnook-search-profile) + 32  [0x1009caa34]  rt.rs:206
+      +       4104 std::sys::backtrace::__rust_begin_short_backtrace::h6276c303bd3237af  (in vecnook-search-profile) + 16  [0x1009cab5c]  backtrace.rs:166
+      +         4104 vecnook_search_profile::main::hf79c1d41e304132e  (in vecnook-search-profile) + 1644  [0x1009ca508]  main.rs:12
+      +           3920 vecnook::index::VectorIndex::search_hnsw::hc7019530c1807019  (in vecnook-search-profile) + 672  [0x1009c4470]  index.rs:546
+      +           ! 3839 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 2560  [0x1009c4f4c]  index.rs:1027
+      +           ! : 3507 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 1572,1544,...  [0x1009c4b70,0x1009c4b54,...]  index.rs:1025
+      +           ! : 86 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 1292  [0x1009c4a58]  index.rs:1024
+      +           ! : 75 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 2528,2800  [0x1009c4f2c,0x1009c503c]  option.rs:0
+      +           ! : 44 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 2740,2712,...  [0x1009c5000,0x1009c4fe4,...]  index.rs:1027
+      +           ! : 38 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 1252,1260  [0x1009c4a30,0x1009c4a38]  index.rs:1020
+      +           ! : 28 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 700,588,...  [0x1009c4808,0x1009c4798,...]  index.rs:1016
+      +           ! : 24 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 3072,3044,...  [0x1009c514c,0x1009c5130,...]  index.rs:1029
+      +           ! : 24 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 3624,3596,...  [0x1009c5374,0x1009c5358,...]  index.rs:1031
+      +           ! : 6 alloc::raw_vec::RawVec$LT$T$C$A$GT$::grow_one::h27eb46050ac4a14b  (in vecnook-search-profile) + 60  [0x1009d0a70]  mod.rs:188
+      +           ! : | 6 alloc::raw_vec::RawVecInner$LT$A$GT$::finish_grow::hc5e41417dba3f224  (in vecnook-search-profile) + 228  [0x1009d0c50]  mod.rs:556
+      +           ! : |   6 _realloc  (in libsystem_malloc.dylib) + 452  [0x18962bf14]
+      +           ! : |     6 _malloc_zone_realloc  (in libsystem_malloc.dylib) + 148  [0x18962b6f8]
+      +           ! : |       2 xzm_realloc  (in libsystem_malloc.dylib) + 904  [0x18961bf0c]
+      +           ! : |       + 2 _xzm_free  (in libsystem_malloc.dylib) + 1048  [0x18961c530]
+      +           ! : |       +   2 mach_absolute_time  (in libsystem_kernel.dylib) + 108  [0x1897bc10c]
+      +           ! : |       1 _xzm_xzone_malloc_freelist_outlined  (in libsystem_malloc.dylib) + 796  [0x1896229bc]
+      +           ! : |       1 xzm_realloc  (in libsystem_malloc.dylib) + 808  [0x18961beac]
+      +           ! : |       + 1 _xzm_xzone_malloc_tiny  (in libsystem_malloc.dylib) + 24  [0x189620f54]
+      +           ! : |       1 xzm_realloc  (in libsystem_malloc.dylib) + 880  [0x18961bef4]
+      +           ! : |       + 1 _platform_memmove  (in libsystem_platform.dylib) + 180  [0x189809414]
+      +           ! : |       1 xzm_realloc  (in libsystem_malloc.dylib) + 328  [0x18961bccc]
+      +           ! : 3 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 2476,2788  [0x1009c4ef8,0x1009c5030]  index.rs:1026
+      +           ! : 3 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 492  [0x1009c4738]  mod.rs:0
+      +           ! : 1 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 1136  [0x1009c49bc]  index.rs:1017
+      +           ! 49 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 2868  [0x1009c5080]  index.rs:1029
+      +           ! : 42 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 1572,1544,...  [0x1009c4b70,0x1009c4b54,...]  index.rs:1025
+      +           ! : 3 alloc::raw_vec::RawVec$LT$T$C$A$GT$::grow_one::h27eb46050ac4a14b  (in vecnook-search-profile) + 60  [0x1009d0a70]  mod.rs:188
+      +           ! : | 3 alloc::raw_vec::RawVecInner$LT$A$GT$::finish_grow::hc5e41417dba3f224  (in vecnook-search-profile) + 228  [0x1009d0c50]  mod.rs:556
+      +           ! : |   3 _realloc  (in libsystem_malloc.dylib) + 452  [0x18962bf14]
+      +           ! : |     2 _malloc_zone_realloc  (in libsystem_malloc.dylib) + 148  [0x18962b6f8]
+      +           ! : |     + 2 xzm_realloc  (in libsystem_malloc.dylib) + 808  [0x18961beac]
+      +           ! : |     +   2 _xzm_xzone_malloc_tiny  (in libsystem_malloc.dylib) + 116  [0x189620fb0]
+      +           ! : |     1 _malloc_zone_realloc  (in libsystem_malloc.dylib) + 124  [0x18962b6e0]
+      +           ! : 2 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 3044,3072  [0x1009c5130,0x1009c514c]  index.rs:1029
+      +           ! : 2 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 2528,2800  [0x1009c4f2c,0x1009c503c]  option.rs:0
+      +           ! 13 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 4024  [0x1009c5504]  index.rs:1038
+      +           ! : 10 core::slice::sort::unstable::quicksort::quicksort::h435e2b3f0f31699e  (in vecnook-search-profile) + 1580  [0x1009c2bd8]  quicksort.rs:74
+      +           ! : | 6 core::slice::sort::unstable::quicksort::quicksort::h435e2b3f0f31699e  (in vecnook-search-profile) + 1580  [0x1009c2bd8]  quicksort.rs:74
+      +           ! : | + 4 core::slice::sort::shared::smallsort::small_sort_general::h7dcb3794c4311019  (in vecnook-search-profile) + 204,716,...  [0x1009c1c90,0x1009c1e90,...]  smallsort.rs:217
+      +           ! : | + 2 core::slice::sort::unstable::quicksort::quicksort::h435e2b3f0f31699e  (in vecnook-search-profile) + 1580  [0x1009c2bd8]  quicksort.rs:74
+      +           ! : | +   2 core::slice::sort::unstable::quicksort::quicksort::h435e2b3f0f31699e  (in vecnook-search-profile) + 1580  [0x1009c2bd8]  quicksort.rs:74
+      +           ! : | +     2 core::slice::sort::shared::smallsort::small_sort_general::h7dcb3794c4311019  (in vecnook-search-profile) + 192,1120  [0x1009c1c84,0x1009c2024]  smallsort.rs:217
+      +           ! : | 3 core::slice::sort::shared::smallsort::small_sort_general::h7dcb3794c4311019  (in vecnook-search-profile) + 192,744,...  [0x1009c1c84,0x1009c1eac,...]  smallsort.rs:217
+      +           ! : | 1 core::slice::sort::shared::smallsort::small_sort_general::h7dcb3794c4311019  (in vecnook-search-profile) + 100  [0x1009c1c28]  smallsort.rs:217
+      +           ! : |   1 core::slice::sort::shared::smallsort::sort4_stable::hf00a9045f475fb8e  (in vecnook-search-profile) + 620  [0x1009c1bbc]  smallsort.rs:656
+      +           ! : 1 core::slice::sort::shared::smallsort::small_sort_general::h7dcb3794c4311019  (in vecnook-search-profile) + 744  [0x1009c1eac]  smallsort.rs:217
+      +           ! : 1 core::slice::sort::unstable::quicksort::quicksort::h435e2b3f0f31699e  (in vecnook-search-profile) + 296  [0x1009c26d4]  quicksort.rs:45
+      +           ! : | 1 core::slice::sort::shared::pivot::median3_rec::h8411a8279f0e214a  (in vecnook-search-profile) + 96  [0x1009c1810]  pivot.rs:68
+      +           ! : |   1 core::slice::sort::shared::pivot::median3_rec::h8411a8279f0e214a  (in vecnook-search-profile) + 356  [0x1009c1914]  pivot.rs:71
+      +           ! : 1 core::slice::sort::unstable::quicksort::quicksort::h435e2b3f0f31699e  (in vecnook-search-profile) + 1284  [0x1009c2ab0]  quicksort.rs:63
+      +           ! 12 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 356  [0x1009c46b0]  index.rs:1014
+      +           ! : 10 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 1568,1572,...  [0x1009c4b6c,0x1009c4b70,...]  index.rs:1025
+      +           ! : 1 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 1292  [0x1009c4a58]  index.rs:1024
+      +           ! : 1 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 2580  [0x1009c4f60]  index.rs:1027
+      +           ! 4 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 164  [0x1009c45f0]  index.rs:1004
+      +           ! : 4 vecnook::index::VectorIndex::score::h9d47b7e5012c5c18  (in vecnook-search-profile) + 244,264,...  [0x1009c8ccc,0x1009c8ce0,...]  index.rs:961
+      +           ! 2 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 3716  [0x1009c53d0]  index.rs:1040
+      +           ! : 2 _xzm_free  (in libsystem_malloc.dylib) + 1580  [0x18961c744]
+      +           ! 1 vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile) + 116  [0x1009c45c0]  index.rs:1003
+      +           !   1 _xzm_malloc_zone_malloc_type_calloc_entry  (in libsystem_malloc.dylib) + 284  [0x18962a1b8]
+      +           181 vecnook::index::VectorIndex::search_hnsw::hc7019530c1807019  (in vecnook-search-profile) + 620  [0x1009c443c]  index.rs:544
+      +           ! 175 vecnook::index::VectorIndex::greedy::h0152230f2a9ea655  (in vecnook-search-profile) + 392,364,...  [0x1009c91e0,0x1009c91c4,...]  index.rs:983
+      +           ! 6 vecnook::index::VectorIndex::greedy::h0152230f2a9ea655  (in vecnook-search-profile) + 64  [0x1009c9098]  index.rs:979
+      +           !   6 vecnook::index::VectorIndex::score::h9d47b7e5012c5c18  (in vecnook-search-profile) + 356,260,...  [0x1009c8d3c,0x1009c8cdc,...]  index.rs:961
+      +           2 vecnook::index::VectorIndex::search_hnsw::hc7019530c1807019  (in vecnook-search-profile) + 232,280  [0x1009c42b8,0x1009c42e8]  index.rs:530
+      +           1 vecnook::index::VectorIndex::search_hnsw::hc7019530c1807019  (in vecnook-search-profile) + 828  [0x1009c450c]  index.rs:0
+      +             1 vecnook::index::VectorIndex::report::h6db4eace7a898631  (in vecnook-search-profile) + 336  [0x1009c9860]  index.rs:941
+      +               1 _xzm_xzone_free_freelist  (in libsystem_malloc.dylib) + 760  [0x189624e38]
+      +                 1 mach_absolute_time  (in libsystem_kernel.dylib) + 108  [0x1897bc10c]
+      1 ???  (in <unknown binary>)  [0x100c76a80]
+        1 core::slice::sort::unstable::quicksort::quicksort::h435e2b3f0f31699e  (in vecnook-search-profile) + 296  [0x1009c26d4]  quicksort.rs:45
+          1 core::slice::sort::shared::pivot::median3_rec::h8411a8279f0e214a  (in vecnook-search-profile) + 0  [0x1009c17b0]  pivot.rs:55
+
+Total number in stack (recursive counted multiple, when >=5):
+
+Sort by top of stack, same collapsed (when >= 5):
+        vecnook::index::VectorIndex::search_layer::hfe4f84f645653767  (in vecnook-search-profile)        3891
+        vecnook::index::VectorIndex::greedy::h0152230f2a9ea655  (in vecnook-search-profile)        175
+        core::slice::sort::shared::smallsort::small_sort_general::h7dcb3794c4311019  (in vecnook-search-profile)        10
+        vecnook::index::VectorIndex::score::h9d47b7e5012c5c18  (in vecnook-search-profile)        10

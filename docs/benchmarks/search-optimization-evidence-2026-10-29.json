@@ -1,0 +1,82 @@
+{
+  "toolchain": "rustc 1.96.0 (ac68faa20 2026-05-25)",
+  "harness_sha256": "6e1d41254a03fdf168702cb7a5a87f11d406ff49b209bbe3c38c065aad6322ae",
+  "synthetic_searches": 11664,
+  "scifact_searches": 600,
+  "checks": [
+    "ordered IDs",
+    "distance f64 bits",
+    "metadata",
+    "complete/mode/reason",
+    "distance computations",
+    "eligible/filter counts",
+    "graph statistics"
+  ],
+  "traces": {
+    "before": {
+      "sha256": "503fd31455054f387fc790139ac6427386a230efc77c3aa67b7be5ccdb98fc13",
+      "bytes": 4506958,
+      "lines": 12319,
+      "executable_sha256": "516158ab74182e0c4a406d08e8eb10d00d9291eaf7cc8b26349eafbe94fb3ab0"
+    },
+    "after": {
+      "sha256": "503fd31455054f387fc790139ac6427386a230efc77c3aa67b7be5ccdb98fc13",
+      "bytes": 4506958,
+      "lines": 12319,
+      "executable_sha256": "958c3e53c2ecb6837ba0846fee6d76bd1991bc5fca17f39a966bf3c5d430ba58"
+    }
+  },
+  "equal": true,
+  "before_runtime_revision": "8fee4793d9abfea7c3391a3921142b1da99aff40",
+  "after_implementation_revision": "b66cf72b82b95bca9b670493d3ff857196edbe0f",
+  "measurement_revision": "8ea578b8081b688affddbdd03f70d04302bc13b0",
+  "profiling": {
+    "separate_diagnostic_run": true,
+    "sampling_seconds": 5,
+    "sampling_interval_ms": 1,
+    "total_main_thread_samples": 4105,
+    "search_layer_top_of_stack_samples": 3891,
+    "search_layer_sample_percent": 94.78684531059683,
+    "hot_source": "baseline src/index.rs:1025, candidate distance scoring",
+    "raw_sample_sha256": "ee748b7a876e89d905f4abf46720535ef128d25a5bd5aa570a23904cfd7bbb10",
+    "before_assembly": "ordered additions into a single f64 accumulator after coordinate products",
+    "after_implementation": "four independent f64 accumulators interleaved across candidates; coordinate order preserved; query conversion shared"
+  },
+  "actual_usearch": {
+    "version": "2.26.6",
+    "hardware_acceleration": [
+      "neon"
+    ],
+    "mean_distance_computations": 1363.7466666666667
+  },
+  "vecnook_mean_distance_computations": 1453.27,
+  "local_checks": {
+    "msrv_core_test_exit": 0,
+    "msrv_release_distance_bit_tests": 2,
+    "fmt_exit": 0,
+    "clippy_all_targets_exit": 0
+  },
+  "host_load_context": {
+    "host_isolated": false,
+    "existing_registry_qa_workloads": 3,
+    "used_for_excluding_runs": false,
+    "snapshots": [
+      {
+        "observed_utc": "2026-10-29T03:03:21.684060+00:00",
+        "load_average": [
+          73.92578125,
+          38.18603515625,
+          25.24072265625
+        ]
+      },
+      {
+        "observed_utc": "2026-10-29T03:06:30.502782+00:00",
+        "load_average": [
+          17.5732421875,
+          28.72021484375,
+          23.9287109375
+        ]
+      }
+    ]
+  }
+}

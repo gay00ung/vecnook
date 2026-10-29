@@ -969,6 +969,27 @@ impl VectorIndex {
         }
     }
 
+    fn score_four(
+        &self,
+        query: &Query<'_>,
+        nodes: [usize; 4],
+        computations: &mut usize,
+    ) -> [Scored; 4] {
+        let records = nodes.map(|node| &self.nodes[node]);
+        let distances = math::distance_four(
+            self.config.metric,
+            query,
+            records.map(|n| n.record.vector.as_slice()),
+            records.map(|n| n.inverse_norm),
+        );
+        *computations += 4;
+        std::array::from_fn(|i| Scored {
+            distance: distances[i],
+            id: records[i].record.id,
+            node: nodes[i],
+        })
+    }
+
     fn greedy(
         &self,
         query: &Query<'_>,
@@ -1017,21 +1038,46 @@ impl VectorIndex {
             if best.len() == ef && current > *best.peek().unwrap() {
                 break;
             }
-            for &neighbor in &self.nodes[current.node].links[layer] {
-                if visited.contains(neighbor) {
-                    continue;
-                }
-                visited.insert(neighbor);
-                let candidate = self.score(query, neighbor, computations);
+            let mut accept = |candidate: Scored| {
                 if best.len() < ef || candidate < *best.peek().unwrap() {
                     frontier.push(Reverse(candidate));
-                    if eligible(neighbor) {
+                    if eligible(candidate.node) {
                         best.push(candidate);
                         if best.len() > ef {
                             best.pop();
                         }
                     }
                 }
+            };
+            // Tiny vectors do not amortize the four-candidate setup.
+            if query.vector.len() < 32 {
+                for &neighbor in &self.nodes[current.node].links[layer] {
+                    if !visited.contains(neighbor) {
+                        visited.insert(neighbor);
+                        accept(self.score(query, neighbor, computations));
+                    }
+                }
+                continue;
+            }
+            let mut pending = [0; 4];
+            let mut count = 0;
+            for &neighbor in &self.nodes[current.node].links[layer] {
+                if visited.contains(neighbor) {
+                    continue;
+                }
+                visited.insert(neighbor);
+                pending[count] = neighbor;
+                count += 1;
+                if count == 4 {
+                    // Scores are independent; admit them in the original link order.
+                    for candidate in self.score_four(query, pending, computations) {
+                        accept(candidate);
+                    }
+                    count = 0;
+                }
+            }
+            for &neighbor in &pending[..count] {
+                accept(self.score(query, neighbor, computations));
             }
         }
         let mut result = best.into_vec();

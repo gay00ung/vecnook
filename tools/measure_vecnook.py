@@ -35,6 +35,7 @@ def main():
                       "incomplete_queries": int(fields["incomplete_queries"]),
                       "p50_ms": float(metrics["p50_ms"]), "p95_ms": float(metrics["p95_ms"]),
                       "sequential_qps": float(metrics["sequential_qps"]),
+                      "mean_distance_computations": float(metrics["mean_distance_computations"]),
                       "peak_process_rss_bytes": int(peak if sys.platform == "darwin" else peak * 1024),
                       "rss_scope": "native benchmark child including loader/query arrays/index/exact oracle",
                       "raw_output": result.stdout}))
