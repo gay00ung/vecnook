@@ -11,7 +11,7 @@ HNSW search, exact search, and durable storage. Built with the standard library,
 [![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/gay00ung/badge.svg)](https://hub.xerj.org/contributors/gay00ung)
 
-[Quick start](#quick-start) · [API reference](https://docs.rs/vecnook/1.4.0/vecnook/) · [Documentation](#documentation) · [Benchmarks](docs/current-benchmarks.md)
+[Quick start](#quick-start) · [API reference](https://docs.rs/vecnook/1.4.0/vecnook/) · [Documentation](#documentation) · [Benchmarks](docs/engine-comparison.md)
 
 </div>
 
@@ -113,9 +113,20 @@ Unchanged files are skipped on later syncs. Results include original chunks, sou
 | Filter and rank results | [Compound filters](docs/compound-filters.md) · [Hybrid search](docs/hybrid-search.md) |
 | Back up, restore, or upgrade | [Operations](docs/operations.md) · [Compatibility](docs/compatibility.md) |
 | Use immutable readers or SQ8 | [Generation API and optional acceleration](docs/engine-generations.md) |
-| Evaluate performance and fit | [Benchmarks](docs/current-benchmarks.md) · [Operating range](docs/operating-range.md) · [Engine choices](docs/choosing.md) |
+| Evaluate performance and fit | [Benchmarks](docs/engine-comparison.md) · [Operating range](docs/operating-range.md) · [Engine choices](docs/choosing.md) |
 
 ## Measured search performance
+
+[![Same-data local engine comparison: Vecnook Rust index API, USearch Python index API, and Chroma Python local DB API; p95 latency and Recall@10 with three fresh processes per target.](https://raw.githubusercontent.com/gay00ung/vecnook/main/docs/media/engine-comparison.png)](docs/engine-comparison.md)
+
+Measured on **2026-10-29** with identical SciFact vectors and queries: 5,183 × 768 dimensions, 300 queries, cosine, Top-10, M=16, efConstruction=200, and efSearch=128. Each target ran in three fresh processes; all exceeded 99% Recall@10 in every run.
+
+**The APIs have different scopes.** Chroma includes local DB validation and query handling; Vecnook and USearch measure index calls. The chart reports query-call latency with observed min–max ranges, using a logarithmic latency axis. USearch had the lowest median p95 in this session.
+
+[Full comparison, raw results, and reproduction](docs/engine-comparison.md)
+
+<details>
+<summary>Vecnook candidate-pool sweep: six settings on the latest source</summary>
 
 [![Vecnook 1.5.0-rc.1 SciFact benchmark: measured p95 search latency and Recall@10 across six candidate-pool sizes, with three fresh processes per setting.](https://raw.githubusercontent.com/gay00ung/vecnook/main/docs/media/search-benchmark.png)](docs/current-benchmarks.md)
 
@@ -124,6 +135,8 @@ Measured on **2026-10-29 with Vecnook 1.5.0-rc.1**, built from `main`. The chart
 This measures in-memory HNSW agreement with exact cosine Top-10, rather than human-rated relevance. Embedding generation, file loading, and index construction are excluded; it does not measure the optional SQ8 or SIMD/mmap paths.
 
 [Results, raw data, and reproduction](docs/current-benchmarks.md) · [Other workload measurements](docs/operating-range.md) · [Historical 0.3 comparison](docs/text-benchmarks.md)
+
+</details>
 
 ## Releases
 
