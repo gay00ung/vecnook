@@ -38,6 +38,7 @@ def main():
     parser.add_argument("--after-binary", type=Path, required=True)
     parser.add_argument("--before-evidence", type=Path, help="Verify the retained original binary; omit for a freshly rebuilt baseline")
     parser.add_argument("--before-revision", default="8fee4793d9abfea7c3391a3921142b1da99aff40")
+    parser.add_argument("--rust-toolchain", default="stable", help="Toolchain used to build the binaries")
     parser.add_argument("--host-activity", required=True, help="Describe concurrent work, including QA")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -101,7 +102,7 @@ def main():
                         "memory_bytes": int(output("sysctl", "-n", "hw.memsize")),
                         "os": output("sw_vers", "-productVersion"),
                         "os_build": output("sw_vers", "-buildVersion"),
-                        "rustc": output("rustc", "+stable", "--version"), "python": sys.version.split()[0],
+                        "rustc": output("rustc", "+" + args.rust_toolchain, "--version"), "python": sys.version.split()[0],
                         "packages": sorted(f"{d.metadata['Name']}=={d.version}" for d in metadata.distributions())},
         "dataset": dataset,
         "method": {"rounds": 4, "ef": 128, "m": 16, "ef_construction": 200,

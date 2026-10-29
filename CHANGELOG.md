@@ -1,6 +1,11 @@
 # Changelog
 
-## 1.5.0-rc.1 — source candidate, not published
+## Unreleased — 1.5 development
+
+- Interleave four HNSW candidate distance reductions while preserving f64 coordinate order, distance bits, candidate order and search settings. Keep the original path below 32 dimensions.
+- Record the fixed-configuration [before/after comparison](docs/engine-comparison.md): all 32 fresh-process results, shared-host variability, independent reference and 12,264-search equivalence checks. The changed runtime requires a fresh candidate and full QA before stable promotion.
+
+## 1.5.0-rc.1 — prerelease
 
 - Add bounded JSONL generation sessions and batches with one pinned view, explicit close, EOF/idle cleanup and recoverable request errors.
 - Add explicitly prepared, checksummed SQ8 caches with source identity, atomic completion, directory quotas and reader leases. Scan codes through a default 1 MiB workspace, preserving original reranking and resident SQ8 results.
