@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0-rc.1 — source candidate, not published
+
+- Add bounded JSONL generation sessions and batches with one pinned view, explicit close, EOF/idle cleanup and recoverable request errors.
+- Add explicitly prepared, checksummed SQ8 caches with source identity, atomic completion, directory quotas and reader leases. Scan codes through a default 1 MiB workspace, preserving original reranking and resident SQ8 results.
+- Use exact bounded i32 accumulation in the new cached-code scan, with full i8-range and maximum-dimension equality tests. Keep the dependency-free safe core, existing formats and default searches.
+- Record actual CLI, peak RSS, simultaneous-reader and failure-boundary checks in [development validation](docs/validation-1.5.md). Keep the bounded mmap experiment outside the public companion.
+- Prepare the 0.1.1-rc.1 companion against exact core 1.5.0-rc.1 and the Python 1.5.0rc1 client metadata. Extend the mixed soak with prepared-cache/lease checks and add an independent full-duration session/cache workload.
+
 ## 1.4.0 — 2026-10-27
 
 - Promote the checked segmented-generation, SQ8 and process-reader APIs, paired with optional `vecnook-accel 0.1.0` SIMD/mmap. Preserve the candidate's runtime, tests, tools, build settings, Rust 1.89 support, original f32 data and existing mutable-store/default-search contracts.

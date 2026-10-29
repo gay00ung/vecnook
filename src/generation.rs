@@ -16,9 +16,13 @@ use std::{
 
 mod format;
 mod quantization;
+mod quantized_cache;
 #[cfg(test)]
 mod tests;
 pub use quantization::QuantizedSnapshot;
+pub use quantized_cache::{
+    CachedQuantizedSnapshot, QuantizedCacheInfo, QuantizedCacheOptions, remove_quantized_cache,
+};
 
 const MAX_RECORDS: usize = 1_000_000;
 const MAX_SEGMENTS: usize = 1024;
@@ -762,6 +766,24 @@ impl Snapshot {
     /// Codes are an approximate candidate scan, not an HNSW graph or exact index.
     pub fn quantize(&self) -> Result<QuantizedSnapshot<'_>> {
         QuantizedSnapshot::build(self)
+    }
+    /// Explicitly prepare a derived cache in a dedicated directory outside this store.
+    /// Existing completed caches are not overwritten; prune only after readers close.
+    pub fn prepare_quantized_cache(
+        &self,
+        directory: impl AsRef<Path>,
+        options: QuantizedCacheOptions,
+    ) -> Result<QuantizedCacheInfo> {
+        quantized_cache::prepare(self, directory.as_ref(), options)
+    }
+    /// Open a fully validated derived cache without allocating all int8 codes.
+    /// This Snapshot has already validated the original source; a cache cannot bypass it.
+    pub fn quantize_cached(
+        &self,
+        directory: impl AsRef<Path>,
+        options: QuantizedCacheOptions,
+    ) -> Result<CachedQuantizedSnapshot<'_>> {
+        CachedQuantizedSnapshot::open(self, directory.as_ref(), options)
     }
 }
 

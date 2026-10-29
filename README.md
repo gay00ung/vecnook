@@ -14,7 +14,17 @@ Install the companion only when its explicit platform APIs are needed:
 The [1.3 document workflow](docs/user-experience.md) and its [validation](docs/validation-1.3.md)
 remain available. Earlier memory/filter results are recorded in [1.2 validation](docs/validation-1.2.md).
 
+The **1.5.0-rc.1 source candidate** adds opt-in [JSONL sessions, prepared SQ8 caches and bounded
+code buffers](docs/engine-generations.md#batch-and-session-cli-unreleased).
+[Development measurements](docs/validation-1.5.md) separate startup, repeated
+requests, whole-process RSS and the decision to defer bounded mmap.
+The paired companion source is 0.1.1-rc.1, with an exact core dependency.
+These candidate versions have not been published. Build this PR with
+`cargo build --locked --release`; the stable 1.4 installation below remains available.
+[Current candidate QA](docs/qa-1.5.md) separates PR/source checks from registry release approval.
+
 [![CI](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml/badge.svg)](https://github.com/gay00ung/vecnook/actions/workflows/ci.yml)
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/gay00ung/badge.svg)](https://hub.xerj.org/contributors/gay00ung)
 [crates.io](https://crates.io/crates/vecnook) · [API reference](https://docs.rs/vecnook/1.4.0/vecnook/) · [MIT license](LICENSE) · [Changelog](CHANGELOG.md) · [Measured benchmarks](docs/benchmarks.md)
 
 **Vecnook targets local Rust applications.** Use one mutable database handle, bounded datasets, and application-provided embeddings. Persistence supports macOS, Linux and Windows. The mutable HNSW index stays in RAM; the opt-in generation API reads separate immutable segments. [Release validation](docs/validation-1.4.md) includes both full 24-hour workloads and Windows 11 ARM64 NTFS verification. See [compatibility](docs/compatibility.md) before upgrading.

@@ -121,6 +121,12 @@ jobs:
         run: |
           package=$(find target/package -maxdepth 1 -name 'vecnook-*.crate' -print -quit)
           python tools/check_distribution.py --crate "$package" --toolchain "${{ matrix.rust }}" --output work/packaged-consumer
+      - name: Preserve source-candidate distribution receipts
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f
+        with:
+          name: packaged-distribution-${{ matrix.os }}-${{ matrix.rust }}
+          path: work/packaged-consumer/receipt.json
+          retention-days: 30
       - name: Actual registry consumers
         if: steps.registry.outputs.version != ''
         env:
