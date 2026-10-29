@@ -36,7 +36,8 @@ def main():
     parser.add_argument("--rust-truth", type=Path, required=True)
     parser.add_argument("--before-binary", type=Path, required=True)
     parser.add_argument("--after-binary", type=Path, required=True)
-    parser.add_argument("--before-evidence", type=Path, required=True)
+    parser.add_argument("--before-evidence", type=Path, help="Verify the retained original binary; omit for a freshly rebuilt baseline")
+    parser.add_argument("--before-revision", default="8fee4793d9abfea7c3391a3921142b1da99aff40")
     parser.add_argument("--host-activity", required=True, help="Describe concurrent work, including QA")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -50,9 +51,16 @@ def main():
     os.environ["ANONYMIZED_TELEMETRY"] = "False"
     binaries = {"Vecnook before": args.before_binary.resolve(), "Vecnook after": args.after_binary.resolve()}
     identities = {name: sha256(binary) for name, binary in binaries.items()}
-    previous = json.loads(args.before_evidence.read_text())
-    if identities["Vecnook before"] != previous["binary_sha256"]:
-        raise ValueError("before binary differs from the retained original comparison")
+    original = ROOT / "docs/benchmarks/engine-comparison-2026-10-29.json"
+    previous = json.loads(original.read_text())
+    if args.before_evidence:
+        retained = json.loads(args.before_evidence.read_text())
+        if identities["Vecnook before"] != retained["binary_sha256"]:
+            raise ValueError("before binary differs from the retained original comparison")
+    before_revision = output("git", "rev-parse", args.before_revision + "^{commit}")
+    if output("git", "diff", previous["source_revision"], before_revision, "--name-only",
+              "--", "src", "Cargo.toml", "Cargo.lock"):
+        raise ValueError("declared baseline runtime differs from the original comparison")
     if identities["Vecnook before"] == identities["Vecnook after"]:
         raise ValueError("before and after binaries must differ")
     independent = json.loads(args.truth.read_text())
@@ -76,14 +84,18 @@ def main():
     revision = output("git", "rev-parse", "HEAD")
     versions = {name: output(str(binary), "--version").removeprefix("vecnook ")
                 for name, binary in binaries.items()}
+    if versions["Vecnook before"] != previous["vecnook_version"]:
+        raise ValueError("baseline binary version differs")
     evidence = {
         "schema": 2, "started_at_utc": datetime.now(timezone.utc).isoformat(),
         "source_revision": revision,
         "binaries": {name: {"sha256": identities[name], "reported_version": versions[name],
-                              "origin": "retained original comparison binary" if name.endswith("before")
-                              else "local development build; not a published release candidate"}
+                              "origin": ("retained original comparison binary" if args.before_evidence else "rebuilt baseline")
+                              if name.endswith("before") else "local development build; not a published release candidate"}
                      for name in binaries},
-        "original_comparison_sha256": sha256(args.before_evidence),
+        "original_comparison_sha256": sha256(original),
+        "before_revision": before_revision,
+        "baseline_runtime_equivalent_to_original": True,
         "original_comparison_source_revision": previous["source_revision"],
         "environment": {"cpu": output("sysctl", "-n", "machdep.cpu.brand_string"),
                         "memory_bytes": int(output("sysctl", "-n", "hw.memsize")),
