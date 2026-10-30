@@ -1,11 +1,13 @@
 # Changelog
 
-## Unreleased — 1.5 development
+## 1.5.0-rc.2 — candidate preparation
 
-- Interleave four HNSW candidate distance reductions while preserving f64 coordinate order, distance bits, candidate order and search settings. Keep the original path below 32 dimensions.
-- Record the fixed-configuration [before/after comparison](docs/engine-comparison.md): all 32 fresh-process results, shared-host variability, independent reference and 12,264-search equivalence checks. The changed runtime requires a fresh candidate and full QA before stable promotion.
+- Include the accepted HNSW four-candidate distance-scoring improvement while preserving f64 coordinate order, distance bits, graph candidate order and search settings. Keep the original path below 32 dimensions.
+- Preserve the [32-process before/after measurements](docs/engine-comparison.md) and 12,264-search equivalence checks under their actual development-binary identities, including shared-host variation and all outliers.
+- Freeze the changed runtime and additional packaged benchmark/comparison/demo tools in a fresh candidate. Prepare core 1.5.0-rc.2, exact-core companion 0.1.1-rc.2 and Python 1.5.0rc2; preserve RC1 archives, receipts and healthy workloads without reusing their approval for RC2.
+- Require fresh source checks and exact-registry core/mapped/session full-duration gates before stable promotion. Mark SciFact group-memory samples without live engine PIDs as unavailable, preserving original samples and separate native high-water measurements. P2 bounded-window mmap remains excluded.
 
-## 1.5.0-rc.1 — prerelease
+## 1.5.0-rc.1 — 2026-10-29 (prerelease)
 
 - Add bounded JSONL generation sessions and batches with one pinned view, explicit close, EOF/idle cleanup and recoverable request errors.
 - Add explicitly prepared, checksummed SQ8 caches with source identity, atomic completion, directory quotas and reader leases. Scan codes through a default 1 MiB workspace, preserving original reranking and resident SQ8 results.

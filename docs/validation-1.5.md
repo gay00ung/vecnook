@@ -1,10 +1,12 @@
-# 1.5 development validation (unreleased)
+# 1.5 development validation
 
 P0 session/batch CLI and P1 prepared-cache/block scans are implemented on the
 development branch. P2 bounded mmap remains an experiment and is excluded.
 These measurements used worktree builds with 1.4.0/0.1.0 metadata. The later PR
-prepares core 1.5.0-rc.1/companion 0.1.1-rc.1 metadata and new QA workloads;
-the measured search runtime is unchanged. This report does not approve a registry release.
+prepared core 1.5.0-rc.1/companion 0.1.1-rc.1 metadata and new QA workloads
+without changing that historical P0/P1 measured runtime. Subsequent HNSW scoring
+changes and their separate measurements are in [the engine comparison](engine-comparison.md).
+This report does not approve a registry release.
 
 ## Conditions and evidence identity
 
@@ -126,9 +128,14 @@ it is not a service-level guarantee. Earlier 4MiB misses are not erased by tunin
 | SciFact / resident | 1 | 1.257–1.442 | 6.859 |
 | SciFact / resident | 2 | 1.264–1.340 | 13.641 |
 | SciFact / resident | 4 | 1.257–1.409 | 27.234 |
-| SciFact / cached | 1 | 0.587–0.665 | 0.000 |
-| SciFact / cached | 2 | 0.618–0.657 | 0.000 |
+| SciFact / cached | 1 | 0.587–0.665 | unavailable |
+| SciFact / cached | 2 | 0.618–0.657 | unavailable |
 | SciFact / cached | 4 | 1.310–3.439 | 19.562 |
+
+For SciFact cached 1/2-reader groups, every sampling record had an empty
+engine PID list. The raw collector sums are zero because no live engine was
+captured; group RSS is unavailable, rather than zero memory. The separate native
+full-lifetime process peaks above remain valid. Original samples are preserved.
 
 These sums do not account for shared OS file-cache pages. More readers can
 increase contention and latency; the single-reader target does not cover these groups.
@@ -216,3 +223,13 @@ Linux/macOS/Windows/MSRV CI and exact registry-consumer matrix, independent full
 24h workloads, source-equivalence/publication gates and distribution verification.
 No new registry publication, deployment, 24h approval or user-observation claim
 is made by these local development checks. The published 1.4 artifacts are intact.
+
+## Subsequent candidate validation
+
+The completed PR #9 source24h checks and published RC1 distribution are recorded
+in [candidate QA](qa-1.5.md). Their exact original identities remain separate
+from the controlled development measurements above. RC2 includes the accepted
+HNSW scoring change and additional packaged benchmark/comparison/demo tools,
+and therefore requires a new frozen
+source fingerprint and exact-registry full24h core/mapped/session evidence before
+stable promotion. No RC2 duration approval is supplied by this document.

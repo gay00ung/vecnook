@@ -26,7 +26,7 @@ To repeat the same distribution flow on another Windows 11 NTFS machine with
 Python 3.12+, Rust and Node.js available:
 
 ```bash
-python tools/check_distribution.py --registry 1.4.0-rc.1 --toolchain stable --output work/windows11-registry
+python tools/check_distribution.py --registry 1.5.0-rc.2 --toolchain stable --output work/windows11-registry
 ```
 
 The receipt records the actual OS caption, product type and filesystem. Server CI
@@ -35,7 +35,7 @@ does not supply the required Windows 11 evidence.
 Run the exact candidate archive's mixed workload separately from benchmarks:
 
 ```bash
-python3 tools/run_soak.py --crate work/registry/vecnook-1.4.0-rc.1.crate --output work/soak-rc1 --seconds 86400 --mutations 100000
+python3 tools/run_soak.py --crate work/registry/vecnook-1.5.0-rc.2.crate --output work/soak-rc2 --seconds 86400 --mutations 100000
 ```
 
 `case/progress.json` records actual elapsed time and acknowledgements. The final
@@ -115,3 +115,13 @@ archives/checksums, the Python wheel/checksum and the paired QA receipts. Verify
 public asset download hashes/server digests. A green binary build alone does not
 approve the registered source or full-duration workload. See
 [1.4 validation](validation-1.4.md) for the current measured status.
+
+## Additional 1.5 cache/session gate
+
+The [1.5 candidate protocol](qa-1.5.md) adds prepared-cache/lease checks to the
+core workload and an independent full24h session/cache workload. Stable approval
+requires those exact-archive lifecycle/request/fixture gates alongside the paired
+core/mapped-reader gates. New packaged tools change the frozen source fingerprint,
+even when search runtime is unchanged. This RC2 also includes the accepted HNSW
+distance-scoring change and needs fresh candidate validation; RC1 receipts cannot
+approve its changed runtime or tool sources.
