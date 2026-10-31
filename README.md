@@ -11,7 +11,7 @@ HNSW search, exact search, and durable storage. Built with the standard library,
 [![MIT license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/gay00ung/badge.svg)](https://hub.xerj.org/contributors/gay00ung)
 
-[Quick start](#quick-start) · [API reference](https://docs.rs/vecnook/1.4.0/vecnook/) · [Documentation](#documentation) · [Benchmarks](docs/engine-comparison.md)
+[Quick start](#quick-start) · [API reference](https://docs.rs/vecnook/1.5.0/vecnook/) · [Documentation](#documentation) · [Benchmarks](docs/engine-comparison.md)
 
 </div>
 
@@ -40,14 +40,14 @@ Vecnook targets bounded, local datasets with one mutable database handle. The mu
 
 ## Quick start
 
-Requires **Rust 1.89+**. The examples below use the stable **1.4.0** release.
+Requires **Rust 1.89+**. The examples below target **1.5.0**.
 
 <a id="embed-a-database"></a>
 
 ### Rust library
 
 ```bash
-cargo add vecnook@=1.4.0
+cargo add vecnook@=1.5.0
 ```
 
 `VectorIndex` is an in-memory index. `Database` adds synced writes, locking, checkpoints, backups, and recovery.
@@ -82,12 +82,12 @@ fn main() -> Result<()> {
 ### Command line
 
 ```bash
-cargo install vecnook --version '=1.4.0' --locked
+cargo install vecnook --version '=1.5.0' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
 
-Use a fresh database path on the first run. For a compiler-free installation, download a ZIP and its SHA-256 file from the [1.4.0 release](https://github.com/gay00ung/vecnook/releases/tag/v1.4.0) and follow the [installation guide](docs/user-experience.md#install-a-native-cli).
+Use a fresh database path on the first run. For a compiler-free installation, download a ZIP and its SHA-256 file matching your version from the [releases page](https://github.com/gay00ung/vecnook/releases) and follow the [installation guide](docs/user-experience.md#install-a-native-cli).
 
 <a id="search-real-documents"></a>
 
@@ -145,35 +145,22 @@ This earlier session used the original RC1-code binary and three fresh processes
 
 ## Releases
 
-**Stable: 1.4.0.** Adds segmented immutable generations, separate-process pinned readers, and SQ8 candidates with original-f32 reranking. The optional `vecnook-accel 0.1.0` companion supplies SIMD and read-only mmap. Install it only when you need its explicit platform APIs:
+**1.5.0** adds bounded JSONL snapshot sessions/batches, explicitly prepared SQ8 caches with reader leases and the accepted HNSW distance-scoring improvement. It preserves original records/f32 vectors, default searches, storage contracts and Rust 1.89 support. P2 bounded-window mmap remains excluded; the optional companion retains its existing full-segment mmap.
+
+The optional `vecnook-accel 0.1.1` pairs with exactly core `1.5.0`. Install it when you need its explicit platform APIs:
 
 ```bash
-cargo install vecnook-accel --version '=0.1.0' --locked
+cargo install vecnook-accel --version '=0.1.1' --locked
 ```
 
-Both registered candidates completed independent 24-hour workloads, alongside eight core and eight paired companion registry checks. See [1.4 validation and limits](docs/validation-1.4.md).
+The Python `1.5.0` wheel needs the native CLI separately. Its Client methods open per request; retained JSONL sessions are a separate CLI interface. See [the generation guide](docs/engine-generations.md#batch-and-session-cli-15) and [development measurements](docs/validation-1.5.md) for startup, validation, preparation and repeated-query costs.
 
-<details>
-<summary>Candidate preparation: 1.5.0-rc.2</summary>
-
-This checkout prepares core `1.5.0-rc.2`, exact-core companion `0.1.1-rc.2` and Python `1.5.0rc2`. It includes the [accepted HNSW distance-scoring improvement](docs/engine-comparison.md), plus opt-in [JSONL sessions, prepared SQ8 caches, and bounded code buffers](docs/engine-generations.md#batch-and-session-cli-unreleased). P2 bounded-window mmap is excluded.
-
-[RC1 is published](https://github.com/gay00ung/vecnook/releases/tag/v1.5.0-rc.1). Its completed source QA and distribution retain their original identities. The changed HNSW runtime and additional packaged benchmark/comparison/demo tools require a new candidate fingerprint and RC2's own full QA and registry validation; RC1 receipts cannot approve this source.
-
-Build this checkout with `cargo build --locked --release`. Once the exact RC2 registry versions are public, candidate installations use:
-
-```bash
-cargo add vecnook@=1.5.0-rc.2
-cargo install vecnook --version '=1.5.0-rc.2' --locked
-cargo install vecnook-accel --version '=0.1.1-rc.2' --locked
-```
-
-The optional companion and the separately downloadable `vecnook-1.5.0rc2-py3-none-any.whl` are candidate artifacts. The Python wheel needs the native CLI. [Development measurements](docs/validation-1.5.md) cover startup, repeated requests, whole-process RSS and the bounded-mmap decision; [candidate QA](docs/qa-1.5.md) records the independent registry/platform/full24h gates required before stable 1.5 promotion.
-
-</details>
+The [checked RC2](https://github.com/gay00ung/vecnook/releases/tag/v1.5.0-rc.2) completed three independent actual-registry 24-hour workloads, eight core and eight paired companion registry checks, actual remote-tag installations, tag CI/native ZIP checks and verification of all 75 public assets. [Candidate QA](docs/qa-1.5.md) records exact identities and results. Stable promotion changes versions, exact dependencies, lockfiles and documentation while preserving the checked runtime/tests/tools/build settings. Release files are listed on the [releases page](https://github.com/gay00ung/vecnook/releases).
 
 <details>
 <summary>Earlier releases and validation</summary>
+
+The [1.4.0 release](https://github.com/gay00ung/vecnook/releases/tag/v1.4.0) introduced segmented immutable generations, pinned readers and SQ8 candidates with original-f32 reranking, paired with companion 0.1.0. Its [validation and limits](docs/validation-1.4.md) retain their original evidence.
 
 The [1.3 document workflow](docs/user-experience.md) and its [validation](docs/validation-1.3.md) remain available. Earlier memory and filter results are in [1.2 validation](docs/validation-1.2.md). See the [changelog](CHANGELOG.md) for release history.
 

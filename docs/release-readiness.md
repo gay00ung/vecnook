@@ -125,3 +125,9 @@ core/mapped-reader gates. New packaged tools change the frozen source fingerprin
 even when search runtime is unchanged. This RC2 also includes the accepted HNSW
 distance-scoring change and needs fresh candidate validation; RC1 receipts cannot
 approve its changed runtime or tool sources.
+
+The checked 1.5 RC2 completed these candidate gates, including the separate
+actual-registry session/cache workload and all public assets; exact identities and
+results are in [1.5 candidate QA](qa-1.5.md). Stable 1.5 promotion preserves the
+checked runtime/tests/tools/build settings and still requires the normal PR/main
+CI, official publication/equivalence gates and fresh actual stable distributions.
