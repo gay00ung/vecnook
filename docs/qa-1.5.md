@@ -1,10 +1,59 @@
 # 1.5 candidate QA
 
-The active preparation candidate is core 1.5.0-rc.2, Python 1.5.0rc2 and companion
-0.1.1-rc.2 with an exact core dependency. P2 bounded-window mmap is excluded.
+The checked candidate is core 1.5.0-rc.2, Python 1.5.0rc2 and companion
+0.1.1-rc.2 with an exact core dependency. Its actual registry, full-duration,
+platform and public-distribution gates are complete. The metadata-only stable
+promotion targets core/Python 1.5.0 and companion 0.1.1. P2 bounded-window mmap is excluded.
 The candidate includes the accepted HNSW distance-scoring change from main
 `b71cf70`, alongside additional packaged benchmark/comparison/demo tools. Its runtime
 and frozen source fingerprint differ from RC1 and require fresh source/archive evidence.
+
+## Completed RC2 registry validation — 2026-10-31
+
+[RC2's public prerelease](https://github.com/gay00ung/vecnook/releases/tag/v1.5.0-rc.2)
+contains the exact archives, 16 registry distribution receipts, eight native ZIPs, Python
+wheel and separately identified source-only/registry QA receipts and diagnostics.
+All 75 server digests/sizes and independent unauthenticated public downloads
+matched; SHA256SUMS covers the other 74 assets.
+
+| Actual registry archive | SHA256 |
+| --- | --- |
+| core 1.5.0-rc.2 | 3b6879d14c7f705f865aa63810abfc00edb1eeb6a1b97adc50780e3dac357124 |
+| companion 0.1.1-rc.2 | 6d722c64aff691cea61d797965f56c6b49de2926697bb9c16e0618837f975014 |
+
+Core runtime/test/tool/build fingerprint is
+`2cb5a923d3b27111ed5ff8c1ca3e76da887cdbc8a83322c8926f7933a41b882a`;
+normalized companion fingerprint is
+`f9024bf37fb16a02bc532444d880629914d47915c2f17575d6fe724bae064096`.
+Both actual Cargo-packaged archives identify clean main
+`986169d75e18493d95a36e1134d4a7fe951962ae`, produced by normal PR #10 merge.
+The source-only feature archive `4ab2365ec60e2c07569516595af8d63dcd6afda629f4d31e0dcb65bd91a3bf40`
+retains its different identity and supplies no substitute registry approval.
+
+- Core: 86400.568117542 seconds, 189106 ACKs, 89 restarts, 17 backups,
+  710 publications, 355 each SQ8/prepared-cache/lease checks and 17 generation backups.
+- Session/cache: 86400.22028595908 seconds after 100 resident references,
+  1449203 requests and 354 sessions. Normal/EOF/kill/idle counts are 89/89/88/88;
+  preparations/live-lease refusals/released leases each 354, re-encodings 0,
+  invalid-input recoveries 708, before/after/current fixture bytes identical.
+- Separate mapped reader: 86400.024580708 seconds, 140577169 records,
+  818024 maps and 332 observed generations. It binds the final successful
+  publisher receipt SHA256 `d221010b02e4bdc48d278f6909b6bab2971c4689877efa125074f0fbe1c555cb`.
+
+Each actual-registry run completed its own 24-hour clock with completed progress
+and exit code 0. The official paired gate accepted all eight core and eight companion
+registry receipts and the final publisher/reader pair; the additional session gate
+passed independently. Both registry platform checks have no errors. Actual hosts
+are Linux, macOS, Windows Server 2025/ProductType 3/AMD64/NTFS and Windows 11 Enterprise/
+ProductType 1/ARM64/NTFS, each with Rust 1.89.0 and stable 1.99.1. Tag source CI 41173849574
+passed 10 jobs and native CI 41173849735 passed 4 jobs. Fresh actual remote annotated-tag
+installations, local registry CLI/library consumers, seven exact docs.rs APIs and
+the installed Python wheel's actual-registry CLI consumer also passed.
+
+These gates approve this candidate's frozen implementation for metadata-only
+promotion. Stable publication, fresh stable consumers/tagCI and the formal public
+release remain separate steps; development timings and external-user observations
+keep their original scope.
 
 ## RC1 history and scope
 

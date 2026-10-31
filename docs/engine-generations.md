@@ -153,7 +153,7 @@ cache, it builds codes again for that invocation. The latency tables in [1.4 val
 measure queries on a retained Rust view after open/build; use the library to reuse
 that view across queries. The tables do not describe one-shot CLI latency.
 
-## Batch and session CLI (unreleased)
+## Batch and session CLI (1.5)
 
 snapshot-session accepts UTF-8 JSONL on stdin. snapshot-batch reads the same
 protocol from a file. Both open one Snapshot, optionally build one resident SQ8
@@ -191,7 +191,7 @@ not query execution. Fatal input/output failures exit with an error. Process
 termination releases OS leases. A new CURRENT leaves active sessions unchanged:
 open another session to choose it. There is no network listener or generation pool.
 
-## Prepared SQ8 and bounded buffers (unreleased)
+## Prepared SQ8 and bounded buffers (1.5)
 
 Prepare codes explicitly in a dedicated directory outside the source store.
 Its parent must exist:

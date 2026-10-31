@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.5.0 — 2026-10-31
+
+- Promote RC2's bounded JSONL snapshot sessions/batches, prepared SQ8 caches/leases and accepted HNSW scoring change, paired with exact-core companion 0.1.1 and Python 1.5.0. Preserve the checked runtime, tests, packaged tools, build settings, dependency-free safe core, Rust 1.89, original f32 records and existing default-search/storage contracts. P2 bounded-window mmap stays excluded.
+- Complete the exact registered RC2's separate core, session/cache and mapped-reader workloads: 86400.568117542 seconds/189106 ACKs; 86400.22028595908 seconds/1449203 requests/354 sessions/all leases released/zero re-encodings; and 86400.024580708 seconds/140577169 checked records/332 generations. The reader binds the final successful publisher receipt.
+- Verify eight core and eight paired companion registry consumers on Linux/macOS/Windows Server x64 NTFS/actual Windows 11 ARM64 NTFS with MSRV and stable, remote tag installations, tag CI/eight native ZIPs, the official paired gate and every one of RC2's 75 public assets. Keep source-only/registry/earlier-candidate identities separate in [candidate QA](docs/qa-1.5.md).
+- Retain original development measurement revisions, binaries, compiler, API scopes, startup/validation/preparation costs and all latency/RSS samples. Independent external-user and production-app observations remain unmeasured.
+
 ## 1.5.0-rc.2 — candidate preparation
 
 - Include the accepted HNSW four-candidate distance-scoring improvement while preserving f64 coordinate order, distance bits, graph candidate order and search settings. Keep the original path below 32 dimensions.

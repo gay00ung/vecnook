@@ -226,10 +226,13 @@ is made by these local development checks. The published 1.4 artifacts are intac
 
 ## Subsequent candidate validation
 
-The completed PR #9 source24h checks and published RC1 distribution are recorded
-in [candidate QA](qa-1.5.md). Their exact original identities remain separate
-from the controlled development measurements above. RC2 includes the accepted
-HNSW scoring change and additional packaged benchmark/comparison/demo tools,
-and therefore requires a new frozen
-source fingerprint and exact-registry full24h core/mapped/session evidence before
-stable promotion. No RC2 duration approval is supplied by this document.
+The completed PR #9 source 24-hour checks and RC1 registry results retain their
+original identities in [candidate QA](qa-1.5.md). The subsequent RC2 includes the
+accepted HNSW scoring change and additional packaged benchmark/comparison/demo
+tools; its separate exact-registry core/mapped/session 24-hour workloads, 8+8
+registry consumers, official paired gate and all 75 public assets have now passed.
+Their archive hashes, actual durations and receipts are recorded in candidate QA
+and on the [RC2 release](https://github.com/gay00ung/vecnook/releases/tag/v1.5.0-rc.2).
+Those later release checks do not replace or relabel any measurement, binary,
+compiler, input, timing, RSS sample or P2 decision in this development report.
+Stable metadata promotion and actual stable public distribution remain separate.
