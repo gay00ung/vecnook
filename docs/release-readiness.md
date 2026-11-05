@@ -131,3 +131,11 @@ actual-registry session/cache workload and all public assets; exact identities a
 results are in [1.5 candidate QA](qa-1.5.md). Stable 1.5 promotion preserves the
 checked runtime/tests/tools/build settings and still requires the normal PR/main
 CI, official publication/equivalence gates and fresh actual stable distributions.
+
+## 1.6 Python session candidate
+
+The additive Python retained-session client changes the packaged source identity.
+Core 1.6.0-rc.1/Python 1.6.0rc1 and companion 0.1.2-rc.1 therefore require new
+source and actual-registry evidence, including the existing full-duration gates
+and Python process/cache lifecycle checks. [1.6 candidate QA](qa-1.6.md) records
+the required sequence and pending status; completed 1.5 receipts remain historical.
