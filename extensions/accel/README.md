@@ -5,7 +5,7 @@ memory mapping for Vecnook. The portable `vecnook` core remains dependency-free
 and forbids unsafe code. This companion isolates its platform intrinsics and OS
 mapping calls, supports Rust 1.89, and depends on one exact core release.
 
-This checkout prepares `0.1.2-rc.1` paired with exactly `vecnook 1.6.0-rc.1`.
+This checkout prepares `0.1.2-rc.2` paired with exactly `vecnook 1.6.0-rc.2`.
 Its new candidate publication and validation are pending; the platform runtime
 remains unchanged. The latest stable `0.1.1` pairs with exactly `vecnook 1.5.0`.
 That checked RC2 pair completed
@@ -17,7 +17,7 @@ their original scope in `docs/validation-1.5.md`.
 Install the CLI:
 
 ```bash
-cargo install vecnook-accel --version '=0.1.2-rc.1' --locked
+cargo install vecnook-accel --version '=0.1.2-rc.2' --locked
 vecnook-accel demo data/new-accel-demo
 vecnook-accel search data/new-accel-demo 0,0,1 1 --sq8 2 --mmap
 ```
@@ -29,8 +29,8 @@ and generation/sequence values encoded as decimal strings.
 
 ```toml
 [dependencies]
-vecnook = "=1.6.0-rc.1"
-vecnook-accel = "=0.1.2-rc.1"
+vecnook = "=1.6.0-rc.2"
+vecnook-accel = "=0.1.2-rc.2"
 ```
 
 ```rust,no_run

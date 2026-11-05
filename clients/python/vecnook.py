@@ -196,7 +196,8 @@ class SnapshotSession:
             self._fail("snapshot reader stopped before completing its response")
         try:
             response = json.loads(raw.decode("utf-8"), parse_constant=_snapshot_nonfinite,
-                                  parse_float=_snapshot_float, object_pairs_hook=_snapshot_object)
+                                  parse_float=_snapshot_float, parse_int=_snapshot_int,
+                                  object_pairs_hook=_snapshot_object)
         except (ValueError, UnicodeError):
             self._fail("snapshot reader returned invalid UTF-8 JSON")
         if not isinstance(response, dict) or type(response.get("schema_version")) is not int or response["schema_version"] != 1:
@@ -217,6 +218,11 @@ class SnapshotSession:
 
 def _snapshot_nonfinite(value):
     raise ValueError("non-finite JSON number: " + value)
+
+
+def _snapshot_int(value):
+    # Rust's finite f64 JSON output can spell a negative zero as the integer -0.
+    return -0.0 if value == "-0" else int(value)
 
 
 def _snapshot_float(value):

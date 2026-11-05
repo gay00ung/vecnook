@@ -1,6 +1,13 @@
 # Changelog
 
-## 1.6.0-rc.1 — candidate preparation
+## 1.6.0-rc.2 — candidate preparation
+
+- Preserve the sign of inner-product distance JSON `-0` in the new Python session
+  decoder; verify its f64 bits against an actual native search. Keep the local,
+  unpublished RC1 source archive as superseded preparation evidence. No RC1
+  full-duration run or registry publication started.
+
+## 1.6.0-rc.1 — local preparation history
 
 - Add the standard-library Python `SnapshotSession` over the existing native
   JSONL protocol, with one pinned generation/child, streaming batch results,

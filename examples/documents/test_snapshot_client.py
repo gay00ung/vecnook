@@ -276,6 +276,20 @@ class NativeSessionTests(unittest.TestCase):
         old.close()
         self.assertEqual(json.loads(self.native("snapshot-gc", self.store))["removed_generations"], 1)
 
+    def test_inner_product_negative_zero_distance_keeps_its_f64_sign(self):
+        db, store = self.root / "ip-raw", self.root / "ip-store"
+        self.native("init", db, 2, "--metric", "ip")
+        self.native("put", db, "1", "1,-0.0", "zero distance")
+        self.native("put", db, "2", "0,1", "negative distance")
+        self.native("snapshot-publish", db, store, "python-ip-session")
+        raw = self.native("snapshot-search", store, "0,1", 2)
+        self.assertIn('"distance":-0,', raw)
+        with SnapshotSession(store, binary=self.binary, timeout=10) as reader:
+            result = reader.search_vector([0, 1], 2)["result"]
+            self.assertEqual([n["id"] for n in result["neighbors"]], ["2", "1"])
+            self.assertEqual(struct.pack("<d", result["neighbors"][1]["distance"]),
+                             struct.pack("<d", -0.0))
+
     def test_prepared_cache_is_explicit_pinned_and_released_after_close(self):
         with self.assertRaises(VecnookError):
             self.session(sq8=16, sq8_cache=self.cache)

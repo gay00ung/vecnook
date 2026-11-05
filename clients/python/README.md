@@ -7,7 +7,7 @@ at runtime and executes the local binary; it is not an in-process Rust binding.
 application owns that collection's exclusive handle. `SnapshotSession` retains a
 separate read-only published generation until you close it.
 
-This checkout prepares Python **1.6.0rc1** with core **1.6.0-rc.1**. Its candidate
+This checkout prepares Python **1.6.0rc2** with core **1.6.0-rc.2**. Its candidate
 release checks are pending. Install from this checkout to try the new API;
 the published 1.5.0 wheel does not contain `SnapshotSession`.
 

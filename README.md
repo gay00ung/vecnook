@@ -40,7 +40,7 @@ Vecnook targets bounded, local datasets with one mutable database handle. The mu
 
 ## Quick start
 
-Requires **Rust 1.89+**. This checkout prepares **1.6.0-rc.1**; publication and its
+Requires **Rust 1.89+**. This checkout prepares **1.6.0-rc.2**; publication and its
 new full-duration candidate gates are pending. The examples below target that
 candidate. The latest completed stable release is [1.5.0](https://github.com/gay00ung/vecnook/releases/tag/v1.5.0).
 
@@ -49,7 +49,7 @@ candidate. The latest completed stable release is [1.5.0](https://github.com/gay
 ### Rust library
 
 ```bash
-cargo add vecnook@=1.6.0-rc.1
+cargo add vecnook@=1.6.0-rc.2
 ```
 
 `VectorIndex` is an in-memory index. `Database` adds synced writes, locking, checkpoints, backups, and recovery.
@@ -84,7 +84,7 @@ fn main() -> Result<()> {
 ### Command line
 
 ```bash
-cargo install vecnook --version '=1.6.0-rc.1' --locked
+cargo install vecnook --version '=1.6.0-rc.2' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -148,10 +148,10 @@ This earlier session used the original RC1-code binary and three fresh processes
 
 ## Releases
 
-**1.6.0-rc.1 is in preparation.** The additive Python `SnapshotSession` reuses
+**1.6.0-rc.2 is in preparation.** The additive Python `SnapshotSession` reuses
 the existing native JSONL reader and streams batches while preserving a pinned
-generation. Core/Python versions are `1.6.0-rc.1`/`1.6.0rc1`; companion
-`0.1.2-rc.1` depends on that exact core. The Rust engine and native protocol are
+generation. Core/Python versions are `1.6.0-rc.2`/`1.6.0rc2`; companion
+`0.1.2-rc.2` depends on that exact core. The Rust engine and native protocol are
 unchanged. New packaged Python code/tests change the candidate identity and
 require [fresh candidate QA](docs/qa-1.6.md); earlier release receipts do not
 approve this checkout.

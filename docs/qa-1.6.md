@@ -1,10 +1,18 @@
 # 1.6 candidate QA
 
-Core 1.6.0-rc.1, Python 1.6.0rc1 and exact-core companion 0.1.2-rc.1 are in
+Core 1.6.0-rc.2, Python 1.6.0rc2 and exact-core companion 0.1.2-rc.2 are in
 preparation. No 1.6 candidate publication, registry workload or stable promotion
 is approved by this document. The added Python client/tests change the packaged
 source fingerprint even though the Rust engine and native protocol are unchanged.
 Earlier 1.5/RC2/RC1 identities, clocks and measurements remain historical evidence.
+
+## Local RC1 preparation history
+
+RC1 was packaged locally before a new inner-product edge check found that the
+Python decoder lost a distance sign when native JSON used `-0`. RC2 preserves
+that f64 sign and adds a real native regression assertion. The unpublished RC1
+archive and diagnostic are retained; no RC1 full-duration run or registry
+publication started. RC2 uses a new exact archive/source identity.
 
 ## Scope and focused checks
 
