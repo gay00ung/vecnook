@@ -40,14 +40,16 @@ Vecnook targets bounded, local datasets with one mutable database handle. The mu
 
 ## Quick start
 
-Requires **Rust 1.89+**. The examples below target **1.5.0**.
+Requires **Rust 1.89+**. This checkout prepares **1.6.0-rc.2**; publication and its
+new full-duration candidate gates are pending. The examples below target that
+candidate. The latest completed stable release is [1.5.0](https://github.com/gay00ung/vecnook/releases/tag/v1.5.0).
 
 <a id="embed-a-database"></a>
 
 ### Rust library
 
 ```bash
-cargo add vecnook@=1.5.0
+cargo add vecnook@=1.6.0-rc.2
 ```
 
 `VectorIndex` is an in-memory index. `Database` adds synced writes, locking, checkpoints, backups, and recovery.
@@ -82,7 +84,7 @@ fn main() -> Result<()> {
 ### Command line
 
 ```bash
-cargo install vecnook --version '=1.5.0' --locked
+cargo install vecnook --version '=1.6.0-rc.2' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -113,6 +115,7 @@ Unchanged files are skipped on later syncs. Results include original chunks, sou
 | Filter and rank results | [Compound filters](docs/compound-filters.md) · [Hybrid search](docs/hybrid-search.md) |
 | Back up, restore, or upgrade | [Operations](docs/operations.md) · [Compatibility](docs/compatibility.md) |
 | Use immutable readers or SQ8 | [Generation API and optional acceleration](docs/engine-generations.md) |
+| Reuse a Python snapshot reader | [Python sessions and streaming batches](clients/python/README.md#reuse-a-published-snapshot-reader) |
 | Evaluate performance and fit | [Benchmarks](docs/engine-comparison.md) · [Operating range](docs/operating-range.md) · [Engine choices](docs/choosing.md) |
 
 ## Measured search performance
@@ -144,6 +147,14 @@ This earlier session used the original RC1-code binary and three fresh processes
 </details>
 
 ## Releases
+
+**1.6.0-rc.2 is in preparation.** The additive Python `SnapshotSession` reuses
+the existing native JSONL reader and streams batches while preserving a pinned
+generation. Core/Python versions are `1.6.0-rc.2`/`1.6.0rc2`; companion
+`0.1.2-rc.2` depends on that exact core. The Rust engine and native protocol are
+unchanged. New packaged Python code/tests change the candidate identity and
+require [fresh candidate QA](docs/qa-1.6.md); earlier release receipts do not
+approve this checkout.
 
 **1.5.0** adds bounded JSONL snapshot sessions/batches, explicitly prepared SQ8 caches with reader leases and the accepted HNSW distance-scoring improvement. It preserves original records/f32 vectors, default searches, storage contracts and Rust 1.89 support. P2 bounded-window mmap remains excluded; the optional companion retains its existing full-segment mmap.
 

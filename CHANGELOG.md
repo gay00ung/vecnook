@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.6.0-rc.2 — candidate preparation
+
+- Preserve the sign of inner-product distance JSON `-0` in the new Python session
+  decoder; verify its f64 bits against an actual native search. Keep the local,
+  unpublished RC1 source archive as superseded preparation evidence. No RC1
+  full-duration run or registry publication started.
+
+## 1.6.0-rc.1 — local preparation history
+
+- Add the standard-library Python `SnapshotSession` over the existing native
+  JSONL protocol, with one pinned generation/child, streaming batch results,
+  explicit prepared-cache options and separate initial timing diagnostics.
+- Serialize shared-instance calls and bound startup/request pipe I/O, including
+  blocked writes. Close/reap on protocol failure or timeout, retain native query
+  error categories without silently reopening, and release pins/cache leases
+  through a context manager or idempotent close.
+- Exercise actual subprocess failures and published 1.5 CLI compatibility,
+  full-u64 IDs, original UTF-8/signed zero, old-generation retention, cache lease
+  refusal/release and idle expiry. Existing mutable `Client` calls and the Rust
+  engine, native protocol, dependency-free safe core and Rust 1.89 stay unchanged.
+- Prepare core 1.6.0-rc.1, Python 1.6.0rc1 and exact-core companion 0.1.2-rc.1.
+  New archive identities require fresh source/registry/full-duration gates;
+  candidate publication and stable 1.6.0 approval remain pending.
+
 ## 1.5.0 — 2026-10-31
 
 - Promote RC2's bounded JSONL snapshot sessions/batches, prepared SQ8 caches/leases and accepted HNSW scoring change, paired with exact-core companion 0.1.1 and Python 1.5.0. Preserve the checked runtime, tests, packaged tools, build settings, dependency-free safe core, Rust 1.89, original f32 records and existing default-search/storage contracts. P2 bounded-window mmap stays excluded.
