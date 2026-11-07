@@ -1,9 +1,8 @@
 # Segmented generations, SQ8 and optional platform readers
 
-The 1.6 candidate adds a standard-library [Python retained reader and streaming
-batch API](../clients/python/README.md#reuse-a-published-snapshot-reader) over the
-existing native session protocol. Its candidate validation is pending. Existing
-generation/storage/native contracts below remain unchanged.
+Python 1.6 adds a standard-library [retained reader and streaming batch
+API](../clients/python/README.md#reuse-a-published-snapshot-reader) over the native
+session protocol. Each reader pins the published generation it opened.
 
 The 1.4 release adds a separate immutable bulk snapshot store. Applications can
 publish an acknowledged database or collection view, then let several processes
