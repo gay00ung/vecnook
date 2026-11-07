@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.6.0
+
+- Add Python `SnapshotSession` for applications that search the same published
+  generation repeatedly. It retains one native reader and streams a batch one
+  query at a time. Mutable `Client` calls still open their collection per request.
+  [#13](https://github.com/gay00ung/vecnook/pull/13)
+- Choose resident SQ8 or an explicitly prepared cache when opening the session.
+  Startup diagnostics report store open and cache work separately. Calls on one
+  session are serialized with bounded startup and request I/O. Native query
+  errors can be recovered on the same snapshot. Closing the session or leaving
+  its context manager releases the reader and any cache lease.
+  [#13](https://github.com/gay00ung/vecnook/pull/13)
+- Preserve full-range IDs, original UTF-8 and the sign of zero in native
+  inner-product distances returned through Python.
+  [#13](https://github.com/gay00ung/vecnook/pull/13)
+- Pair optional `vecnook-accel 0.1.2` with exactly core `1.6.0`. Use the
+  Python 1.6.0 wheel with the core CLI. Rust 1.89, JSON v1 and the 1.x storage
+  formats remain supported. See the [1.6 candidate record](docs/qa-1.6.md)
+  for the verified packages, platforms and workloads.
+
+<details>
+<summary>Prerelease history</summary>
+
 ## 1.6.0-rc.2 — candidate preparation
 
 - Preserve the sign of inner-product distance JSON `-0` in the new Python session
@@ -23,6 +46,8 @@
 - Prepare core 1.6.0-rc.1, Python 1.6.0rc1 and exact-core companion 0.1.2-rc.1.
   New archive identities require fresh source/registry/full-duration gates;
   candidate publication and stable 1.6.0 approval remain pending.
+
+</details>
 
 ## 1.5.0 — 2026-10-31
 

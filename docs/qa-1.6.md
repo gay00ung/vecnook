@@ -1,10 +1,40 @@
 # 1.6 candidate QA
 
-Core 1.6.0-rc.2, Python 1.6.0rc2 and exact-core companion 0.1.2-rc.2 are in
-preparation. No 1.6 candidate publication, registry workload or stable promotion
-is approved by this document. The added Python client/tests change the packaged
-source fingerprint even though the Rust engine and native protocol are unchanged.
-Earlier 1.5/RC2/RC1 identities, clocks and measurements remain historical evidence.
+Core 1.6.0-rc.2, Python 1.6.0rc2 and exact-core companion 0.1.2-rc.2 completed
+candidate validation. The [public RC2 release](https://github.com/gay00ung/vecnook/releases/tag/v1.6.0-rc.2)
+contains the checked files and receipts. Stable 1.6.0/0.1.2 has a separate
+publication and installation gate.
+
+## Verified RC2 evidence
+
+The feature archive had SHA-256
+`b5a78f85fe0b0c378469971ef77db6e0bda6dde2956aead71138143b45b7fc7e`.
+Its three independent source-only runs completed before
+[PR #13](https://github.com/gay00ung/vecnook/pull/13) merged. Those runs verified
+189,194 core mutations, 1,287,868 native requests and 1,630,637 Python requests.
+
+The registered core and companion were built from checked main
+`2a61d0de129f2d934de6ac86ddd4055e144c6c6f`. Their archive SHA-256 values are
+`47a9ef82c2ddd80840d9bf598ffa51ad0a6e424199039e857d64cec6c1358f23`
+and `11edbf9d2f3a2fe9e253080066765568b57de47d060c4423419e3ff3ee4f4d29`.
+Each registry workload completed on its own clock.
+
+| Workload | Elapsed seconds | Verified result |
+| --- | ---: | --- |
+| Core mixed operations | 86,400.571 | 189,146 acknowledged mutations and 17 verified backups |
+| Native sessions | 86,400.181 | 1,257,189 requests and 307 released cache leases |
+| Python sessions | 86,401.118 | 1,612,755 requests and 394 released cache leases |
+| Mapped reader | 86,400.079 | 137,712,726 checked records and 352 generations |
+
+The mapped reader binds the final core receipt. Both session workloads released
+all leases and recorded zero session re-encodings. The
+[tag CI](https://github.com/gay00ung/vecnook/actions/runs/42340767410) supplied
+eight registry receipts per crate on Linux, macOS, Windows Server x64 NTFS and
+Windows 11 ARM64 NTFS with Rust 1.89 and stable. The official paired gate and
+both remote tag installations passed. The Python wheel passed with the
+registry CLI. Exact docs.rs API pages, all eight native ZIPs and all 73 public
+assets passed verification, including independent downloads and `SHA256SUMS`.
+These counts describe the validation workload.
 
 ## Local RC1 preparation history
 
