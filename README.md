@@ -40,16 +40,14 @@ Vecnook targets bounded, local datasets with one mutable database handle. The mu
 
 ## Quick start
 
-Requires **Rust 1.89+**. This checkout prepares **1.6.0-rc.2**; publication and its
-new full-duration candidate gates are pending. The examples below target that
-candidate. The latest completed stable release is [1.5.0](https://github.com/gay00ung/vecnook/releases/tag/v1.5.0).
+Requires **Rust 1.89+**. The commands below install **1.6.0**.
 
 <a id="embed-a-database"></a>
 
 ### Rust library
 
 ```bash
-cargo add vecnook@=1.6.0-rc.2
+cargo add vecnook@=1.6.0
 ```
 
 `VectorIndex` is an in-memory index. `Database` adds synced writes, locking, checkpoints, backups, and recovery.
@@ -84,7 +82,7 @@ fn main() -> Result<()> {
 ### Command line
 
 ```bash
-cargo install vecnook --version '=1.6.0-rc.2' --locked
+cargo install vecnook --version '=1.6.0' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -148,21 +146,20 @@ This earlier session used the original RC1-code binary and three fresh processes
 
 ## Releases
 
-**1.6.0-rc.2 is in preparation.** The additive Python `SnapshotSession` reuses
-the existing native JSONL reader and streams batches while preserving a pinned
-generation. Core/Python versions are `1.6.0-rc.2`/`1.6.0rc2`; companion
-`0.1.2-rc.2` depends on that exact core. The Rust engine and native protocol are
-unchanged. New packaged Python code/tests change the candidate identity and
-require [fresh candidate QA](docs/qa-1.6.md); earlier release receipts do not
-approve this checkout.
-
-**1.5.0** adds bounded JSONL snapshot sessions/batches, explicitly prepared SQ8 caches with reader leases and the accepted HNSW distance-scoring improvement. It preserves original records/f32 vectors, default searches, storage contracts and Rust 1.89 support. P2 bounded-window mmap remains excluded; the optional companion retains its existing full-segment mmap.
-
-The optional `vecnook-accel 0.1.1` pairs with exactly core `1.5.0`. Install it when you need its explicit platform APIs:
+**1.6.0** adds Python [`SnapshotSession`](clients/python/README.md#reuse-a-published-snapshot-reader).
+It opens a published generation once and streams batches through the same native
+reader. Close the session to release its generation pin and any prepared cache
+lease. Existing `Client` calls continue to open the collection per request.
+The optional `vecnook-accel 0.1.2` pairs with exactly core `1.6.0`.
 
 ```bash
-cargo install vecnook-accel --version '=0.1.1' --locked
+cargo install vecnook-accel --version '=0.1.2' --locked
 ```
+
+The [1.6 candidate record](docs/qa-1.6.md) links the verified RC2 workloads,
+registry installations and public files.
+
+**1.5.0** adds bounded JSONL snapshot sessions/batches, explicitly prepared SQ8 caches with reader leases and the accepted HNSW distance-scoring improvement. It preserves original records/f32 vectors, default searches, storage contracts and Rust 1.89 support. P2 bounded-window mmap remains excluded; the optional companion retains its existing full-segment mmap.
 
 The Python `1.5.0` wheel needs the native CLI separately. Its Client methods open per request; retained JSONL sessions are a separate CLI interface. See [the generation guide](docs/engine-generations.md#batch-and-session-cli-15) and [development measurements](docs/validation-1.5.md) for startup, validation, preparation and repeated-query costs.
 

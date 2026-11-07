@@ -7,14 +7,13 @@ at runtime and executes the local binary; it is not an in-process Rust binding.
 application owns that collection's exclusive handle. `SnapshotSession` retains a
 separate read-only published generation until you close it.
 
-This checkout prepares Python **1.6.0rc2** with core **1.6.0-rc.2**. Its candidate
-release checks are pending. Install from this checkout to try the new API;
-the published 1.5.0 wheel does not contain `SnapshotSession`.
+Python **1.6.0** provides `SnapshotSession`. Install the matching core **1.6.0**
+CLI before opening a session.
 
 Versioned wheels are attached to the
 [GitHub releases page](https://github.com/gay00ung/vecnook/releases).
 After downloading the wheel, install it with
-`python -m pip install ./vecnook-1.5.0-py3-none-any.whl`.
+`python -m pip install ./vecnook-1.6.0-py3-none-any.whl`.
 
 ```python
 from vecnook import Client
