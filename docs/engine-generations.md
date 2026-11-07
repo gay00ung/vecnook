@@ -195,6 +195,49 @@ not query execution. Fatal input/output failures exit with an error. Process
 termination releases OS leases. A new CURRENT leaves active sessions unchanged:
 open another session to choose it. There is no network listener or generation pool.
 
+## Node.js snapshot session example
+
+The [ES module](../examples/javascript/snapshot-session.mjs) uses Node.js 24 and
+the local Vecnook CLI (1.6.0 or later). Pass a published generation store and
+embeddings in the store's vector space. Use `VECNOOK_BINARY` or the `binary`
+option if the CLI is outside your PATH.
+
+```js
+import { openSnapshotSession } from './examples/javascript/snapshot-session.mjs';
+
+const session = await openSnapshotSession('data/generations');
+try {
+  console.log(session.info().generation);
+  const reply = await session.searchVector([1, -0, 0], 1, {
+    ids: ['18446744073709551615'],
+  });
+  console.log(reply.result.neighbors);
+  for await (const { result } of session.searchBatch([[1, 0, 0], [0, 1, 0]], 3)) {
+    console.log(result.neighbors);
+  }
+} finally {
+  await session.close();
+}
+```
+
+Each session pins one generation until the child exits. Open a new session
+to read a new publication. `searchVector` returns the native envelope, with
+generation, sequence and neighbor IDs as decimal strings. Filter IDs accept
+canonical strings or `BigInt`. Vectors accept arrays and `Float32Array`.
+
+Await each search before starting another on the same session. An async batch
+pulls one vector per result and preserves order. Results already yielded remain
+valid if a later query fails. A native query error keeps its `kind` and leaves
+the session available. A protocol failure, idle expiry or request timeout
+terminates the session. `close()` waits for a pending search and releases the
+generation pin and cache lease when the child exits.
+
+Set `sq8` to reuse resident SQ8 codes, or also set `sq8Cache` to open an
+explicitly prepared cache with optional `bufferBytes`. Startup and each request
+have a 30-second deadline (`timeoutMs`). Native idle expiry defaults to
+60 seconds (`idleMs`). `maxResponseBytes` bounds each UTF-8 response line
+including its newline and defaults to 16 MiB, up to 64 MiB.
+
 ## Prepared SQ8 and bounded buffers (1.5)
 
 Prepare codes explicitly in a dedicated directory outside the source store.
