@@ -139,3 +139,10 @@ The checked core 1.6.0-rc.2/Python 1.6.0rc2 and companion 0.1.2-rc.2 completed
 the source and registry gates, including four independent registry 24-hour
 workloads. [1.6 candidate QA](qa-1.6.md) records the results and the separate
 requirements for stable publication.
+
+## 1.7 Node.js session candidate
+
+The Node.js bridge and regression tests change the packaged core fingerprint.
+Use the new exact archives and the inherited duration and distribution gates.
+The [1.7 candidate QA](qa-1.7.md) also requires the packaged bridge to run
+against the matching CLI on the release platforms.
