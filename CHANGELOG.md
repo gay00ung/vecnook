@@ -1,5 +1,16 @@
 # Changelog
 
+## 1.7.0-rc.1 — candidate preparation
+
+- Add a [Node.js snapshot session example](docs/engine-generations.md#nodejs-snapshot-session-example)
+  for repeated searches and streaming batches against one published generation.
+  The bridge preserves full u64 IDs, UTF-8 metadata and signed zero, and closes
+  the local reader to release its generation and cache leases.
+  [#15](https://github.com/gay00ung/vecnook/pull/15)
+- Prepare the Python 1.7.0rc1 wheel and pair `vecnook-accel 0.1.3-rc.1` with
+  exactly core `1.7.0-rc.1`. The [1.7 candidate QA](docs/qa-1.7.md) tracks the
+  new source and registry checks.
+
 ## 1.6.0
 
 - Add Python `SnapshotSession` for applications that search the same published

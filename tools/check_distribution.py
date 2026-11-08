@@ -119,6 +119,10 @@ def main():
     env = dict(base_env, VECNOOK_BINARY=str(binary))
     command(sys.executable, source / "tools/check_contracts.py", env=env)
     command(sys.executable, "-m", "unittest", "discover", "-s", source / "examples/documents", "-p", "test_*.py", env=env)
+    node_session_tests = source / "examples/javascript/snapshot-session.test.mjs"
+    has_node_session_tests = node_session_tests.is_file()
+    if has_node_session_tests:
+        command("node", "--test", node_session_tests, env=env)
     command(*cargo, "test", "--offline", "--locked", "--manifest-path", source / "Cargo.toml",
             "--target-dir", root / "tests", "--test", "upgrade", "--test", "operations", "--test", "compound_filters", "--test", "user_experience", "--test", "generations")
     consumer = root / "consumer"
@@ -140,6 +144,8 @@ def main():
             raise ValueError("consumer did not resolve the exact checked crates.io library")
     checks = ["installed_cli", "json_contracts", "document_flow", "legacy_upgrade",
               "doctor_export_import_backup", "external_app_restart", "offline_demo_restart", "compound_filters", "user_experience", "segmented_generations"]
+    if has_node_session_tests:
+        checks.append("node_snapshot_session")
     if args.registry:
         checks += ["registry_cli_install", "registry_library_resolution"]
     receipt = dict(schema_version=1, passed=True, version=version, registry=bool(args.registry),
