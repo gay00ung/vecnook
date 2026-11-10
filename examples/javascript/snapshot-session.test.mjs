@@ -49,6 +49,27 @@ async function fixture(t, metric = 'l2') {
   } };
 }
 
+test('runs the local snapshot app through publication and reopen', () => {
+  const script = fileURLToPath(new URL('./local-snapshot-app.mjs', import.meta.url));
+  const app = childProcess.spawnSync(process.execPath, [script], {
+    env: { ...process.env, VECNOOK_BINARY: binary },
+    encoding: 'utf8', timeout: 45_000, windowsHide: true,
+  });
+  if (app.error) throw app.error;
+  assert.equal(app.status, 0, app.stderr);
+  const rows = app.stdout.trim().split(/\r?\n/).map(line => JSON.parse(line));
+  assert.deepEqual(rows.map(row => row.stage), ['initial', 'initial', 'pinned', 'reopened']);
+  for (const row of rows) assert.deepEqual(row.neighbors.map(match => match.id), [id]);
+  const [first, second, pinned, reopened] = rows;
+  assert.equal(first.neighbors[0].distance, 0);
+  assert.ok(second.neighbors[0].distance > 0);
+  assert.equal(first.generation, second.generation);
+  assert.equal(first.generation, pinned.generation);
+  assert.notEqual(pinned.generation, reopened.generation);
+  assert.deepEqual(rows.map(row => row.neighbors[0].metadata),
+    ['Original note', 'Original note', 'Original note', 'Revised note']);
+});
+
 test('streams one filtered query at a time and recovers after a native query error', async t => {
   const { open } = await fixture(t);
   const reader = await open({ sq8: 16 });
