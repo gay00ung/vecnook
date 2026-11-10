@@ -40,14 +40,15 @@ Vecnook targets bounded, local datasets with one mutable database handle. The mu
 
 ## Quick start
 
-Requires **Rust 1.89+**. The commands below install **1.7.0**.
+Requires **Rust 1.89+**. The commands below target **1.8.0-rc.1** when it is available in the registry.
+See the [1.7.0 release instructions](https://github.com/gay00ung/vecnook/tree/v1.7.0#quick-start) for the current stable version.
 
 <a id="embed-a-database"></a>
 
 ### Rust library
 
 ```bash
-cargo add vecnook@=1.7.0
+cargo add vecnook@=1.8.0-rc.1
 ```
 
 `VectorIndex` is an in-memory index. `Database` adds synced writes, locking, checkpoints, backups, and recovery.
@@ -82,7 +83,7 @@ fn main() -> Result<()> {
 ### Command line
 
 ```bash
-cargo install vecnook --version '=1.7.0' --locked
+cargo install vecnook --version '=1.8.0-rc.1' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -145,6 +146,10 @@ This earlier session used the original RC1-code binary and three fresh processes
 </details>
 
 ## Releases
+
+**1.8.0-rc.1** packages a runnable Node.js example for publishing a generation,
+streaming ID-filtered searches and reopening the reader after an update.
+[Local snapshot app](docs/engine-generations.md#nodejs-snapshot-session-example) · [1.8 candidate QA](docs/qa-1.8.md)
 
 **1.7.0** adds a Node.js example that reuses one local snapshot reader for
 repeated vector searches and streams one query at a time. The optional

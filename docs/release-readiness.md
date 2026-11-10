@@ -146,3 +146,9 @@ The checked 1.7.0 RC1 completed separate source and registry gates, including
 four independent registry 24-hour workloads and the packaged Node.js bridge
 against the registry CLI on all eight core distribution jobs. Stable promotion
 requires the separate publication and installation gates. [1.7 candidate QA](qa-1.7.md)
+
+## 1.8 Node.js local app candidate
+
+The packaged app example and test change the core source fingerprint. Run the
+Node.js suite with the CLI installed from the exact package and collect fresh
+source, registry and tag evidence. [1.8 candidate QA](qa-1.8.md)

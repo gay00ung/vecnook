@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.8.0-rc.1
+
+- Run a complete [Node.js snapshot app](docs/engine-generations.md#nodejs-snapshot-session-example)
+  that publishes a fixture, streams ID-filtered searches and reopens a reader
+  after publishing an update. The example shows the original record through
+  the pinned reader and the revision through the new session.
+  [#18](https://github.com/gay00ung/vecnook/pull/18)
+- Prepare core `1.8.0-rc.1`, Python `1.8.0rc1` and exact-core companion
+  `0.1.4-rc.1`. [1.8 candidate QA](docs/qa-1.8.md)
+
 ## 1.7.0
 
 - Open a published generation from Node.js and reuse one local snapshot reader
