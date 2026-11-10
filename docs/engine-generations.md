@@ -238,6 +238,19 @@ have a 30-second deadline (`timeoutMs`). Native idle expiry defaults to
 60 seconds (`idleMs`). `maxResponseBytes` bounds each UTF-8 response line
 including its newline and defaults to 16 MiB, up to 64 MiB.
 
+Run the [local snapshot app](../examples/javascript/local-snapshot-app.mjs) from
+the repository root with Node.js 24 and the CLI on PATH. Set `VECNOOK_BINARY`
+to use a CLI outside your PATH.
+
+```sh
+node examples/javascript/local-snapshot-app.mjs
+```
+
+The example publishes a temporary two-record fixture and streams two searches
+filtered to one ID. It then publishes an updated record. The `pinned` result
+shows the original note, and the `reopened` result shows the revised note from
+the new generation.
+
 ## Prepared SQ8 and bounded buffers (1.5)
 
 Prepare codes explicitly in a dedicated directory outside the source store.
