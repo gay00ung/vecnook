@@ -142,7 +142,7 @@ requirements for stable publication.
 
 ## 1.7 Node.js session candidate
 
-The Node.js bridge and regression tests change the packaged core fingerprint.
-Use the new exact archives and the inherited duration and distribution gates.
-The [1.7 candidate QA](qa-1.7.md) also requires the packaged bridge to run
-against the matching CLI on the release platforms.
+The checked 1.7.0 RC1 completed separate source and registry gates, including
+four independent registry 24-hour workloads and the packaged Node.js bridge
+against the registry CLI on all eight core distribution jobs. Stable promotion
+requires the separate publication and installation gates. [1.7 candidate QA](qa-1.7.md)
