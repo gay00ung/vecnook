@@ -227,7 +227,7 @@ is made by these local development checks. The published 1.4 artifacts are intac
 ## Subsequent candidate validation
 
 The completed PR #9 source 24-hour checks and RC1 registry results retain their
-original identities in [candidate QA](qa-1.5.md). The subsequent RC2 includes the
+original identities in [candidate QA](https://github.com/gay00ung/vecnook/blob/v1.7.0/docs/qa-1.5.md). The subsequent RC2 includes the
 accepted HNSW scoring change and additional packaged benchmark/comparison/demo
 tools; its separate exact-registry core/mapped/session 24-hour workloads, 8+8
 registry consumers, official paired gate and all 75 public assets have now passed.

@@ -149,7 +149,7 @@ This earlier session used the original RC1-code binary and three fresh processes
 
 **1.8.0-rc.1** packages a runnable Node.js example for publishing a generation,
 streaming ID-filtered searches and reopening the reader after an update.
-[Local snapshot app](docs/engine-generations.md#nodejs-snapshot-session-example) · [1.8 candidate QA](docs/qa-1.8.md)
+[Local snapshot app](docs/engine-generations.md#nodejs-snapshot-session-example) · [1.8 candidate QA](https://github.com/gay00ung/vecnook/blob/f88d3f72ba1819e7e7e7d6026c033cd8dd70d6e6/docs/qa-1.8.md)
 
 **1.7.0** adds a Node.js example that reuses one local snapshot reader for
 repeated vector searches and streams one query at a time. The optional
@@ -160,7 +160,7 @@ cargo install vecnook-accel --version '=0.1.3' --locked
 ```
 
 The 1.7 candidate record links the four independent registry workloads,
-installed consumers and checked release files. [1.7 candidate QA](docs/qa-1.7.md)
+installed consumers and checked release files. [1.7 candidate QA](https://github.com/gay00ung/vecnook/blob/v1.7.0/docs/qa-1.7.md)
 
 **1.6.0** adds Python [`SnapshotSession`](clients/python/README.md#reuse-a-published-snapshot-reader).
 It opens a published generation once and streams batches through the same native
@@ -168,14 +168,14 @@ reader. Close the session to release its generation pin and any prepared cache
 lease. Existing `Client` calls continue to open the collection per request.
 The optional `vecnook-accel 0.1.2` pairs with exactly core `1.6.0`.
 
-The [1.6 candidate record](docs/qa-1.6.md) links the verified RC2 workloads,
+The [1.6 candidate record](https://github.com/gay00ung/vecnook/blob/v1.7.0/docs/qa-1.6.md) links the verified RC2 workloads,
 registry installations and public files.
 
 **1.5.0** adds bounded JSONL snapshot sessions/batches, explicitly prepared SQ8 caches with reader leases and the accepted HNSW distance-scoring improvement. It preserves original records/f32 vectors, default searches, storage contracts and Rust 1.89 support. P2 bounded-window mmap remains excluded; the optional companion retains its existing full-segment mmap.
 
 The Python `1.5.0` wheel needs the native CLI separately. Its Client methods open per request; retained JSONL sessions are a separate CLI interface. See [the generation guide](docs/engine-generations.md#batch-and-session-cli-15) and [development measurements](docs/validation-1.5.md) for startup, validation, preparation and repeated-query costs.
 
-The [checked RC2](https://github.com/gay00ung/vecnook/releases/tag/v1.5.0-rc.2) completed three independent actual-registry 24-hour workloads, eight core and eight paired companion registry checks, actual remote-tag installations, tag CI/native ZIP checks and verification of all 75 public assets. [Candidate QA](docs/qa-1.5.md) records exact identities and results. Stable promotion changes versions, exact dependencies, lockfiles and documentation while preserving the checked runtime/tests/tools/build settings. Release files are listed on the [releases page](https://github.com/gay00ung/vecnook/releases).
+The [checked RC2](https://github.com/gay00ung/vecnook/releases/tag/v1.5.0-rc.2) completed three independent actual-registry 24-hour workloads, eight core and eight paired companion registry checks, actual remote-tag installations, tag CI/native ZIP checks and verification of all 75 public assets. [Candidate QA](https://github.com/gay00ung/vecnook/blob/v1.7.0/docs/qa-1.5.md) records exact identities and results. Stable promotion changes versions, exact dependencies, lockfiles and documentation while preserving the checked runtime/tests/tools/build settings. Release files are listed on the [releases page](https://github.com/gay00ung/vecnook/releases).
 
 <details>
 <summary>Earlier releases and validation</summary>
