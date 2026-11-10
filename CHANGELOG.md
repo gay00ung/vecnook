@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.7.0
+
+- Open a published generation from Node.js and reuse one local snapshot reader
+  across repeated vector searches. `searchBatch` pulls one vector per result
+  and preserves request order. Close the session to release its generation pin
+  and any prepared-cache lease. [Node.js usage](docs/engine-generations.md#nodejs-snapshot-session-example) · [#15](https://github.com/gay00ung/vecnook/pull/15)
+- The Node.js bridge preserves full u64 IDs as decimal strings, UTF-8 metadata
+  and signed-zero distances. ID filters accept decimal strings or `BigInt`, and vectors accept arrays
+  or `Float32Array` vectors. A native query error leaves the pinned session
+  available for the next request. [#15](https://github.com/gay00ung/vecnook/pull/15)
+- Pair the Python 1.7.0 wheel with the core 1.7.0 CLI. Optional
+  `vecnook-accel 0.1.3` pins exactly core `1.7.0` and uses full-segment mmap.
+  Rust 1.89, original records and `f32` vectors, CLI JSON v1, default searches
+  and the 1.x storage formats remain supported. [1.7 candidate QA](docs/qa-1.7.md)
+
+<details>
+<summary>Prerelease history</summary>
+
 ## 1.7.0-rc.1 — candidate preparation
 
 - Add a [Node.js snapshot session example](docs/engine-generations.md#nodejs-snapshot-session-example)
@@ -10,6 +28,8 @@
 - Prepare the Python 1.7.0rc1 wheel and pair `vecnook-accel 0.1.3-rc.1` with
   exactly core `1.7.0-rc.1`. The [1.7 candidate QA](docs/qa-1.7.md) tracks the
   new source and registry checks.
+
+</details>
 
 ## 1.6.0
 
