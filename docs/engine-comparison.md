@@ -43,8 +43,8 @@ construction and warmup. Of 4,105 main-thread samples, **3,891 (94.8%)** had
 candidate-scoring call. Disassembly showed the original cosine reduction adding
 coordinate products into one ordered `f64` accumulator. Multiplications already
 used compiler-generated vector instructions; the ordered addition chain remained.
-The [sample call graph](benchmarks/search-profile-before-2026-10-29.txt) and
-[diagnostic identities and checks](benchmarks/search-optimization-evidence-2026-10-29.json)
+The [sample call graph](https://github.com/gay00ung/vecnook/blob/v1.7.0/docs/benchmarks/search-profile-before-2026-10-29.txt) and
+[diagnostic identities and checks](https://github.com/gay00ung/vecnook/blob/v1.7.0/docs/benchmarks/search-optimization-evidence-2026-10-29.json)
 are retained separately from the timed comparison.
 
 Every actual USearch benchmark process reported **`hardware_acceleration=neon`**.
@@ -122,10 +122,10 @@ corpora, server concurrency, production applications, or the CLI/SQ8/mmap costs.
 
 ## Evidence and identity
 
-- [All 32 results, environment, binary hashes, and aggregation](benchmarks/engine-comparison-before-after-2026-10-29.json)
-- [First 16-run series](benchmarks/engine-comparison-series1-2026-10-29.json) · [Second 16-run series](benchmarks/engine-comparison-series2-2026-10-29.json)
-- [Equivalence and profiling evidence](benchmarks/search-optimization-evidence-2026-10-29.json)
-- [Original nine-run comparison](benchmarks/engine-comparison-2026-10-29.json) · [Historical RC1 candidate-pool sweep](current-benchmarks.md)
+- [All 32 results, environment, binary hashes, and aggregation](https://github.com/gay00ung/vecnook/blob/v1.7.0/docs/benchmarks/engine-comparison-before-after-2026-10-29.json)
+- [First 16-run series](https://github.com/gay00ung/vecnook/blob/v1.7.0/docs/benchmarks/engine-comparison-series1-2026-10-29.json) · [Second 16-run series](https://github.com/gay00ung/vecnook/blob/v1.7.0/docs/benchmarks/engine-comparison-series2-2026-10-29.json)
+- [Equivalence and profiling evidence](https://github.com/gay00ung/vecnook/blob/v1.7.0/docs/benchmarks/search-optimization-evidence-2026-10-29.json)
+- [Original nine-run comparison](https://github.com/gay00ung/vecnook/blob/v1.7.0/docs/benchmarks/engine-comparison-2026-10-29.json) · [Historical RC1 candidate-pool sweep](current-benchmarks.md)
 
 | Artifact | SHA-256 |
 | --- | --- |

@@ -21,6 +21,8 @@ def check(path):
                 raise ValueError(f"private/generated path in package: {relative}")
             if name.startswith("LOCAL_") or name in {"PLAN.md", "PLANNING_QA.md", "IMPLEMENTATION_QA.md"}:
                 raise ValueError(f"planning document in package: {relative}")
+            if relative.match("docs/qa-*.md"):
+                raise ValueError(f"release QA document in package: {relative}")
             allowed = len(relative.parts) == 1 and name in ROOT_FILES
             if len(relative.parts) > 1:
                 top = relative.parts[0]

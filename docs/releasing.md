@@ -16,7 +16,7 @@ cargo package --offline --list
 cargo tree --offline
 ```
 
-CI also checks Rust 1.89. Inspect the source archive: it must contain no `work/`, `data/`, planning/QA documents, Python bytecode, credentials, or generated database files. Install the packaged source into a fresh directory and test a consumer of the packaged library. Runtime model weights and benchmark datasets stay outside the crate.
+CI also checks Rust 1.89. Inspect the source archive: it must contain no `work/`, `data/`, planning/QA documents, Python bytecode, credentials, or generated database files. Keep the versioned QA records in the repository and link to them from the packaged documentation. Install the packaged source into a fresh directory and test a consumer of the packaged library. Runtime model weights and benchmark datasets stay outside the crate.
 
 ## Registry authentication
 

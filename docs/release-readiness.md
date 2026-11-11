@@ -118,7 +118,7 @@ approve the registered source or full-duration workload. See
 
 ## Additional 1.5 cache/session gate
 
-The [1.5 candidate protocol](qa-1.5.md) adds prepared-cache/lease checks to the
+The [1.5 candidate protocol](https://github.com/gay00ung/vecnook/blob/v1.7.0/docs/qa-1.5.md) adds prepared-cache/lease checks to the
 core workload and an independent full24h session/cache workload. Stable approval
 requires those exact-archive lifecycle/request/fixture gates alongside the paired
 core/mapped-reader gates. New packaged tools change the frozen source fingerprint,
@@ -128,7 +128,7 @@ approve its changed runtime or tool sources.
 
 The checked 1.5 RC2 completed these candidate gates, including the separate
 actual-registry session/cache workload and all public assets; exact identities and
-results are in [1.5 candidate QA](qa-1.5.md). Stable 1.5 promotion preserves the
+results are in [1.5 candidate QA](https://github.com/gay00ung/vecnook/blob/v1.7.0/docs/qa-1.5.md). Stable 1.5 promotion preserves the
 checked runtime/tests/tools/build settings and still requires the normal PR/main
 CI, official publication/equivalence gates and fresh actual stable distributions.
 
@@ -137,7 +137,7 @@ CI, official publication/equivalence gates and fresh actual stable distributions
 The additive Python retained-session client changes the packaged source identity.
 The checked core 1.6.0-rc.2/Python 1.6.0rc2 and companion 0.1.2-rc.2 completed
 the source and registry gates, including four independent registry 24-hour
-workloads. [1.6 candidate QA](qa-1.6.md) records the results and the separate
+workloads. [1.6 candidate QA](https://github.com/gay00ung/vecnook/blob/v1.7.0/docs/qa-1.6.md) records the results and the separate
 requirements for stable publication.
 
 ## 1.7 Node.js session candidate
@@ -145,4 +145,10 @@ requirements for stable publication.
 The checked 1.7.0 RC1 completed separate source and registry gates, including
 four independent registry 24-hour workloads and the packaged Node.js bridge
 against the registry CLI on all eight core distribution jobs. Stable promotion
-requires the separate publication and installation gates. [1.7 candidate QA](qa-1.7.md)
+requires the separate publication and installation gates. [1.7 candidate QA](https://github.com/gay00ung/vecnook/blob/v1.7.0/docs/qa-1.7.md)
+
+## 1.8 Node.js local app candidate
+
+The packaged app example and test change the core source fingerprint. Run the
+Node.js suite with the CLI installed from the exact package and collect fresh
+source, registry and tag evidence. [1.8 candidate QA](https://github.com/gay00ung/vecnook/blob/f88d3f72ba1819e7e7e7d6026c033cd8dd70d6e6/docs/qa-1.8.md)
