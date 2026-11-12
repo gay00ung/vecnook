@@ -147,7 +147,9 @@ For a new collection, `docs-sync --chunker markdown-v1` separates headings and
 long paragraphs, keeps small fenced blocks together and falls back to the normal
 byte bound for oversized blocks/lines. Original UTF-8 bytes and line references
 are preserved. `--include-text` additionally reads UTF-8 `.txt` files; it is
-explicit on each scan. Both modes retain the existing source/chunk limits.
+explicit on each scan. `--prune` removes missing sources only in the formats
+selected for that scan. Add `--include-text` when pruning missing `.txt`
+sources. Both modes retain the existing source/chunk limits.
 
 Structural chunking records identity input schema `prompt_version=2` and the
 chunker name, so older convenience clients reject that new workflow instead of

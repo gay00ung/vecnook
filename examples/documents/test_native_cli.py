@@ -49,6 +49,35 @@ class NativeCliTests(unittest.TestCase):
                                        "--mode", "keyword", "--json", "--ollama-url", origin))
         self.assertEqual(result["neighbors"], [])
 
+    def test_prune_only_removes_missing_sources_in_scanned_formats(self):
+        args = [self.documents, "--db", self.args.db, "--ollama-url", self.client.url, "--json"]
+        text = self.documents / "retained.TXT"
+        text.write_bytes("텍스트 원문 🚀\r\n".encode("utf-8"))
+        markdown = next(self.documents.glob("*.md"))
+
+        def inspect():
+            return json.loads(self.native("docs-inspect", self.args.db.parent, self.args.db.name))
+
+        self.native("docs-sync", *args, "--include-text")
+        before = inspect()
+        self.assertEqual({row["source"] for row in before["documents"]}, {markdown.name, text.name})
+        original = next(row for row in before["documents"] if row["source"] == text.name)
+        requests = len(self.server.inputs)
+        markdown.unlink()
+
+        plan = json.loads(self.native("docs-sync", *args, "--prune", "--dry-run"))
+        self.assertEqual(plan["deleted_sources"], [markdown.name])
+        self.assertEqual(inspect(), before)
+        result = json.loads(self.native("docs-sync", *args, "--prune"))
+        self.assertEqual(result["deleted"], 1)
+        self.assertEqual(inspect()["documents"], [original])
+
+        text.unlink()
+        result = json.loads(self.native("docs-sync", *args, "--prune", "--include-text"))
+        self.assertEqual(result["deleted"], 1)
+        self.assertEqual(inspect()["documents"], [])
+        self.assertEqual(len(self.server.inputs), requests)
+
     def test_default_find_selects_identifiers_and_keyword_queries_do_not_request_embeddings(self):
         origin = self.client.url
         self.native("docs-sync", self.documents, "--db", self.args.db, "--ollama-url", origin)
