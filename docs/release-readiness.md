@@ -155,3 +155,11 @@ checks, four independent 24-hour registry workloads, and eight actual registry
 jobs per crate. Each core job ran the Node.js suite with the matching CLI.
 Stable promotion requires separate publication and installation checks.
 [1.8 candidate QA](https://github.com/gay00ung/vecnook/blob/v1.8.0/docs/qa-1.8.md)
+
+## 1.8.1 document sync prune candidate
+
+Pruning is limited to the selected file formats. The embedded document client
+and its regression test change the shipped source fingerprint. Verify the
+actual installed CLI's dry-run and write paths against a mixed Markdown/text
+folder. The [1.8.1 candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.8.1.md)
+requires fresh source and exact registry evidence for both archives.

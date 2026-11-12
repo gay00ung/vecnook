@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.1-rc.1
+
+- Keep previously indexed `.txt` records when `docs-sync --prune` scans
+  Markdown only. Pass `--include-text` to prune missing text files as well.
+  `--dry-run` and the write use the same scope. The Rust API, CLI JSON v1,
+  storage format and search defaults are unchanged.
+- Pair core `1.8.1-rc.1`, Python wheel `1.8.1rc1` and companion
+  `0.1.5-rc.1`. [Candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.8.1.md).
+
 ## 1.8.0
 
 - Run the packaged [Node.js local snapshot app](docs/engine-generations.md#nodejs-snapshot-session-example)
