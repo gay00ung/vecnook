@@ -7,13 +7,12 @@ at runtime and executes the local binary; it is not an in-process Rust binding.
 application owns that collection's exclusive handle. `SnapshotSession` retains a
 separate read-only published generation until you close it.
 
-Pair the Python **1.8.0rc1** wheel with the core **1.8.0-rc.1** CLI.
-The stable wheel and CLI are available from the [1.7.0 release](https://github.com/gay00ung/vecnook/releases/tag/v1.7.0).
+Pair the Python **1.8.0** wheel with the core **1.8.0** CLI.
 
 Versioned wheels are attached to the
 [GitHub releases page](https://github.com/gay00ung/vecnook/releases).
 After downloading the wheel, install it with
-`python -m pip install ./vecnook-1.8.0rc1-py3-none-any.whl`.
+`python -m pip install ./vecnook-1.8.0-py3-none-any.whl`.
 
 ```python
 from vecnook import Client

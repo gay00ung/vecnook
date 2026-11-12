@@ -44,3 +44,39 @@ documentation edits. Use separate clean-main and tag CI, the ordered core and
 actual companion publication gates, fresh registry consumers and the formal
 release verification. Repository examples and external app observations have
 separate evidence. [Feedback workflow](feedback.md)
+
+## RC1 evidence
+
+The [public prerelease](https://github.com/gay00ung/vecnook/releases/tag/v1.8.0-rc.1) records clean-main
+commit 520849294c8c9c5a26e9ef72d72e0ff4406d62bf and the annotated tag. These are the actual Cargo registry archives and the
+Python wheel checked against the registry CLI:
+
+| Archive | SHA-256 |
+| --- | --- |
+| vecnook-1.8.0-rc.1.crate | 4431452ffc2c40d08f3182d3db61e5eb50140ef9d9859d211850325fcfcb6fd3 |
+| vecnook-accel-0.1.4-rc.1.crate | 50095b44f1b990f394110d4ca75a63d94ffd72e58c0a589a894beda829ae80c3 |
+| vecnook-1.8.0rc1-py3-none-any.whl | 0bc9fb50390920ec2d54c9a46a99b9717cc687fd072feea884c261fdd39d46cc |
+
+The separate source-only audit used commit 2513892b80b76cb7773dcec50ae1fccdb5d526e0.
+Each of the four public registry runs completed with exit status zero and
+at least 86,400 seconds on its own clock.
+
+| Workload | Elapsed seconds | Checked result |
+| --- | ---: | --- |
+| Mixed core | 86400.578369833 | 189,289 acknowledged mutations, 17 verified backups |
+| Native sessions | 86400.19129700004 | 1,269,865 verified requests, 311 released leases |
+| Python sessions | 86400.088853875 | 1,620,059 verified requests, 396 released leases |
+| Mapped reader | 86400.044292958 | 138,136,021 checked records, 355 observed generations |
+
+The mapped reader binds the successful final core publisher receipt.
+[Tag CI](https://github.com/gay00ung/vecnook/actions/runs/43138437679) checked both exact registry
+packages and the packaged Node.js suite across Linux x64, macOS ARM64,
+Windows Server x64 NTFS and Windows 11 ARM64 NTFS with Rust 1.89 and stable.
+Both remote tag installations, the wheel against the registry CLI and the
+[eight native ZIPs](https://github.com/gay00ung/vecnook/actions/runs/43138437667) passed. All
+74 assets matched server sizes and digests and independent
+unauthenticated downloads. SHA256SUMS covers the other 73
+assets.
+
+These counts describe the release workloads. Independent observations from
+external users and real applications are tracked separately.

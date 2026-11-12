@@ -149,6 +149,9 @@ requires the separate publication and installation gates. [1.7 candidate QA](htt
 
 ## 1.8 Node.js local app candidate
 
-The packaged app example and test change the core source fingerprint. Run the
-Node.js suite with the CLI installed from the exact package and collect fresh
-source, registry and tag evidence. [1.8 candidate QA](https://github.com/gay00ung/vecnook/blob/f88d3f72ba1819e7e7e7d6026c033cd8dd70d6e6/docs/qa-1.8.md)
+The packaged app example and test change the core source fingerprint. The
+[checked 1.8 RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.8.0-rc.1) completed separate source and registry
+checks, four independent 24-hour registry workloads, and eight actual registry
+jobs per crate. Each core job ran the Node.js suite with the matching CLI.
+Stable promotion requires separate publication and installation checks.
+[1.8 candidate QA](https://github.com/gay00ung/vecnook/blob/v1.8.0/docs/qa-1.8.md)

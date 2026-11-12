@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.8.0
+
+- Run the packaged [Node.js local snapshot app](docs/engine-generations.md#nodejs-snapshot-session-example)
+  with Node.js 24. The app publishes a two-record fixture and streams searches
+  filtered to one ID. After an update, the pinned reader still returns the
+  original note; a reopened session returns the revision.
+  [#18](https://github.com/gay00ung/vecnook/pull/18)
+- Pair the Python 1.8.0 wheel with the core 1.8.0 CLI. The optional
+  vecnook-accel 0.1.4 companion requires exactly core 1.8.0 and maps complete
+  segments. Rust 1.89, original records and f32 vectors, CLI JSON v1,
+  default searches and 1.x storage formats remain supported.
+- The packaged docs link to the [versioned QA record](https://github.com/gay00ung/vecnook/blob/v1.8.0/docs/qa-1.8.md), which stays in the
+  repository. The [public RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.8.0-rc.1) records four independent 24-hour registry
+  checks, the installed consumers and their verified assets.
+  [#19](https://github.com/gay00ung/vecnook/pull/19)
+
+<details>
+<summary>Prerelease history</summary>
+
 ## 1.8.0-rc.1
 
 - Run a complete [Node.js snapshot app](docs/engine-generations.md#nodejs-snapshot-session-example)
@@ -9,6 +28,8 @@
   [#18](https://github.com/gay00ung/vecnook/pull/18)
 - Prepare core `1.8.0-rc.1`, Python `1.8.0rc1` and exact-core companion
   `0.1.4-rc.1`. [1.8 candidate QA](https://github.com/gay00ung/vecnook/blob/f88d3f72ba1819e7e7e7d6026c033cd8dd70d6e6/docs/qa-1.8.md)
+
+</details>
 
 ## 1.7.0
 

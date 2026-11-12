@@ -40,15 +40,14 @@ Vecnook targets bounded, local datasets with one mutable database handle. The mu
 
 ## Quick start
 
-Requires **Rust 1.89+**. The commands below target **1.8.0-rc.1** when it is available in the registry.
-See the [1.7.0 release instructions](https://github.com/gay00ung/vecnook/tree/v1.7.0#quick-start) for the current stable version.
+Requires **Rust 1.89+**. The commands below target **1.8.0**.
 
 <a id="embed-a-database"></a>
 
 ### Rust library
 
 ```bash
-cargo add vecnook@=1.8.0-rc.1
+cargo add vecnook@=1.8.0
 ```
 
 `VectorIndex` is an in-memory index. `Database` adds synced writes, locking, checkpoints, backups, and recovery.
@@ -83,7 +82,7 @@ fn main() -> Result<()> {
 ### Command line
 
 ```bash
-cargo install vecnook --version '=1.8.0-rc.1' --locked
+cargo install vecnook --version '=1.8.0' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -147,9 +146,17 @@ This earlier session used the original RC1-code binary and three fresh processes
 
 ## Releases
 
-**1.8.0-rc.1** packages a runnable Node.js example for publishing a generation,
-streaming ID-filtered searches and reopening the reader after an update.
-[Local snapshot app](docs/engine-generations.md#nodejs-snapshot-session-example) · [1.8 candidate QA](https://github.com/gay00ung/vecnook/blob/f88d3f72ba1819e7e7e7d6026c033cd8dd70d6e6/docs/qa-1.8.md)
+**1.8.0** packages a runnable [Node.js snapshot app](docs/engine-generations.md#nodejs-snapshot-session-example).
+It streams searches against a pinned generation, publishes a revision, and
+reopens the session to read the updated record. The Python 1.8.0 wheel uses
+the core CLI. Optional vecnook-accel 0.1.4 pairs with exactly core 1.8.0.
+
+```bash
+cargo install vecnook-accel --version '=0.1.4' --locked
+```
+
+The [checked RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.8.0-rc.1) records the four independent 24-hour registry
+workloads and package installations. [1.8 candidate QA](https://github.com/gay00ung/vecnook/blob/v1.8.0/docs/qa-1.8.md)
 
 **1.7.0** adds a Node.js example that reuses one local snapshot reader for
 repeated vector searches and streams one query at a time. The optional
