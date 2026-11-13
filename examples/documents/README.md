@@ -46,7 +46,18 @@ Use the same user tags as the original import. Unchanged source/chunk content, l
 
 Imports store a reserved `vecnook:sync:v1:` tag identifying the managed folder. User-facing search hides this management tag; the collection API retains it. The default namespace derives from the absolute folder path. For portable folders, supply the same `--namespace my-notes` on the initial `index` and every `sync`. This namespace must own one source folder in the collection. Collections made by the older importer have no management tag: build a new collection rather than silently adopting their records. Unmanaged source collisions are rejected, and pruning only removes sources in the selected namespace.
 
-Pruning requires an explicit flag and a complete successful directory scan. Access errors, symlink directories/files and model errors abort it. Changing a file to empty removes its old chunks as an explicit update. Deleting a file requires `--prune`. The stored model digest, prompts, dimensions and metric must match; a changed model requires a new collection. Omit `sync --model` to infer the existing model. A sequence precondition rejects intervening writes: rerun the sync after a conflict. Successful batches are durable before the command reports completion; a checkpoint is separate maintenance. Completion reports changed, unchanged, deleted and failed file counts.
+Pruning requires `--prune` and a complete successful scan. It removes missing
+sources in the scanned formats: `.md` by default, plus `.txt` with
+`--include-text`. Use `--dry-run` to review which sources would be removed.
+Access errors, symlinks and model errors abort pruning. A file made empty still
+removes its old chunks as an explicit update.
+
+The stored model digest, prompts, dimensions and metric must match; a changed
+model requires a new collection. Omit `sync --model` to infer the existing
+model. A sequence precondition rejects intervening writes: rerun the sync after
+a conflict. Successful batches are durable before completion is reported;
+a checkpoint is separate maintenance. Completion reports changed, unchanged,
+deleted and failed file counts.
 
 ## Complete application flow
 

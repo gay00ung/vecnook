@@ -355,8 +355,9 @@ def sync_documents(args, client):
     chunker = getattr(args, "chunker", None) or identity.get("chunker", "bytes-v1")
     if manifest and (model != identity["model"] or chunker != identity.get("chunker", "bytes-v1")):
         raise ValueError("embedding model/chunker changed; rebuild into a new collection with docs-reindex")
+    formats = input_formats(args)
     chunks, sources = read_chunks(args.documents, allow_empty=True, include_sources=True,
-                                 chunker=chunker, formats=input_formats(args))
+                                 chunker=chunker, formats=formats)
     tag, tags = managed_tag(args), import_tags(args)
     state = inspected_state(args) if manifest else dict(documents=[], sequence="0", diagnostics={})
     documents, sequence = state["documents"], int(state["sequence"])
@@ -409,7 +410,11 @@ def sync_documents(args, client):
                 next_id += 1
             rows.append((identifier, c, encode_document(identifier, c, tags, *chunk_metadata(c, record_metadata))))
         plans.append(dict(source=source, old=old, rows=rows, vectors=vectors))
-    removed = sorted(set(stored) - set(incoming)) if getattr(args, "prune", False) else []
+    removed = []
+    if getattr(args, "prune", False):
+        # A source outside this scan's formats is not known to be missing.
+        removed = sorted(source for source in stored.keys() - incoming.keys()
+                         if Path(source).suffix.lower() in formats)
     for source in removed:
         if len(stored[source]) > 1024:
             raise ValueError(f"prune source exceeds 1024 operations: {source}")
