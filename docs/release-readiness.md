@@ -161,5 +161,5 @@ Stable promotion requires separate publication and installation checks.
 Pruning is limited to the selected file formats. The embedded document client
 and its regression test change the shipped source fingerprint. Verify the
 actual installed CLI's dry-run and write paths against a mixed Markdown/text
-folder. The [1.8.1 candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.8.1.md)
+folder. The [1.8.1 candidate QA](https://github.com/gay00ung/vecnook/blob/6165904d73b1d5925385db1bc459cef01ff7a1c9/docs/qa-1.8.1.md)
 requires fresh source and exact registry evidence for both archives.
