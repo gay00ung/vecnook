@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.8.1
+
+- Keep previously indexed `.txt` records when `docs-sync --prune` scans
+  Markdown only. Pass `--include-text` to prune missing text files as well.
+  Dry-run and write use the same scope.
+  [#21](https://github.com/gay00ung/vecnook/pull/21)
+- Pair core `1.8.1`, Python wheel `1.8.1` and optional companion `0.1.5`.
+  The companion requires exactly core `1.8.1` and maps complete segments.
+  Rust 1.89, original text and f32 vectors, the Rust API, CLI JSON v1,
+  default searches and 1.x storage formats remain supported.
+- The [checked RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.8.1-rc.1) records the four independent 24-hour
+  workloads and the verified registry installations.
+  [Versioned QA record](https://github.com/gay00ung/vecnook/blob/6165904d73b1d5925385db1bc459cef01ff7a1c9/docs/qa-1.8.1.md)
+
+<details>
+<summary>Prerelease history</summary>
+
 ## 1.8.1-rc.1
 
 - Keep previously indexed `.txt` records when `docs-sync --prune` scans
@@ -8,6 +25,8 @@
   storage format and search defaults are unchanged.
 - Pair core `1.8.1-rc.1`, Python wheel `1.8.1rc1` and companion
   `0.1.5-rc.1`. [Candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.8.1.md).
+
+</details>
 
 ## 1.8.0
 

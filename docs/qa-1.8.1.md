@@ -45,3 +45,22 @@ release assets against server digests and SHA256SUMS. Promote only the checked
 runtime, tests, tools and build settings. Stable has its own PR, clean-main,
 paired publication and public verification gates. Internal fixtures do not
 establish external adoption.
+
+## Checked RC1 results
+
+The [public candidate](https://github.com/gay00ung/vecnook/releases/tag/v1.8.1-rc.1)
+passed the installed CLI regression and the paired archive checks. Each public
+package workload ran at least 86,400 seconds and exited with status 0.
+
+- Mixed core acknowledged 189,230 mutations.
+- Native sessions verified 1,217,683 requests.
+- Python sessions verified 1,587,996 requests.
+- The mapped reader checked 136,637,438 records and matched the final core publisher receipt.
+
+[Tag CI](https://github.com/gay00ung/vecnook/actions/runs/43575019767) checked both registry packages
+with Rust 1.89 and stable on Linux x64, macOS ARM64, Windows Server x64 NTFS
+and Windows 11 ARM64 NTFS. Separate source-only receipts, eight native CLI
+archives and the installed Python wheel are on the candidate release. All
+75 public assets matched the server sizes, digests and
+`SHA256SUMS`. This evidence applies to the candidate archives. Stable verifies
+its own registry packages, installations and release assets.
