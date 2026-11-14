@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.0-rc.1
+
+- Python `Client.sync` accepts `include_text=True` for the existing opt-in
+  UTF-8 text scan. Dry-run and prune follow the CLI's selected formats.
+  Markdown remains the default.
+- Pair core `1.9.0-rc.1`, Python wheel `1.9.0rc1` and optional companion
+  `0.1.6-rc.1`. [Candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.9.md)
+
 ## 1.8.1
 
 - Keep previously indexed `.txt` records when `docs-sync --prune` scans
