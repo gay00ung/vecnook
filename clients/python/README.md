@@ -7,12 +7,13 @@ at runtime and executes the local binary; it is not an in-process Rust binding.
 application owns that collection's exclusive handle. `SnapshotSession` retains a
 separate read-only published generation until you close it.
 
-Pair the Python **1.8.1** wheel with the core **1.8.1** CLI.
+Pair the Python **1.9.0rc1** wheel with the core **1.9.0-rc.1** CLI.
+For stable installations, use the [1.8.1 release](https://github.com/gay00ung/vecnook/releases/tag/v1.8.1).
 
 Versioned wheels are attached to the
 [GitHub releases page](https://github.com/gay00ung/vecnook/releases).
 After downloading the wheel, install it with
-`python -m pip install ./vecnook-1.8.1-py3-none-any.whl`.
+`python -m pip install ./vecnook-1.9.0rc1-py3-none-any.whl`.
 
 ```python
 from vecnook import Client
@@ -26,7 +27,10 @@ restored = Client.import_jsonl("data/search.jsonl", "data/restored")
 ```
 
 For an Ollama collection, `sync` and `search` connect to the locally installed
-model. `put_text` instead accepts your own embedding callable and the exact
+model. `sync` scans Markdown by default. Pass `include_text=True` to also scan
+UTF-8 `.txt` files, including when previewing with `dry_run=True`. With
+`prune=True`, the selected formats determine which missing sources are removed.
+`put_text` instead accepts your own embedding callable and the exact
 collection identity. Include model digest/version and prompts in that identity.
 This package does not select a provider, download models or send telemetry.
 

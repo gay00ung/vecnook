@@ -6,6 +6,7 @@ import io
 import json
 import os
 from pathlib import Path
+import struct
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -137,6 +138,51 @@ class ExperienceTests(unittest.TestCase):
             search.reindex_documents(self.args, self.client)
         self.assertEqual(search.inspected_state(self.args), old)
 
+    def test_python_sync_can_opt_in_to_text_scanning_and_pruning(self):
+        package = Path(__file__).resolve().parents[2] / 'clients/python/vecnook.py'
+        spec = importlib.util.spec_from_file_location('vecnook_client', package)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        origin = self.client.url
+
+        class LocalFixtureClient(module.Client):
+            def _run(self, command, *arguments, **kwargs):
+                if command == 'docs-sync':
+                    arguments = (*arguments, '--ollama-url', origin)
+                return super()._run(command, *arguments, **kwargs)
+
+        client = LocalFixtureClient(self.args.db, binary=self.args.binary)
+        markdown = next(self.documents.glob('*.md'))
+        text = self.documents / 'retained.TXT'
+        original_text = '텍스트 원문 🚀\r\n'
+        text.write_bytes(original_text.encode('utf-8'))
+        preview = client.sync(self.documents, dry_run=True, include_text=True)
+        self.assertEqual({entry['source'] for entry in preview['files']}, {markdown.name, text.name})
+        self.assertFalse(self.args.db.exists())
+        self.assertEqual(self.server.inputs, [])
+
+        self.assertEqual(client.sync(self.documents, include_text=True)['changed'], 2)
+        before = client.inspect()
+        original = next(row for row in before['documents'] if row['source'] == text.name)
+        self.assertEqual(original['text'], original_text)
+        vector_bits = struct.pack('<2f', *original['vector'])
+        requests = len(self.server.inputs)
+        markdown.unlink()
+
+        default = client.sync(self.documents, dry_run=True, prune=True)
+        self.assertEqual(default['deleted_sources'], [markdown.name])
+        self.assertEqual(client.sync(self.documents, dry_run=True, prune=True, include_text=False), default)
+        self.assertEqual(client.inspect(), before)
+        self.assertEqual(client.sync(self.documents, prune=True)['deleted'], 1)
+        retained = client.inspect()['documents']
+        self.assertEqual(retained, [original])
+        self.assertEqual(struct.pack('<2f', *retained[0]['vector']), vector_bits)
+
+        text.unlink()
+        self.assertEqual(client.sync(self.documents, prune=True, include_text=True)['deleted_sources'], [text.name])
+        self.assertEqual(client.inspect()['documents'], [])
+        self.assertEqual(len(self.server.inputs), requests)
+
     def test_jsonl_roundtrip_large_ids_f32_bits_and_invalid_import_is_unclaimed(self):
         self.sync()
         state = search.inspected_state(self.args)
@@ -157,7 +203,6 @@ class ExperienceTests(unittest.TestCase):
         restored = search.inspected_state(self.args)['documents'][0]
         self.assertEqual(restored['id'], str(2**64-1))
         self.assertEqual(restored['text'], state['documents'][0]['text'])
-        import struct
         self.assertEqual(struct.pack('<ff', *restored['vector']), struct.pack('<ff', *row['vector']))
         self.args.db = self.root/'invalid'
         self.args.input.write_text(lines[0]+'\n'+lines[1]+'\n'+lines[1]+'\n', encoding='utf-8')

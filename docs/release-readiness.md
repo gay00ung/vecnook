@@ -163,3 +163,11 @@ and its regression test change the shipped source fingerprint. Verify the
 actual installed CLI's dry-run and write paths against a mixed Markdown/text
 folder. The [1.8.1 candidate QA](https://github.com/gay00ung/vecnook/blob/6165904d73b1d5925385db1bc459cef01ff7a1c9/docs/qa-1.8.1.md)
 requires fresh source and exact registry evidence for both archives.
+
+## 1.9 Python text sync candidate
+
+Python `Client.sync` exposes the existing CLI text scan as an opt-in keyword.
+The packaged wheel source and integration test change the core fingerprint.
+Verify preview, scan and selected-format pruning through the installed CLI.
+[1.9 candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.9.md)
+specifies fresh source, exact registry and stable promotion gates.

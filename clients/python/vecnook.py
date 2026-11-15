@@ -341,11 +341,14 @@ class Client:
         flags = ["--vector"] if include_vector else []
         return self._run("docs-get", "--db", self.path, str(identifier), *flags)
 
-    def sync(self, folder, *, dry_run=False, prune=False, model=None, namespace=None):
-        """Sync local Markdown using the installed Ollama model identity."""
+    def sync(self, folder, *, dry_run=False, prune=False, model=None, namespace=None,
+             include_text=False):
+        """Sync local Markdown and optional UTF-8 text with the installed Ollama model."""
         flags = ["--dry-run"] if dry_run else []
         if prune:
             flags.append("--prune")
+        if include_text:
+            flags.append("--include-text")
         for name, value in [("--model", model), ("--namespace", namespace)]:
             if value is not None:
                 flags.extend([name, value])
