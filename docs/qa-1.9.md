@@ -37,3 +37,9 @@ registry CLI, versioned docs.rs pages, remote annotated tag installs, tag CI,
 native ZIPs and all public download sizes and hashes against `SHA256SUMS`.
 Keep source-only, registry and native evidence distinct. Stable promotion needs
 its own PR CI, clean-main CI, actual paired publication and public verification.
+
+## Verified release candidate
+
+The [1.9.0 RC1 release](https://github.com/gay00ung/vecnook/releases/tag/v1.9.0-rc.1) includes the four completed registry workloads,
+eight installed platform/toolchain receipts for each crate, the installed wheel
+regression, eight native CLI archives and checksums.

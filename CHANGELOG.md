@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.9.0
+
+- Python `Client.sync(include_text=True)` scans UTF-8 `.txt` files alongside
+  Markdown. Preview, write and prune use the selected formats. Markdown-only
+  calls keep previously indexed text files. [#23](https://github.com/gay00ung/vecnook/pull/23)
+- Pair core `1.9.0`, Python wheel `1.9.0` and optional companion `0.1.6`.
+  The companion requires exactly core `1.9.0` and maps complete segments.
+- The [checked RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.9.0-rc.1) includes four independent 24-hour registry
+  workloads, the Python wheel regression and both packages' verified registry
+  installations. [Versioned QA record](https://github.com/gay00ung/vecnook/blob/e1e703c8f935f9dc22bec6922bf8e35762136c0c/docs/qa-1.9.md)
+
+<details>
+<summary>Prerelease history</summary>
+
 ## 1.9.0-rc.1
 
 - Python `Client.sync` accepts `include_text=True` for the existing opt-in
@@ -7,6 +21,8 @@
   Markdown remains the default.
 - Pair core `1.9.0-rc.1`, Python wheel `1.9.0rc1` and optional companion
   `0.1.6-rc.1`. [Candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.9.md)
+
+</details>
 
 ## 1.8.1
 
