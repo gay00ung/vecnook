@@ -40,15 +40,14 @@ Vecnook targets bounded, local datasets with one mutable database handle. The mu
 
 ## Quick start
 
-Requires **Rust 1.89+**. The commands below target **1.9.0-rc.1** once it is
-published. The current stable release is [1.8.1](https://github.com/gay00ung/vecnook/releases/tag/v1.8.1).
+Requires **Rust 1.89+**. The commands below target **1.9.0**.
 
 <a id="embed-a-database"></a>
 
 ### Rust library
 
 ```bash
-cargo add vecnook@=1.9.0-rc.1
+cargo add vecnook@=1.9.0
 ```
 
 `VectorIndex` is an in-memory index. `Database` adds synced writes, locking, checkpoints, backups, and recovery.
@@ -83,7 +82,7 @@ fn main() -> Result<()> {
 ### Command line
 
 ```bash
-cargo install vecnook --version '=1.9.0-rc.1' --locked
+cargo install vecnook --version '=1.9.0' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -147,10 +146,10 @@ This earlier session used the original RC1-code binary and three fresh processes
 
 ## Releases
 
-The **1.9.0-rc.1** Python client adds `Client.sync(include_text=True)` for
+The **1.9.0** Python client adds `Client.sync(include_text=True)` for
 opt-in scanning and pruning of UTF-8 `.txt` files using the CLI's existing
-rules. Pair the Python `1.9.0rc1` wheel and optional `0.1.6-rc.1` companion with
-core `1.9.0-rc.1`. [Candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.9.md)
+rules. Pair the Python `1.9.0` wheel and optional `0.1.6` companion with
+core `1.9.0`. [Checked RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.9.0-rc.1) · [Candidate QA](https://github.com/gay00ung/vecnook/blob/e1e703c8f935f9dc22bec6922bf8e35762136c0c/docs/qa-1.9.md)
 
 **1.8.1** limits document pruning to missing files in the
 formats selected for the current scan. A Markdown-only scan keeps previously
