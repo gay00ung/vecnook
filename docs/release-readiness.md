@@ -171,3 +171,9 @@ The packaged wheel source and integration test change the core fingerprint.
 Verify preview, scan and selected-format pruning through the installed CLI.
 [1.9 candidate QA](https://github.com/gay00ung/vecnook/blob/e1e703c8f935f9dc22bec6922bf8e35762136c0c/docs/qa-1.9.md)
 specifies fresh source, exact registry and stable promotion gates.
+
+## 1.9.1 JSONL restore candidate
+
+Restore a JSONL archive exported by the native CLI at the finite f32 limits.
+The embedded document script and its regression test change the shipped source
+fingerprint. [1.9.1 candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.9.1.md) records the source and registry gates.

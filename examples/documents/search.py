@@ -24,6 +24,8 @@ MAX_TOTAL = 32 * MAX_FILE
 MAX_CHUNKS = 10_000
 CHUNK_BYTES = 3000
 DEFAULT_MODEL = "embeddinggemma:latest"
+F32_MAX = float.fromhex("0x1.fffffep+127")
+F32_OVERFLOW = float.fromhex("0x1.ffffffp+127")
 
 
 @dataclass
@@ -158,7 +160,7 @@ class Ollama:
             raise ValueError("embedding dimension must be 1..4096")
         for vector in vectors:
             if (len(vector) != dimension or any(type(v) not in {int, float} or
-                    not math.isfinite(v) or abs(v) > 3.4028234663852886e38 for v in vector)
+                    not math.isfinite(v) or abs(v) > F32_MAX for v in vector)
                     or not any(vector)):
                 raise ValueError("embedding must be a finite, nonzero f32 vector")
         return vectors
@@ -710,7 +712,9 @@ def import_jsonl(args, _client):
             if identifier in seen or len(seen) >= MAX_CHUNKS:
                 raise ValueError("duplicate ID or too many JSONL chunks")
             seen.add(identifier)
-            if len(vector) != dimension or any(type(v) not in {int, float} or not math.isfinite(v) or abs(v) > 3.4028234663852886e38 for v in vector) or (metric == "cosine" and not any(vector)):
+            if (len(vector) != dimension or any(type(v) not in {int, float} or
+                    not -F32_OVERFLOW < v < F32_OVERFLOW for v in vector)
+                    or (metric == "cosine" and not any(vector))):
                 raise ValueError("invalid JSONL vector")
             if type(d["start_line"]) is not int or type(d["end_line"]) is not int or not 1 <= d["start_line"] <= d["end_line"] <= 2**32-1:
                 raise ValueError("invalid JSONL line range")
@@ -724,6 +728,9 @@ def import_jsonl(args, _client):
             encoded += 13+4*dimension+len(payload.encode())
             if encoded > 256*MAX_FILE:
                 raise ValueError("JSONL snapshot capacity exceeded")
+            # Decimals in the finite rounding interval can be slightly larger than F32_MAX.
+            # Normalize the endpoints before formatting the coordinates for the native CLI.
+            vector = (min(max(v, -F32_MAX), F32_MAX) for v in vector)
             rows.append(f"put\t{identifier}\t{coordinates(vector)}\t{payload}\n")
     # All rows validate before the destination is claimed. Use a staged native
     # collection and a native logical archive for fully validated single-snapshot import.
