@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.9.1-rc.1
+
+- Restore JSONL exports that contain the largest finite `f32` values.
+  Import preserves their original bits and rejects overflow before creating a
+  destination collection.
+- Pair core `1.9.1-rc.1`, Python wheel `1.9.1rc1` and companion `0.1.7-rc.1`.
+  [Candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.9.1.md)
+
 ## 1.9.0
 
 - Python `Client.sync(include_text=True)` scans UTF-8 `.txt` files alongside

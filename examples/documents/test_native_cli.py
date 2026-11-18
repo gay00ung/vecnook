@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import struct
 import subprocess
 import unittest
 from unittest.mock import patch
@@ -77,6 +78,40 @@ class NativeCliTests(unittest.TestCase):
         self.assertEqual(result["deleted"], 1)
         self.assertEqual(inspect()["documents"], [])
         self.assertEqual(len(self.server.inputs), requests)
+
+    def test_jsonl_roundtrips_maximum_finite_f32_and_rejects_overflow(self):
+        source = self.root / "finite"
+        restored = self.root / "restored"
+        archive = self.root / "finite.jsonl"
+        batch = self.root / "finite.tsv"
+        identifier = 2**64 - 1
+        maximum = float.fromhex("0x1.fffffep+127")
+        vector = [maximum, -maximum, -0.0]
+        chunk = fixture.search.Chunk("spec.md", 1, 2, "원문 🔎\n두 번째 줄")
+        payload = fixture.search.encode_document(identifier, chunk, ["jsonl"])
+        batch.write_text(f"put\t{identifier}\t{fixture.search.coordinates(vector)}\t{payload}\n", encoding="utf-8")
+
+        self.native("docs-init", self.root, source.name, 3, "caller-owned-jsonl-test", "l2")
+        self.native("docs-batch", "--db", source, batch)
+        self.native("docs-export-jsonl", "--db", source, "--output", archive)
+        self.native("docs-import-jsonl", archive, "--db", restored)
+        [row] = json.loads(self.native("docs-inspect", "--db", restored))["documents"]
+        self.assertEqual(row["id"], str(identifier))
+        self.assertEqual(row["text"], chunk.text)
+        self.assertEqual(row["tags"], ["jsonl"])
+        self.assertEqual(struct.pack("<3f", *row["vector"]), struct.pack("<3f", *vector))
+
+        header, row = archive.read_text(encoding="utf-8").splitlines()
+        document = json.loads(row)
+        overflow = float.fromhex("0x1.ffffffp+127")
+        for label, value in (("positive", overflow), ("negative", -overflow)):
+            with self.subTest(sign=label):
+                document["vector"][0] = value
+                invalid = self.root / f"{label}.jsonl"
+                invalid.write_text(header + "\n" + json.dumps(document) + "\n", encoding="utf-8")
+                target = self.root / f"overflow-{label}"
+                self.native("docs-import-jsonl", invalid, "--db", target, success=False)
+                self.assertFalse(target.exists())
 
     def test_default_find_selects_identifiers_and_keyword_queries_do_not_request_embeddings(self):
         origin = self.client.url

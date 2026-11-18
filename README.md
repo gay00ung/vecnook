@@ -40,14 +40,14 @@ Vecnook targets bounded, local datasets with one mutable database handle. The mu
 
 ## Quick start
 
-Requires **Rust 1.89+**. The commands below target **1.9.0**.
+Requires **Rust 1.89+**. The commands below target **1.9.1-rc.1**. The current stable release is [1.9.0](https://github.com/gay00ung/vecnook/releases/tag/v1.9.0).
 
 <a id="embed-a-database"></a>
 
 ### Rust library
 
 ```bash
-cargo add vecnook@=1.9.0
+cargo add vecnook@=1.9.1-rc.1
 ```
 
 `VectorIndex` is an in-memory index. `Database` adds synced writes, locking, checkpoints, backups, and recovery.
@@ -82,7 +82,7 @@ fn main() -> Result<()> {
 ### Command line
 
 ```bash
-cargo install vecnook --version '=1.9.0' --locked
+cargo install vecnook --version '=1.9.1-rc.1' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -145,6 +145,10 @@ This earlier session used the original RC1-code binary and three fresh processes
 </details>
 
 ## Releases
+
+**1.9.1-rc.1** restores JSONL exports with the largest finite `f32` values.
+True overflow is rejected before creating a destination collection.
+[Candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.9.1.md)
 
 The **1.9.0** Python client adds `Client.sync(include_text=True)` for
 opt-in scanning and pruning of UTF-8 `.txt` files using the CLI's existing
