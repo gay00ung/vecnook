@@ -79,6 +79,71 @@ Run the offline integration tests with a locally built binary:
 VECNOOK_BINARY=target/debug/vecnook python3 -m unittest discover -s examples/documents -p 'test_*.py'
 ```
 
+## Optional static HTML input with your own embeddings
+
+`html_jsonl.py` is a Python 3.10+ standard-library example that produces the existing
+JSONL v1 collection header and one document. It reads local UTF-8 HTML and a JSON
+vector supplied by your application. It makes no network requests and does not
+select or download an embedding model.
+
+First call `extract_text(html)` from this module and pass that exact string to
+your application's embedder. Save its coordinates as a JSON array in `vector.json`.
+Use the same model/version/digest and prompt identity for imports and queries:
+
+```bash
+python3 examples/documents/html_jsonl.py page.html --vector vector.json \
+  --id 18446744073709551615 --model-identity 'my-model:revision:document-prompt-v1' \
+  --tag html --output page.jsonl
+vecnook docs-import-jsonl page.jsonl --db data/new-html
+```
+
+The output requires a new file, and the import requires a new collection. Existing
+outputs and the two input files are preserved. `--source` defaults to the HTML
+filename; pass a stable application source label when filenames are ambiguous.
+`--metric` accepts `l2` (default), `ip` or `cosine`. IDs are canonical decimal u64
+strings, including the full range. Coordinates retain the caller's JSON values;
+the CLI rounds them to f32 on import, preserving maximum finite magnitudes and
+negative zero. A cosine vector must remain nonzero after f32 rounding.
+
+The extraction contract is deliberately small:
+
+- Collect text nodes in parser order and decode character references with
+  Python's [HTMLParser](https://docs.python.org/3/library/html.parser.html).
+  Skip comments and the contents of `head`, `script`, `style`, `template` and
+  `noscript`, including nested excluded elements.
+- Insert one LF before and after each block tag listed in `html_jsonl.BLOCKS`
+  when the current text does not already end with LF. This includes paragraphs,
+  headings, lists, table cells, `br` and `hr`. Inline tags add no separator.
+- Preserve spaces, tabs, CR and internal LF in text nodes, including indentation
+  in `pre`. Remove only leading/trailing LF from the assembled text. Reject an
+  empty or whitespace-only result. For example, `<p>A</p><p>B</p>` becomes `A\nB`;
+  `<b>A</b>  B` becomes `A  B`. Source indentation between blocks remains text.
+- The source range is the **whole HTML input**, from line 1 through the number of
+  LF characters plus one, including the final empty line after a trailing LF.
+  It is not an offset map between extracted text and HTML nodes.
+
+This follows HTMLParser's permissive token stream, without browser DOM repair.
+An unclosed excluded element suppresses subsequent text until its matching close.
+CSS, `hidden` attributes, JavaScript, external resources, image alt text and link
+targets are not interpreted. Review the extracted text before embedding when the
+application needs rendered-page or accessibility semantics.
+
+The HTML input is limited to 1 MiB and the vector file to 128 KiB, read as bytes
+without universal-newline conversion. Extracted text is limited to 6,000 UTF-8
+bytes; larger documents need application-owned chunking and distinct IDs. The
+source label permits 1..1,024 UTF-8 bytes and model identity 1..512, without NUL.
+Up to 32 distinct nonempty tags permit 128 UTF-8 bytes each, without NUL. Vectors
+have 1..4,096 finite f32-roundable coordinates; JSON booleans, NaN and overflow
+are rejected. The header and document row retain the existing 64/128 KiB JSONL
+limits. Validation finishes before the output is opened; filesystem write errors
+can still leave a partial new file to inspect. PDF parsing, automatic chunking,
+folder synchronization and model calls are outside this example.
+
+`test_html_jsonl.py` covers parser semantics, byte/metadata bounds, invalid inputs,
+non-overwrite behavior and an installed CLI import/export/re-import. The CLI check
+compares UTF-8 text, source lines, full-u64 ID, tags, model identity and f32 bits.
+It is included in the offline test command above and runs from the Cargo archive.
+
 ## File dates, byte counts and Boolean filters
 
 ```bash

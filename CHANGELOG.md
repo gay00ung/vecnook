@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.10.0-rc.1
+
+- Add an optional standard-library static HTML-to-JSONL v1 example with
+  application-provided embeddings. Specify text/whitespace/entity/exclusion and
+  whole-source line semantics, enforce bounded input and existing document limits,
+  and verify installed-CLI import/export/re-import without a model server.
+- Pair core `1.10.0-rc.1`, Python wheel `1.10.0rc1` and companion `0.1.8-rc.1`.
+  Fresh candidate source and registry validation is pending.
+  [Candidate QA](https://github.com/gay00ung/vecnook/blob/feature/v1.10.0-html-jsonl/docs/qa-1.10.md)
+
 ## 1.9.1
 
 - Restore JSONL exports produced by the CLI at the largest finite positive and

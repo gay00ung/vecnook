@@ -40,14 +40,14 @@ Vecnook targets bounded, local datasets with one mutable database handle. The mu
 
 ## Quick start
 
-Requires **Rust 1.89+**. The commands below target **1.9.1**. The [checked RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.9.1-rc.1) records candidate validation.
+Requires **Rust 1.89+**. The commands below target candidate **1.10.0-rc.1**. Its new source and registry validation is pending. The latest verified formal release is [1.9.1](https://github.com/gay00ung/vecnook/releases/tag/v1.9.1).
 
 <a id="embed-a-database"></a>
 
 ### Rust library
 
 ```bash
-cargo add vecnook@=1.9.1
+cargo add vecnook@=1.10.0-rc.1
 ```
 
 `VectorIndex` is an in-memory index. `Database` adds synced writes, locking, checkpoints, backups, and recovery.
@@ -82,7 +82,7 @@ fn main() -> Result<()> {
 ### Command line
 
 ```bash
-cargo install vecnook --version '=1.9.1' --locked
+cargo install vecnook --version '=1.10.0-rc.1' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -145,6 +145,8 @@ This earlier session used the original RC1-code binary and three fresh processes
 </details>
 
 ## Releases
+
+**1.10.0-rc.1** adds an optional [static HTML input example](examples/documents/README.md#optional-static-html-input-with-your-own-embeddings). It extracts bounded local text into JSONL v1 using application-provided vectors and model identity. Parser, argument and installed-CLI regressions cover whitespace, metadata and f32 round trips. Full candidate validation is pending.
 
 **1.9.1** restores JSONL exports with the largest finite `f32` values.
 True overflow is rejected before creating a destination collection.
