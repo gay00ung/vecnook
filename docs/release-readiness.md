@@ -176,4 +176,4 @@ specifies fresh source, exact registry and stable promotion gates.
 
 Restore a JSONL archive exported by the native CLI at the finite f32 limits.
 The embedded document script and its regression test change the shipped source
-fingerprint. [1.9.1 candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.9.1.md) records the source and registry gates.
+fingerprint. [1.9.1 candidate QA](https://github.com/gay00ung/vecnook/blob/8eab5c90f2aab19a03e3364e68c9304683c736e0/docs/qa-1.9.1.md) records the source and registry gates.

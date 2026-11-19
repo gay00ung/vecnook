@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.9.1
+
+- Restore JSONL exports produced by the CLI at the largest finite positive and
+  negative f32 values, including exports from 1.9.0. Preserve their exact bits,
+  signed zero, original UTF-8 and full-u64 IDs. Reject overflow before destination
+  creation. [#25](https://github.com/gay00ung/vecnook/pull/25)
+- Pair core and Python wheel 1.9.1 with optional companion 0.1.7, which requires
+  exactly core 1.9.1 and retains full-segment mmap.
+- The [checked RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.9.1-rc.1)
+  records four independent 24-hour registry workloads, exact installed consumers,
+  native archives and the wheel's restore regression.
+
+<details>
+<summary>Prerelease history</summary>
+
 ## 1.9.1-rc.1
 
 - Restore JSONL exports that contain the largest finite `f32` values.
@@ -7,6 +22,8 @@
   destination collection.
 - Pair core `1.9.1-rc.1`, Python wheel `1.9.1rc1` and companion `0.1.7-rc.1`.
   [Candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.9.1.md)
+
+</details>
 
 ## 1.9.0
 
