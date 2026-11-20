@@ -172,6 +172,14 @@ Verify preview, scan and selected-format pruning through the installed CLI.
 [1.9 candidate QA](https://github.com/gay00ung/vecnook/blob/e1e703c8f935f9dc22bec6922bf8e35762136c0c/docs/qa-1.9.md)
 specifies fresh source, exact registry and stable promotion gates.
 
+## 1.10 static HTML input candidate
+
+The optional standard-library HTML example uses existing JSONL v1 and caller-owned
+embeddings. Its packaged parser and tests create a new source fingerprint. Run its
+parser/argument bounds and installed-CLI import/export/re-import from every source
+and actual registry distribution. [1.10 candidate QA](https://github.com/gay00ung/vecnook/blob/feature/v1.10.0-html-jsonl/docs/qa-1.10.md) requires fresh independent
+source and registry workloads and all paired/native/stable gates.
+
 ## 1.9.1 JSONL restore candidate
 
 Restore a JSONL archive exported by the native CLI at the finite f32 limits.
