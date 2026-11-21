@@ -158,3 +158,70 @@ on every chunk. A later sync infers this setting when omitted;
 currently re-embed the affected source. Direct Python index/sync/search accepts
 the same flags. Default new imports retain VDOC1. Attribute-bearing documents
 use VDOC2 and require a 1.2 reader. See [Boolean and range semantics](../../docs/compound-filters.md).
+
+## Optional read-only SQLite input
+
+`sqlite_jsonl.py` is a Python 3.11+ standard-library example for an existing local
+SQLite database (SQLite 3.22+). Supply a trusted SELECT and the exact identity and
+dimensions of the vectors your application already owns. The output is existing
+JSONL v1, ready for the document CLI; no SQL engine, model provider or new payload
+format is added. The existing Python client and document CLI still use Python 3.10+.
+
+For example, an app may keep document fields in `documents` and vectors as JSON
+text in `embeddings`. Save the following as `query.sql`, adapting table/column
+names and the JOIN/filter to your app. Return these nine aliases in this order:
+
+```sql
+SELECT d.id AS id, d.source AS source, d.start_line AS start_line,
+       d.end_line AS end_line, d.text AS text, e.vector_json AS vector_json,
+       d.tags_json AS tags_json, d.numbers_json AS numbers_json,
+       d.dates_json AS dates_json
+FROM documents AS d
+JOIN embeddings AS e ON d.id = e.document_id
+ORDER BY d.id
+```
+
+Use a canonical decimal TEXT ID to cover the complete u64 range; nonnegative
+SQLite INTEGER IDs are also accepted. `source` and `text` are text; line bounds
+are integers. The four `_json` columns contain a vector array, tag array, numeric
+attribute object and date attribute object. Project `'[]' AS tags_json`,
+`'{}' AS numbers_json` or `'{}' AS dates_json` when those fields are absent.
+A JOIN that repeats an ID fails; choose the desired row in the application's SQL.
+Text and line ranges are supplied by the app, without extraction or normalization.
+
+```bash
+python3 examples/documents/sqlite_jsonl.py app.sqlite --sql query.sql \
+  --dimensions 3 --model-identity 'my-model-v1/prompt-v1' --metric l2 \
+  --output app.jsonl
+vecnook docs-import-jsonl app.jsonl --db data/new-app
+```
+
+The input opens through a quoted `file:` URI with `mode=ro`, query-only mode and
+a SELECT/read authorizer. Writes, ATTACH, caller PRAGMAs, extension/file functions
+and multiple statements are refused. One read transaction keeps the SELECT/JOIN
+on one snapshot while a WAL writer commits. Normal SQLite reader locking may
+access/create shared-memory sidecars; use a complete valid SQLite database and
+its required WAL files. The example does not enable `immutable` or copy a live
+main file without its WAL. [SQLite URI rules](https://www.sqlite.org/uri.html) ·
+[Read-only WAL databases](https://www.sqlite.org/wal.html#read_only_databases)
+
+Limits are 8 KiB UTF-8 SQL, 128 KiB SQLite value/row, 10,000 result documents and
+32 MiB total encoded JSONL. Existing source/text/tag/typed-attribute, 1..4096
+vector-dimension and 64/128 KiB JSONL header/row limits still apply. All rows are
+validated before the output is exclusively created; an existing path is never
+overwritten. Validation errors create no output. A later filesystem write failure
+may leave a partial new file, which must be inspected before retrying.
+
+SQLite's progress callback checks every 1,000 VM instructions, stopping after
+1,000,000 counted instructions or a five-second cooperative query-time budget;
+lock waits use a one-second connection timeout. These are result/query bounds,
+not a process-wide RAM or hard wall-time sandbox for arbitrary SQL functions.
+Python 3.11 is required for the connection's runtime `setlimit` controls.
+[Python sqlite3 controls](https://docs.python.org/3.11/library/sqlite3.html)
+
+`test_sqlite_jsonl.py` checks a read-only JOIN, a WAL snapshot during writer
+commits, query/field/row/output bounds, refused mutations and output preservation.
+With `VECNOOK_BINARY` set, it also imports/exports through the installed CLI and
+checks original UTF-8, complete u64 IDs, maximum positive/negative f32 and signed
+zero, including a JSON `-0` coordinate. These fixtures are internal compatibility
+checks, not external-user or app-adoption observations.
