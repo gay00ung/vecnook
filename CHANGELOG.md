@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.10.0
+
+- Add an optional standard-library static HTML-to-JSONL v1 example with
+  application-provided embeddings. Extract ordered text with bounded input and
+  explicit whitespace/entity/exclusion/whole-source-line semantics. Validate
+  import/export/re-import through the installed CLI, preserving text, tags, model
+  identity, full-u64 IDs, maximum finite f32 values and signed-zero bits.
+  [#27](https://github.com/gay00ung/vecnook/pull/27)
+- Pair core and Python wheel 1.10.0 with optional companion 0.1.8, which requires
+  exactly core 1.10.0 and retains full-segment mmap. Rust 1.89, CLI JSON v1,
+  original records, default search and 1.x storage contracts remain supported.
+- The [checked RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.10.0-rc.1)
+  records four independent 24-hour registry workloads, eight exact registry
+  consumers per crate, HTML and installed-wheel regressions, remote annotated-tag
+  installs and verified native/public assets. The application owns embeddings
+  and model identity; no model selection/download or external document upload is
+  added.
+
+<details>
+<summary>Prerelease history</summary>
+
 ## 1.10.0-rc.1
 
 - Add an optional standard-library static HTML-to-JSONL v1 example with
@@ -9,6 +30,8 @@
 - Pair core `1.10.0-rc.1`, Python wheel `1.10.0rc1` and companion `0.1.8-rc.1`.
   Fresh candidate source and registry validation is pending.
   [Candidate QA](https://github.com/gay00ung/vecnook/blob/feature/v1.10.0-html-jsonl/docs/qa-1.10.md)
+
+</details>
 
 ## 1.9.1
 

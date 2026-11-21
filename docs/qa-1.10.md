@@ -53,3 +53,26 @@ and paired publication gates, core-first publication, actual companion packaging
 and final public download audit. A review-only staged companion is never posted.
 Historical performance measurements stay under their original versions, and this
 example does not supply external-user or real-app adoption evidence.
+
+## Completed RC1 validation
+
+The checked source commit was 6ef95fe0e49a6843a8fae969f60fad819009f4dd. Normal merge preserved its tree at f076fcbfab167fc2f563ec0b0997182b15990a1e. Source-only mixed core, native session/cache and Python session runs each completed their own 24-hour gates before publication. These records remain separate from the public-package runs below.
+
+Exact public core archive SHA-256: cc6b3c9e7b75ae3756e1ee6d896889315eccad722286a0d2a0c1f08a2a7d12ae. Exact companion archive SHA-256: 7da68cfb3d1b20c92887bcc15ac3db552d53e63a7dcb1e6959973589e82bfef6.
+
+| Actual registry workload | Own seconds | Verified count |
+| --- | ---: | ---: |
+| Core acknowledged mutations | 86400.929404 | 189,186 |
+| Native session requests | 86405.234288 | 1,258,723 |
+| Python session requests | 86400.067762 | 1,603,296 |
+| Mapped record checks | 86400.016313 | 137,400,808 |
+
+All four original runs completed with exit 0 and their own duration/count/lifecycle/identity evidence. The mapped reader observed 349 generations and bound the final completed core publisher receipt.
+
+The remote annotated v1.10.0-rc.1 tag object e81d842b824008de15628ed30dec1c4f8e7f46a3 resolves to f076fcbfab167fc2f563ec0b0997182b15990a1e. Separate fresh-cache tag installations passed all nine HTML tests, the max-f32 JSONL restore and prune regressions, the Node.js app suite and the companion demo.
+
+[Tag CI](https://github.com/gay00ung/vecnook/actions/runs/44872524002) verified eight actual registry CLI/library jobs for each package with Rust 1.89 and stable on Linux x64, macOS ARM64, actual Windows 11 ProductType 1 ARM64 NTFS and Windows Server ProductType 3 x64 NTFS. [Native archive CI](https://github.com/gay00ung/vecnook/actions/runs/44872524055) supplied four core and four companion archives with extracted executable receipts.
+
+The official core and paired release gates passed on these exact archives and completed receipts. Every core job ran 59 document tests, including nine HTML tests, with checkout, packaged and actual registry CLIs. The installed Python 1.10.0rc1 wheel imported/exported extracted HTML through the actual registry CLI, preserving full-u64 IDs, maximum positive/negative finite f32 and signed-zero bits. The [public RC1 release](https://github.com/gay00ung/vecnook/releases/tag/v1.10.0-rc.1) contains 77 verified assets: all server digests and sizes, independent unauthenticated downloads and 76 SHA256SUMS rows passed.
+
+Stable 1.10.0 promotion changes package/dependency versions, lockfiles and release documentation. It still requires its own normal PR/main CI, candidate-equivalence gates, core-first publication, real companion Cargo verification against that public core, registry/tag installations, docs.rs, wheel/native assets and final public-download audit. Candidate completion alone does not approve a stable publication.

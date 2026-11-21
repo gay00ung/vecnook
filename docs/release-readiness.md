@@ -177,7 +177,7 @@ specifies fresh source, exact registry and stable promotion gates.
 The optional standard-library HTML example uses existing JSONL v1 and caller-owned
 embeddings. Its packaged parser and tests create a new source fingerprint. Run its
 parser/argument bounds and installed-CLI import/export/re-import from every source
-and actual registry distribution. [1.10 candidate QA](https://github.com/gay00ung/vecnook/blob/feature/v1.10.0-html-jsonl/docs/qa-1.10.md) requires fresh independent
+and actual registry distribution. [1.10 candidate QA](https://github.com/gay00ung/vecnook/blob/f076fcbfab167fc2f563ec0b0997182b15990a1e/docs/qa-1.10.md) requires fresh independent
 source and registry workloads and all paired/native/stable gates.
 
 ## 1.9.1 JSONL restore candidate
