@@ -7,10 +7,19 @@ adding a SQL engine, embedding provider, core data model or storage format.
 The new example needs Python 3.11+ and SQLite 3.22+ for runtime connection limits.
 Existing Python client/document CLI support remains Python 3.10+.
 
-Planned versions are core `1.11.0-rc.1`, Python `1.11.0rc1` and exact paired
-companion `0.1.9-rc.1`. The packaged script and regressions change the frozen
+Planned versions are core `1.11.0-rc.2`, Python `1.11.0rc2` and exact paired
+companion `0.1.9-rc.2`. The packaged script and regressions change the frozen
 source fingerprint. Older 1.10 receipts and the isolated prototype do not approve
 this candidate. These requirements remain pending until exact receipts complete.
+
+## RC1 rejection and RC2 identity
+
+RC1 head `4c4fbde603ad0e638bb1ceb2ce10580edf93b4b1` passed local archive checks,
+but POSIX PR jobs could not launch the integration test's relative CLI path after
+switching to a temporary directory. Windows jobs and native archive builds passed.
+RC2 resolves that test path before the cwd change. This changes shipped test
+identity and requires a new archive plus all source/registry duration gates.
+No RC1 full-duration run was started and no RC1 receipt approves RC2.
 
 ## Source candidate
 

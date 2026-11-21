@@ -74,6 +74,7 @@ class SQLiteJsonlTests(unittest.TestCase):
             self.assertEqual(struct.pack("<fff", *row["vector"]), expected)
         binary = os.environ.get("VECNOOK_BINARY")
         if binary:
+            binary = str(Path(binary).resolve())
             restored = self.root / "restored"
             for args in [("docs-import-jsonl", self.output, "--db", restored),
                          ("docs-export-jsonl", "--db", restored, "--output", self.root / "again.jsonl")]:

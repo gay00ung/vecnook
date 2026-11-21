@@ -1,6 +1,10 @@
 # Changelog
 
-## 1.11.0-rc.1
+## 1.11.0-rc.2
+
+- Resolve a relative integration-test CLI path before running it from a temporary
+  directory, matching POSIX CI and existing document fixtures. RC1 source CI failed
+  at this test-launch boundary; changed test sources require fresh RC2 validation.
 
 - Add an optional read-only SQLite-to-JSONL v1 example with application-owned
   SELECT mapping, vectors and model identity. Join existing app data without
@@ -11,8 +15,8 @@
   WAL read snapshot, refused writes/ATTACH/PRAGMA/extensions, bounded query work
   and no output on validation failure. This new example requires Python 3.11+
   and SQLite 3.22+; existing Python client/CLI support remains Python 3.10+.
-- Pair core `1.11.0-rc.1`, Python `1.11.0rc1` and optional companion
-  `0.1.9-rc.1`, requiring that exact core. Core remains dependency-free with
+- Pair core `1.11.0-rc.2`, Python `1.11.0rc2` and optional companion
+  `0.1.9-rc.2`, requiring that exact core. Core remains dependency-free with
   Rust 1.89, original records, default search and 1.x storage; the companion
   retains full-segment mmap. Fresh source and registry validation is pending.
   [Candidate QA](https://github.com/gay00ung/vecnook/blob/feature/v1.11.0-sqlite-jsonl/docs/qa-1.11.md)
