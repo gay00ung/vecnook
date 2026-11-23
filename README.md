@@ -40,14 +40,14 @@ Vecnook targets bounded, local datasets with one mutable database handle. The mu
 
 ## Quick start
 
-Requires **Rust 1.89+**. The commands below target **1.10.0**. The [checked RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.10.0-rc.1) records the source and actual registry validation.
+Requires **Rust 1.89+**. The commands below target **1.11.0-rc.2**. This candidate adds an optional read-only SQLite-to-JSONL example. Fresh source and registry validation is pending; [1.10.0](https://github.com/gay00ung/vecnook/releases/tag/v1.10.0) is the latest verified formal release.
 
 <a id="embed-a-database"></a>
 
 ### Rust library
 
 ```bash
-cargo add vecnook@=1.10.0
+cargo add vecnook@=1.11.0-rc.2
 ```
 
 `VectorIndex` is an in-memory index. `Database` adds synced writes, locking, checkpoints, backups, and recovery.
@@ -82,7 +82,7 @@ fn main() -> Result<()> {
 ### Command line
 
 ```bash
-cargo install vecnook --version '=1.10.0' --locked
+cargo install vecnook --version '=1.11.0-rc.2' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -145,6 +145,8 @@ This earlier session used the original RC1-code binary and three fresh processes
 </details>
 
 ## Releases
+
+**1.11.0-rc.2** adds an optional [read-only SQLite input example](examples/documents/README.md#optional-read-only-sqlite-input). A caller-owned SELECT can join local app records and vectors into existing JSONL v1. It preserves original text, full-u64 IDs and finite f32/signed-zero values, with validation before exclusive output creation. This new example needs Python 3.11+ and SQLite 3.22+; the existing Python client and document CLI retain Python 3.10 support. Fresh source and actual registry QA remain pending.
 
 **1.10.0** adds an optional [static HTML input example](examples/documents/README.md#optional-static-html-input-with-your-own-embeddings). It extracts bounded local text into JSONL v1 using application-provided vectors and model identity. Parser, argument and installed-CLI regressions cover whitespace, metadata and f32 round trips. The [checked RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.10.0-rc.1) passed the full source and registry gates, including HTML import/export with the installed CLI.
 

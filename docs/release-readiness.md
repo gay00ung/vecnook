@@ -185,3 +185,15 @@ source and registry workloads and all paired/native/stable gates.
 Restore a JSONL archive exported by the native CLI at the finite f32 limits.
 The embedded document script and its regression test change the shipped source
 fingerprint. [1.9.1 candidate QA](https://github.com/gay00ung/vecnook/blob/8eab5c90f2aab19a03e3364e68c9304683c736e0/docs/qa-1.9.1.md) records the source and registry gates.
+
+## 1.11 SQLite input candidate
+
+The optional read-only SQLite example and its regressions change the packaged
+source identity. Each source and actual registry core distribution must run the
+SQLite suite with its installed CLI, including JOIN/WAL snapshot consistency,
+refused writes, bounded validation, no output overwrite, full-u64/original-text and
+f32/signed-zero round trips. The new example needs Python 3.11+/SQLite 3.22+;
+existing Python client/CLI compatibility remains unchanged. The
+[1.11 candidate protocol](https://github.com/gay00ung/vecnook/blob/feature/v1.11.0-sqlite-jsonl/docs/qa-1.11.md)
+requires new independent source and exact registry workloads, paired archives,
+wheel/native/tag consumers and separate stable publication gates.
