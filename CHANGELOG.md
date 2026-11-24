@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.11.0
+
+- Add an optional standard-library read-only SQLite SELECT/JOIN example that
+  emits existing JSONL v1 from app-owned vectors and model identity. Nine column
+  aliases define document mapping with bounded SQL, row and output handling.
+  Refuse writes/ATTACH/PRAGMA/extensions and validate before exclusive output
+  creation. Preserve original UTF-8/line endings, full-u64 IDs, typed attributes,
+  maximum finite f32 and signed-zero bits through installed-CLI import/export.
+  The new example needs Python 3.11+ and SQLite 3.22+; the existing Python client
+  and document CLI retain Python 3.10 support.
+  [#29](https://github.com/gay00ung/vecnook/pull/29)
+- Pair core and Python wheel 1.11.0 with optional companion 0.1.9, requiring
+  exactly core 1.11.0 and retaining full-segment mmap. Core stays dependency-free,
+  with Rust 1.89, original records, default search and 1.x storage contracts.
+- The [checked RC2](https://github.com/gay00ung/vecnook/releases/tag/v1.11.0-rc.2)
+  records three full source workloads, four independent full registry workloads,
+  eight actual registry consumers per crate, 67 document tests including eight SQLite tests
+  and nine HTML tests, installed-wheel checks, both remote tag installs, eight native
+  archives and all independently verified public release assets.
+
+<details>
+<summary>Prerelease history</summary>
+
 ## 1.11.0-rc.2
 
 - Resolve a relative integration-test CLI path before running it from a temporary
@@ -21,6 +44,7 @@
   retains full-segment mmap. Fresh source and registry validation is pending.
   [Candidate QA](https://github.com/gay00ung/vecnook/blob/feature/v1.11.0-sqlite-jsonl/docs/qa-1.11.md)
 
+</details>
 
 ## 1.10.0
 
