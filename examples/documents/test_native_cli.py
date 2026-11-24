@@ -113,6 +113,42 @@ class NativeCliTests(unittest.TestCase):
                 self.native("docs-import-jsonl", invalid, "--db", target, success=False)
                 self.assertFalse(target.exists())
 
+    def test_jsonl_export_matches_restore_document_limit(self):
+        collection = self.root / "source"
+        archive = self.root / "restorable.jsonl"
+        restored = self.root / "restored"
+        batch = self.root / "documents.tsv"
+        chunk = fixture.search.Chunk("source.md", 1, 1, "원문")
+        limit = 10_000
+        self.native("docs-init", self.root, collection.name, 1, "caller-owned-limit-test", "l2")
+
+        def insert(first, stop):
+            with batch.open("w", encoding="utf-8") as stream:
+                for identifier in range(first, stop):
+                    payload = fixture.search.encode_document(identifier, chunk, [])
+                    stream.write(f"put\t{identifier}\t{identifier+1}\t{payload}\n")
+            self.native("docs-batch", "--db", collection, batch)
+
+        def documents(db):
+            return json.loads(self.native("docs-inspect", "--db", db))["documents"]
+
+        for first in range(0, limit, 1024):
+            insert(first, min(first + 1024, limit))
+        self.assertIn("Exported 10000 documents",
+                      self.native("docs-export-jsonl", "--db", collection, "--output", archive))
+        self.native("docs-import-jsonl", archive, "--db", restored)
+        original = documents(collection)
+        self.assertEqual(len(original), limit)
+        self.assertEqual(documents(restored), original)
+
+        insert(limit, limit + 1)
+        before = documents(collection)
+        self.assertEqual(len(before), limit + 1)
+        rejected = self.root / "over-limit.jsonl"
+        self.native("docs-export-jsonl", "--db", collection, "--output", rejected, success=False)
+        self.assertFalse(rejected.exists())
+        self.assertEqual(documents(collection), before)
+
     def test_default_find_selects_identifiers_and_keyword_queries_do_not_request_embeddings(self):
         origin = self.client.url
         self.native("docs-sync", self.documents, "--db", self.args.db, "--ollama-url", origin)
