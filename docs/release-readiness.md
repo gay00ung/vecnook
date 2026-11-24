@@ -194,6 +194,6 @@ SQLite suite with its installed CLI, including JOIN/WAL snapshot consistency,
 refused writes, bounded validation, no output overwrite, full-u64/original-text and
 f32/signed-zero round trips. The new example needs Python 3.11+/SQLite 3.22+;
 existing Python client/CLI compatibility remains unchanged. The
-[1.11 candidate protocol](https://github.com/gay00ung/vecnook/blob/feature/v1.11.0-sqlite-jsonl/docs/qa-1.11.md)
+[1.11 candidate protocol](https://github.com/gay00ung/vecnook/blob/20344cb7c5976969017cd1c20fa3f4e3eeea9409/docs/qa-1.11.md)
 requires new independent source and exact registry workloads, paired archives,
 wheel/native/tag consumers and separate stable publication gates.
