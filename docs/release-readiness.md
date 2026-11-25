@@ -197,3 +197,11 @@ existing Python client/CLI compatibility remains unchanged. The
 [1.11 candidate protocol](https://github.com/gay00ung/vecnook/blob/20344cb7c5976969017cd1c20fa3f4e3eeea9409/docs/qa-1.11.md)
 requires new independent source and exact registry workloads, paired archives,
 wheel/native/tag consumers and separate stable publication gates.
+
+## 1.11.1 JSONL export candidate
+
+The embedded document CLI checks the JSONL restore count limit before
+creating an export. The packaged script and its boundary regression change
+the candidate identity. Run the actual CLI test on the fresh source,
+packaged and registry distributions. [1.11.1 candidate QA](qa-1.11.1.md)
+records the source, registry, tag, native and stable release gates.

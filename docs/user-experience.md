@@ -180,8 +180,16 @@ The first JSONL line is a `vecnook_collection` schema-v1 header containing the
 embedding space. Each later line holds a document with a canonical decimal-string
 ID and original `vector`, text, source, lines, tags and optional numbers/dates.
 Finite f32 values, including signed zero, round-trip through native parsing.
-Imports enforce UTF-8, unique full-u64 IDs, dimensions, metric, document limits,
-10,000 chunks, 512 MiB input and native snapshot/batch bounds. They validate and
+JSONL export refuses collections above the 10,000-document import limit before
+creating the output. For larger collections use the native binary transfer.
+
+```bash
+vecnook docs-export --db data/notes data/notes.bin
+vecnook docs-import data/notes.bin data restored
+```
+
+JSONL imports also enforce UTF-8, unique full-u64 IDs, dimensions, metric, document
+limits, 512 MiB input and native snapshot/batch bounds. They validate and
 stage all rows before native logical import claims a new destination. Existing
 destinations/exports are refused. A storage failure can still leave an incomplete
 artifact; this is not a cryptographically authenticated interchange format.

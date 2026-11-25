@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.11.1-rc.1
+
+- Refuse JSONL exports above 10,000 documents before creating an output file.
+  The installed CLI regression restores exactly 10,000 original records and
+  checks that the next document causes a clean refusal. Use the native binary
+  export and import commands for larger collections.
+- Pair core `1.11.1-rc.1`, Python wheel `1.11.1rc1` and optional companion
+  `0.1.10-rc.1`. [1.11.1 candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.11.1.md)
+
 ## 1.11.0
 
 - Add an optional standard-library read-only SQLite SELECT/JOIN example that

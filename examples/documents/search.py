@@ -668,13 +668,18 @@ def environment_check(args, client):
 def export_jsonl(args, _client):
     db = Path(args.db)
     info = json.loads(cli(args.binary, "docs-info", db.parent, db.name))
-    state = inspected_state(args)
+    documents = inspected_state(args)["documents"]
+    if len(documents) > MAX_CHUNKS:
+        raise ValueError(
+            f"JSONL export is limited to {MAX_CHUNKS:,} documents. "
+            "Use docs-export and docs-import for larger collections."
+        )
     # x mode refuses overwriting an existing archive.
     with Path(args.output).open("x", encoding="utf-8", newline="\n") as output:
         output.write(json.dumps(dict(type="vecnook_collection", schema_version=1, space=info), ensure_ascii=False)+"\n")
-        for d in state["documents"]:
+        for d in documents:
             output.write(json.dumps(d, ensure_ascii=False, allow_nan=False)+"\n")
-    print(f"Exported {len(state['documents'])} documents")
+    print(f"Exported {len(documents)} documents")
 
 
 def import_jsonl(args, _client):
