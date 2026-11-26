@@ -1,5 +1,21 @@
 # Changelog
 
+## 1.11.1
+
+- Check the JSONL importer’s 10,000-document limit before creating an export.
+  The CLI round-trip regression restores 10,000 original records and confirms
+  that exporting 10,001 fails before creating a file. Use native binary export
+  and import for larger collections. [#31](https://github.com/gay00ung/vecnook/pull/31)
+- Pair core and Python wheel 1.11.1 with optional companion 0.1.10. The companion
+  pins the exact core version and maps complete segments.
+- Candidate verification covered three source workloads, four registry
+  workloads, 68 document tests, Python wheel and remote tag installations,
+  eight native archives and independent public asset downloads.
+  [Checked 1.11.1 RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.11.1-rc.1)
+
+<details>
+<summary>Prerelease history</summary>
+
 ## 1.11.1-rc.1
 
 - Refuse JSONL exports above 10,000 documents before creating an output file.
@@ -8,6 +24,8 @@
   export and import commands for larger collections.
 - Pair core `1.11.1-rc.1`, Python wheel `1.11.1rc1` and optional companion
   `0.1.10-rc.1`. [1.11.1 candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.11.1.md)
+
+</details>
 
 ## 1.11.0
 
