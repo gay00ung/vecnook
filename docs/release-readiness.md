@@ -205,3 +205,5 @@ creating an export. The packaged script and its boundary regression change
 the candidate identity. Run the actual CLI test on the fresh source,
 packaged and registry distributions. [1.11.1 candidate QA](qa-1.11.1.md)
 records the source, registry, tag, native and stable release gates.
+
+The 1.11.1 RC1 verification covers the 24-hour source and registry runs, platform receipts and independent public asset downloads. [Checked 1.11.1 RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.11.1-rc.1)
