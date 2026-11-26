@@ -4,11 +4,11 @@ version = 4
 
 [[package]]
 name = "vecnook"
-version = "1.11.1"
+version = "1.11.2-rc.1"
 
 [[package]]
 name = "vecnook-accel"
-version = "0.1.10"
+version = "0.1.11-rc.1"
 dependencies = [
  "vecnook",
 ]

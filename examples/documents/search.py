@@ -20,6 +20,7 @@ from urllib.error import URLError
 import re
 
 MAX_FILE = 1024 * 1024
+MAX_JSONL_BYTES = 512 * MAX_FILE
 MAX_TOTAL = 32 * MAX_FILE
 MAX_CHUNKS = 10_000
 CHUNK_BYTES = 3000
@@ -674,11 +675,24 @@ def export_jsonl(args, _client):
             f"JSONL export is limited to {MAX_CHUNKS:,} documents. "
             "Use docs-export and docs-import for larger collections."
         )
-    # x mode refuses overwriting an existing archive.
-    with Path(args.output).open("x", encoding="utf-8", newline="\n") as output:
-        output.write(json.dumps(dict(type="vecnook_collection", schema_version=1, space=info), ensure_ascii=False)+"\n")
-        for d in documents:
-            output.write(json.dumps(d, ensure_ascii=False, allow_nan=False)+"\n")
+    header = dict(type="vecnook_collection", schema_version=1, space=info)
+
+    def output_lines():
+        yield (json.dumps(header, ensure_ascii=False) + "\n").encode("utf-8")
+        for document in documents:
+            yield (json.dumps(document, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
+
+    # Measure the exact UTF-8 bytes before claiming the destination.
+    total_bytes = 0
+    for line in output_lines():
+        total_bytes += len(line)
+        if total_bytes > MAX_JSONL_BYTES:
+            raise ValueError(
+                "JSONL export exceeds the 512 MiB import limit. "
+                "Use docs-export and docs-import for larger archives."
+            )
+    with Path(args.output).open("xb") as output:
+        output.writelines(output_lines())
     print(f"Exported {len(documents)} documents")
 
 
@@ -687,7 +701,7 @@ def import_jsonl(args, _client):
     if db.exists():
         raise ValueError("JSONL import requires a new collection directory")
     source = Path(args.input)
-    if source.stat().st_size > 512*MAX_FILE:
+    if source.stat().st_size > MAX_JSONL_BYTES:
         raise ValueError("JSONL input exceeds 512 MiB")
     with source.open(encoding="utf-8") as stream:
         header = json.loads(stream.readline(64*1024))

@@ -180,8 +180,9 @@ The first JSONL line is a `vecnook_collection` schema-v1 header containing the
 embedding space. Each later line holds a document with a canonical decimal-string
 ID and original `vector`, text, source, lines, tags and optional numbers/dates.
 Finite f32 values, including signed zero, round-trip through native parsing.
-JSONL export refuses collections above the 10,000-document import limit before
-creating the output. For larger collections use the native binary transfer.
+JSONL export checks the import limits of 10,000 documents and 512 MiB before
+creating the output. For collections or archives that exceed either limit, use
+the native binary transfer.
 
 ```bash
 vecnook docs-export --db data/notes data/notes.bin

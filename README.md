@@ -40,14 +40,14 @@ Vecnook targets bounded, local datasets with one mutable database handle. The mu
 
 ## Quick start
 
-Requires **Rust 1.89+**. The commands below target **1.11.1**. The RC1 verification covers JSONL export and restore. The prior RC2 records the optional read-only SQLite-to-JSONL example. [Checked 1.11.1 RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.11.1-rc.1) · [SQLite RC2](https://github.com/gay00ung/vecnook/releases/tag/v1.11.0-rc.2)
+Requires **Rust 1.89+**. The commands below target **1.11.2-rc.1**. [1.11.2 candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.11.2.md)
 
 <a id="embed-a-database"></a>
 
 ### Rust library
 
 ```bash
-cargo add vecnook@=1.11.1
+cargo add vecnook@=1.11.2-rc.1
 ```
 
 `VectorIndex` is an in-memory index. `Database` adds synced writes, locking, checkpoints, backups, and recovery.
@@ -82,7 +82,7 @@ fn main() -> Result<()> {
 ### Command line
 
 ```bash
-cargo install vecnook --version '=1.11.1' --locked
+cargo install vecnook --version '=1.11.2-rc.1' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -146,7 +146,7 @@ This earlier session used the original RC1-code binary and three fresh processes
 
 ## Releases
 
-**1.11.1** checks the 10,000-document JSONL import limit before creating an export. Use native binary transfer for larger collections. [1.11.1 candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.11.1.md)
+**1.11.2-rc.1** checks the 10,000-document and 512 MiB JSONL import limits before creating an export. Use native binary transfer for larger collections or archives. [1.11.2 candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.11.2.md)
 
 **1.11.0** adds an optional [read-only SQLite input example](examples/documents/README.md#optional-read-only-sqlite-input). A caller-owned SELECT can join local app records and vectors into existing JSONL v1. It preserves original text, full-u64 IDs and finite f32/signed-zero values, with validation before exclusive output creation. This new example needs Python 3.11+ and SQLite 3.22+; the existing Python client and document CLI retain Python 3.10 support. The [checked RC2](https://github.com/gay00ung/vecnook/releases/tag/v1.11.0-rc.2) passed the full source and actual registry gates, including SQLite import/export with the installed CLI.
 

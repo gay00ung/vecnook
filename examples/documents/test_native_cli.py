@@ -13,11 +13,11 @@ class NativeCliTests(unittest.TestCase):
     setUp = fixture.IntegrationTests.setUp
     tearDown = fixture.IntegrationTests.tearDown
 
-    def native(self, *arguments, success=True):
+    def native(self, *arguments, success=True, timeout=30):
         # A temporary cwd proves the CLI does not load a script from the checkout.
         binary = Path(self.args.binary).resolve()
         result = subprocess.run([binary, *map(str, arguments)], cwd=self.root,
-                                capture_output=True, text=True, encoding="utf-8", timeout=30)
+                                capture_output=True, text=True, encoding="utf-8", timeout=timeout)
         self.assertEqual(result.returncode == 0, success, result.stderr)
         return result.stdout
 
@@ -136,7 +136,8 @@ class NativeCliTests(unittest.TestCase):
             insert(first, min(first + 1024, limit))
         self.assertIn("Exported 10000 documents",
                       self.native("docs-export-jsonl", "--db", collection, "--output", archive))
-        self.native("docs-import-jsonl", archive, "--db", restored)
+        # Large restores stage batches with durable writes, which can be slower on CI.
+        self.native("docs-import-jsonl", archive, "--db", restored, timeout=120)
         original = documents(collection)
         self.assertEqual(len(original), limit)
         self.assertEqual(documents(restored), original)

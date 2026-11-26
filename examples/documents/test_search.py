@@ -10,6 +10,7 @@ from types import SimpleNamespace
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 import search
 
@@ -116,6 +117,36 @@ class IntegrationTests(unittest.TestCase):
                                ({}, {"d": "2026-02-29"}), ({}, {"d": "20261015"})]:
             with self.assertRaises(ValueError):
                 search.encode_document(1, chunk, [], numbers, dates)
+
+    def test_jsonl_export_and_import_count_utf8_bytes_at_the_same_boundary(self):
+        archive = self.root / "original.jsonl"
+        self.args.output = archive
+        with contextlib.redirect_stdout(io.StringIO()):
+            search.index_documents(self.args, self.client)
+            search.export_jsonl(self.args, self.client)
+        expected = archive.read_bytes()
+        self.assertGreater(len(expected), len(expected.decode("utf-8")))
+
+        exact = self.root / "exact.jsonl"
+        imported = SimpleNamespace(binary=self.args.binary, input=exact, db=self.root / "restored")
+        self.args.output = exact
+        with patch.object(search, "MAX_JSONL_BYTES", len(expected)):
+            with contextlib.redirect_stdout(io.StringIO()):
+                search.export_jsonl(self.args, self.client)
+                search.import_jsonl(imported, self.client)
+        self.assertEqual(exact.read_bytes(), expected)
+        self.assertEqual(search.inspected_state(imported)["documents"],
+                         search.inspected_state(self.args)["documents"])
+
+        self.args.output = self.root / "oversized.jsonl"
+        imported.db = self.root / "rejected"
+        with patch.object(search, "MAX_JSONL_BYTES", len(expected) - 1):
+            with self.assertRaisesRegex(ValueError, "JSONL export exceeds the 512 MiB import limit"):
+                search.export_jsonl(self.args, self.client)
+            with self.assertRaisesRegex(ValueError, "JSONL input exceeds 512 MiB"):
+                search.import_jsonl(imported, self.client)
+        self.assertFalse(self.args.output.exists())
+        self.assertFalse(imported.db.exists())
 
     def test_original_unicode_source_and_text_survive_cli_restart_and_json(self):
         with contextlib.redirect_stdout(io.StringIO()):
