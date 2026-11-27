@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.11.2-rc.1
+
+- Check the JSONL importer's 512 MiB file limit before creating an export.
+  Count UTF-8 bytes including the header and line endings. Use native binary
+  transfer for larger archives.
+- Pair core `1.11.2-rc.1`, Python wheel `1.11.2rc1` and optional companion
+  `0.1.11-rc.1`. [1.11.2 candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.11.2.md)
+
 ## 1.11.1
 
 - Check the JSONL importer’s 10,000-document limit before creating an export.
