@@ -40,14 +40,14 @@ Vecnook targets bounded, local datasets with one mutable database handle. The mu
 
 ## Quick start
 
-Requires **Rust 1.89+**. The commands below target **1.11.2**. [checked 1.11.2 RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.11.2-rc.1)
+Requires **Rust 1.89+**. The commands below target **1.11.3-rc.1**. [1.11.3 candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.11.3.md)
 
 <a id="embed-a-database"></a>
 
 ### Rust library
 
 ```bash
-cargo add vecnook@=1.11.2
+cargo add vecnook@=1.11.3-rc.1
 ```
 
 `VectorIndex` is an in-memory index. `Database` adds synced writes, locking, checkpoints, backups, and recovery.
@@ -82,7 +82,7 @@ fn main() -> Result<()> {
 ### Command line
 
 ```bash
-cargo install vecnook --version '=1.11.2' --locked
+cargo install vecnook --version '=1.11.3-rc.1' --locked
 vecnook demo data/first-demo
 vecnook demo data/first-demo 1
 ```
@@ -145,6 +145,8 @@ This earlier session used the original RC1-code binary and three fresh processes
 </details>
 
 ## Releases
+
+**1.11.3-rc.1** keeps nested fence markers inside the original Markdown code block when using `markdown-v1`. [1.11.3 candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.11.3.md)
 
 **1.11.2** checks the 10,000-document and 512 MiB JSONL import limits before creating an export. Use native binary transfer for larger collections or archives. [checked 1.11.2 RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.11.2-rc.1)
 

@@ -79,16 +79,21 @@ def read_chunks(root, *, allow_empty=False, include_sources=False, chunker="byte
             raise ValueError("document byte limit exceeded")
         source = path.relative_to(root).as_posix()
         sources.append(source)
-        text, start, end, fenced = "", 1, 1, False
+        text, start, end, fence = "", 1, 1, None
         for line_number, line in enumerate(raw.decode("utf-8").splitlines(keepends=True), 1):
             if chunker == "markdown-v1":
-                heading = bool(re.match(r"^#{1,6}\s", line)) and not fenced
-                boundary = heading or (not fenced and not line.strip() and len(text.encode("utf-8")) >= CHUNK_BYTES // 2)
+                heading = bool(re.match(r"^#{1,6}\s", line)) and fence is None
+                boundary = heading or (fence is None and not line.strip() and len(text.encode("utf-8")) >= CHUNK_BYTES // 2)
                 if boundary and text.strip():
                     chunks.append(Chunk(source, start, end, text, len(raw), modified))
                     text = ""
-                if line.lstrip().startswith(("```", "~~~")):
-                    fenced = not fenced
+                marker = re.match(r"(`{3,}|~{3,})(.*)", line.lstrip())
+                if marker:
+                    delimiter, suffix = marker.groups()
+                    if fence is None:
+                        fence = delimiter
+                    elif delimiter.startswith(fence) and not suffix.strip():
+                        fence = None
             # A long Unicode line is split by UTF-8 bytes without breaking characters.
             pieces, piece, size = [], "", 0
             for character in line:
