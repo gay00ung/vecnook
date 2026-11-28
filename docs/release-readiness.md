@@ -214,3 +214,5 @@ The shared byte cap and regression change the runtime and test fingerprints.
 Run [1.11.2 candidate QA](qa-1.11.2.md) for the exact fresh source and registry
 archives, then the paired publication, wheel, native and tag gates. Verify the
 UTF-8 boundary and the actual CLI with the 9,000-document fixture.
+
+The [checked 1.11.2 RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.11.2-rc.1) records the 24-hour source and registry runs, platform receipts and independent public asset verification.
