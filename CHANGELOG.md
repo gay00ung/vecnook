@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.11.2
+
+- Check the JSONL importer’s 512 MiB limit using exact UTF-8 bytes before
+  creating an export. The installed-CLI regression checks rejection before
+  any output and confirms the source can still be restored. Use native
+  binary export and import for larger archives. [#33](https://github.com/gay00ung/vecnook/pull/33)
+- Pair core and Python wheel 1.11.2 with optional companion 0.1.11. The companion
+  pins the exact core version and maps complete segments.
+- The [checked RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.11.2-rc.1) records three source workloads,
+  four independent registry workloads, 69 document tests, Python wheel and
+  remote tag installations, eight native archives and the public asset checks.
+
+<details>
+<summary>Prerelease history</summary>
+
 ## 1.11.2-rc.1
 
 - Check the JSONL importer's 512 MiB file limit before creating an export.
@@ -7,6 +22,8 @@
   transfer for larger archives.
 - Pair core `1.11.2-rc.1`, Python wheel `1.11.2rc1` and optional companion
   `0.1.11-rc.1`. [1.11.2 candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.11.2.md)
+
+</details>
 
 ## 1.11.1
 
