@@ -146,7 +146,9 @@ The default `bytes-v1` chunker retains the existing exact byte/line behavior.
 For a new collection, `docs-sync --chunker markdown-v1` separates headings and
 long paragraphs, keeps small fenced blocks together and falls back to the normal
 byte bound for oversized blocks/lines. Original UTF-8 bytes and line references
-are preserved. `--include-text` additionally reads UTF-8 `.txt` files; it is
+are preserved. A closing fence uses the opening marker, is at least as long
+and has only whitespace after the marker. `--include-text` additionally reads
+UTF-8 `.txt` files; it is
 explicit on each scan. `--prune` removes missing sources only in the formats
 selected for that scan. Add `--include-text` when pruning missing `.txt`
 sources. Both modes retain the existing source/chunk limits.

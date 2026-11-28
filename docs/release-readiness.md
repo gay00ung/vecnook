@@ -216,3 +216,11 @@ archives, then the paired publication, wheel, native and tag gates. Verify the
 UTF-8 boundary and the actual CLI with the 9,000-document fixture.
 
 The [checked 1.11.2 RC1](https://github.com/gay00ung/vecnook/releases/tag/v1.11.2-rc.1) records the 24-hour source and registry runs, platform receipts and independent public asset verification.
+
+## 1.11.3 Markdown fence candidate
+
+The optional `markdown-v1` chunker keeps a short fenced block together when
+its contents include a different or shorter marker. Run the installed CLI
+regression from [1.11.3 candidate QA](qa-1.11.3.md) on checkout, packaged and
+registry builds. The changed runtime script and regression require fresh
+source and registry workloads before promotion.

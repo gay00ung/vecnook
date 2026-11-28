@@ -50,6 +50,29 @@ class NativeCliTests(unittest.TestCase):
                                        "--mode", "keyword", "--json", "--ollama-url", origin))
         self.assertEqual(result["neighbors"], [])
 
+    def test_markdown_v1_keeps_literal_markers_inside_the_open_fence(self):
+        documents = self.root / "fences"
+        documents.mkdir()
+        fenced_blocks = {
+            "different-marker.md": "~~~~markdown\n```rust\n# Inside the fence\ncode\n```\n~~~~\n",
+            "shorter-marker.md": "````markdown\n```\n# Inside the fence\ncode\n```\n`````\n",
+            "trailing-content.md": "```markdown\n``` still in the fence\n# Inside the fence\ncode\n```\n",
+        }
+        outside = "# After the fence\n다음 문단\n"
+        for name, body in fenced_blocks.items():
+            (documents / name).write_bytes((body + outside).encode("utf-8"))
+
+        self.native("docs-sync", documents, "--db", self.args.db, "--ollama-url",
+                    self.client.url, "--chunker", "markdown-v1")
+        rows = json.loads(self.native("docs-inspect", "--db", self.args.db))["documents"]
+        for name, body in fenced_blocks.items():
+            with self.subTest(source=name):
+                parts = [row for row in rows if row["source"] == name]
+                self.assertEqual([row["text"] for row in parts], [body, outside])
+                self.assertEqual([(row["start_line"], row["end_line"]) for row in parts],
+                                 [(1, len(body.splitlines())), (len(body.splitlines()) + 1,
+                                                               len((body + outside).splitlines()))])
+
     def test_prune_only_removes_missing_sources_in_scanned_formats(self):
         args = [self.documents, "--db", self.args.db, "--ollama-url", self.client.url, "--json"]
         text = self.documents / "retained.TXT"

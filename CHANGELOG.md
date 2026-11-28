@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.11.3-rc.1
+
+- Keep small fenced Markdown blocks together in the optional `markdown-v1`
+  chunker. A closing fence uses the opening marker and is at least as long.
+  Literal shorter markers and markers with trailing content remain in the
+  block. The installed CLI regression checks the original text and line ranges.
+- Pair core `1.11.3-rc.1`, Python wheel `1.11.3rc1` and optional companion
+  `0.1.12-rc.1`. [1.11.3 candidate QA](https://github.com/gay00ung/vecnook/blob/main/docs/qa-1.11.3.md)
+
 ## 1.11.2
 
 - Check the JSONL importer’s 512 MiB limit using exact UTF-8 bytes before
